@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      # 🔒 Postgres THẬT — không dùng SQLite. Exclusion constraint và RLS
+      #    không tồn tại ở đó, test sẽ xanh giả (docs/14-testing-strategy.md)
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: garageos
+          POSTGRES_PASSWORD: garageos_dev
+          POSTGRES_DB: garageos
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U garageos -d garageos"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6380:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://garageos_app:garageos_app_dev@localhost:5433/garageos
+      DATABASE_ADMIN_URL: postgresql://garageos:garageos_dev@localhost:5433/garageos
+      REDIS_URL: redis://localhost:6380
+      JWT_ACCESS_SECRET: ci-access-secret-khong-dung-that
+      JWT_REFRESH_SECRET: ci-refresh-secret-khong-dung-that
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm db:migrate
+      - run: pnpm test
+
+      # 🔒 Job không được phép bỏ qua: kiểm tra thuộc tính TOÀN HỆ THỐNG.
+      #    Tự động áp dụng cho bảng thêm mới sau này.
+      - name: Kiểm tra bất biến kiến trúc
+        run: pnpm test:invariants
