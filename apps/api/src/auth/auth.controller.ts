@@ -3,6 +3,7 @@ import { LoginInput, type LoginOutput, type ActorContext } from '@garageos/contr
 import { AuthService } from './auth.service';
 import { ZodPipe } from '../common/zod.pipe';
 import { JwtGuard } from './jwt.guard';
+import { LoginRateLimitGuard } from '../common/rate-limit.guard';
 import { Actor } from '../common/actor.decorator';
 
 @Controller('api/v1/auth')
@@ -13,6 +14,7 @@ export class AuthController {
   constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   @Post('login')
+  @UseGuards(LoginRateLimitGuard)   // GARAGEOS-005: chống brute-force
   login(@Body(new ZodPipe(LoginInput)) input: LoginInput): Promise<LoginOutput> {
     return this.auth.login(input);
   }

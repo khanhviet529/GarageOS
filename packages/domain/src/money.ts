@@ -49,7 +49,12 @@ export function calculateLineTotal(input: LineInput): LineTotals {
   if (input.quantity <= 0) throw new Error(`quantity phải > 0, nhận: ${input.quantity}`);
   if (taxRate < 0 || taxRate > 100) throw new Error(`taxRatePercent ngoài [0,100]: ${taxRate}`);
 
-  const gross = Math.round(input.quantity * input.unitPrice);
+  // GARAGEOS-003: kiểm tra KẾT QUẢ, không chỉ đầu vào. quantity là số thập
+  // phân nên tích có thể vượt miền an toàn dù cả hai đầu vào đều hợp lệ.
+  const gross = assertAmount(
+    Math.round(input.quantity * input.unitPrice),
+    'gross (quantity x unitPrice)',
+  );
 
   // 🔒 INV-M-07: chiết khấu không vượt giá trị dòng
   if (discount > gross) {
@@ -57,8 +62,8 @@ export function calculateLineTotal(input: LineInput): LineTotals {
   }
 
   const net = gross - discount;
-  const tax = Math.round((net * taxRate) / 100);
-  return { gross, discount, net, tax, total: net + tax };
+  const tax = assertAmount(Math.round((net * taxRate) / 100), 'tax');
+  return { gross, discount, net, tax, total: assertAmount(net + tax, 'total') };
 }
 
 /**

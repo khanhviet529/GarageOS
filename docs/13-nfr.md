@@ -44,11 +44,26 @@
 
 | Yêu cầu | Chi tiết |
 |---|---|
-| Mật khẩu | Argon2id, tối thiểu 8 ký tự |
+| Mật khẩu | **scrypt** (N=2^14, r=8, p=1, khoá 64 byte), tối thiểu 8 ký tự |
+
 | Access token | JWT, sống 15 phút |
 | Refresh token | Xoay vòng, sống 30 ngày; 🔒 dùng lại token cũ → thu hồi toàn bộ phiên |
 | Token khách hàng | ≥128 bit ngẫu nhiên, hết hạn 30 ngày sau bàn giao |
 | OTP | 6 số, sống 5 phút, tối đa 3 lần thử |
+
+🔧 **GARAGEOS-002 — đã đổi từ Argon2id sang scrypt.** Bản đầu của tài liệu
+ghi Argon2id, nhưng khi hiện thực thì code dùng scrypt → **tài liệu và code
+mâu thuẫn**, và codex-review bắt được.
+
+Chọn scrypt vì: có sẵn trong Node (`node:crypto`), **không cần native
+module** nên CI và mọi nền tảng deploy đều chạy được, và vẫn là KDF được
+OWASP chấp nhận cho lưu mật khẩu.
+
+⚠️ Argon2id **vẫn tốt hơn** về khả năng chống tấn công song song. Nếu sau
+này chấp nhận thêm phụ thuộc native, chuyển sang Argon2id và **di trú hash
+cũ ngay khi người dùng đăng nhập thành công** (lúc đó có mật khẩu thô).
+Định dạng hash đã có tiền tố thuật toán (`scrypt$...`) chính là để chuẩn bị
+cho việc này.
 
 ### Phân quyền
 

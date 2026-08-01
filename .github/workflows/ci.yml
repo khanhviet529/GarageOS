@@ -47,6 +47,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm db:migrate
+      - run: pnpm db:seed
+
+      # GARAGEOS-004: test tích hợp của API cần API ĐANG CHẠY. Thiếu bước này
+      # thì `before` hook ném lỗi connection refused và CI đỏ.
+      - name: Khởi động API nền
+        run: |
+          pnpm --filter @garageos/api dev &
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:3001/health && break
+            sleep 2
+          done
+          curl -sf http://localhost:3001/health || { echo "API không khởi động được"; exit 1; }
+
       - run: pnpm test
 
       # 🔒 Job không được phép bỏ qua: kiểm tra thuộc tính TOÀN HỆ THỐNG.
