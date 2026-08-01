@@ -15,8 +15,10 @@ import { Pool } from 'pg';
 import { TenantAwareDb, createAppPool } from '../src/tenant-client.ts';
 import type { ActorContext } from '@garageos/contracts';
 
-const TENANT_A = '11111111-1111-1111-1111-111111111111';
-const TENANT_B = '22222222-2222-2222-2222-222222222222';
+// 🔒 UUID RIÊNG cho test — KHÔNG trùng seed (11111111.../22222222...),
+//    nếu trùng thì cleanup của test sẽ xoá dữ liệu seed và gây lỗi FK.
+const TENANT_A = 'aaaaaaaa-0000-4000-8000-000000000001';
+const TENANT_B = 'bbbbbbbb-0000-4000-8000-000000000002';
 
 const ADMIN_URL =
   process.env.DATABASE_ADMIN_URL ??
@@ -40,8 +42,11 @@ before(async () => {
   db = new TenantAwareDb(appPool);
 
   // Dọn và dựng dữ liệu bằng quyền admin (bỏ qua RLS — có chủ đích)
-  await adminPool.query(`DELETE FROM branch WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
-  await adminPool.query(`DELETE FROM tenant WHERE id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  // Xoá theo đúng thứ tự phụ thuộc khoá ngoại
+  await adminPool.query(`DELETE FROM user_branch WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM app_user  WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM branch    WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM tenant    WHERE id        IN ($1,$2)`, [TENANT_A, TENANT_B]);
   await adminPool.query(
     `INSERT INTO tenant (id, name) VALUES ($1,'Garage A'), ($2,'Garage B')`,
     [TENANT_A, TENANT_B],
@@ -53,8 +58,10 @@ before(async () => {
 });
 
 after(async () => {
-  await adminPool.query(`DELETE FROM branch WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
-  await adminPool.query(`DELETE FROM tenant WHERE id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM user_branch WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM app_user  WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM branch    WHERE tenant_id IN ($1,$2)`, [TENANT_A, TENANT_B]);
+  await adminPool.query(`DELETE FROM tenant    WHERE id        IN ($1,$2)`, [TENANT_A, TENANT_B]);
   await adminPool.end();
   await appPool.end();
 });

@@ -35,6 +35,9 @@ jobs:
       REDIS_URL: redis://localhost:6380
       JWT_ACCESS_SECRET: ci-access-secret-khong-dung-that
       JWT_REFRESH_SECRET: ci-refresh-secret-khong-dung-that
+      # Nới rate limit CHỈ trong CI để test tích hợp chạy được.
+      # ⚠️ Không bao giờ đặt biến này ở production.
+      LOGIN_RATE_LIMIT_MAX: '1000'
 
     steps:
       - uses: actions/checkout@v4

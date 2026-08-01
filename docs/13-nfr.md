@@ -45,7 +45,6 @@
 | Yêu cầu | Chi tiết |
 |---|---|
 | Mật khẩu | **scrypt** (N=2^14, r=8, p=1, khoá 64 byte), tối thiểu 8 ký tự |
-
 | Access token | JWT, sống 15 phút |
 | Refresh token | Xoay vòng, sống 30 ngày; 🔒 dùng lại token cũ → thu hồi toàn bộ phiên |
 | Token khách hàng | ≥128 bit ngẫu nhiên, hết hạn 30 ngày sau bàn giao |

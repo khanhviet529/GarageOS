@@ -17,8 +17,11 @@ interface Bucket { count: number; resetAt: number }
  */
 @Injectable()
 export class LoginRateLimitGuard implements CanActivate {
-  private static readonly LIMIT = 5;
-  private static readonly WINDOW_MS = 15 * 60 * 1000;
+  // Cấu hình được để test tích hợp chạy được, nhưng MẶC ĐỊNH vẫn chặt.
+  // ⚠️ Không đặt biến này ở production.
+  private static readonly LIMIT = Number(process.env['LOGIN_RATE_LIMIT_MAX'] ?? 5);
+  private static readonly WINDOW_MS =
+    Number(process.env['LOGIN_RATE_LIMIT_WINDOW_MS'] ?? 15 * 60 * 1000);
   private readonly buckets = new Map<string, Bucket>();
 
   canActivate(ctx: ExecutionContext): boolean {
