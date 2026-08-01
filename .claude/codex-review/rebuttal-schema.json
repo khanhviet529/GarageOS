@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["finding_id","position","reasoning","valid_withdrawal","new_evidence","reframed_claim"],
+  "properties": {
+    "finding_id": { "type": "string" },
+    "position": { "type": "string", "enum": ["MAINTAIN","WITHDRAW","REFRAME"] },
+    "reasoning": { "type": "string",
+      "description": "MAINTAIN: bang chung MOI. WITHDRAW: luan diem nao cua doi phuong bac bo ban va TAI SAO." },
+    "new_evidence": { "type": ["string","null"],
+      "description": "Chi dien khi MAINTAIN. Trich dan code hoac kich ban chua duoc phan bien xu ly." },
+    "valid_withdrawal": { "type": "boolean",
+      "description": "true CHI KHI WITHDRAW va reasoning neu ro luan diem cu the. Dong y chung chung => false." },
+    "reframed_claim": { "type": ["string","null"] }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "severity",
+          "file",
+          "line",
+          "claim",
+          "failure_scenario",
+          "evidence",
+          "confidence",
+          "violated_invariant",
+          "suggested_fix"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR"] },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "claim": { "type": "string" },
+          "failure_scenario": {
+            "type": "string",
+            "description": "Dau vao cu the -> ket qua sai cu the. Khong mo ta duoc thi dung bao."
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Trich dan dong code that hoac quy tac cu the trong docs."
+          },
+          "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+          "violated_invariant": {
+            "type": ["string", "null"],
+            "description": "Ma bat bien bi pha, vd INV-S-01. null neu khong ap dung."
+          },
+          "suggested_fix": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}
