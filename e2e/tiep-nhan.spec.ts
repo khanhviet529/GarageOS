@@ -101,3 +101,43 @@ test('sai mật khẩu hiện thông báo, không lộ chi tiết nội bộ', a
   }
   await page.screenshot({ path: `${SHOTS}/6-sai-mat-khau.png`, fullPage: true });
 });
+
+/**
+ * 🔒 WEB-001 (codex-review) — Bấm "Chọn" ở danh sách gợi ý phải tra ĐÚNG biển
+ * được chọn. Nếu hàm tra cứu đọc state cũ, nó sẽ tra lại biển gõ nhầm và màn
+ * hình đứng yên — nhân viên sẽ tưởng gợi ý hỏng rồi tạo hồ sơ trùng, đúng thứ
+ * mà cả tính năng này sinh ra để chặn.
+ *
+ * Test này ĐỎ trước khi sửa.
+ */
+test('🔒 WEB-001: chọn biển gợi ý thì tra đúng biển đó, không tra lại biển gõ nhầm', async ({ page }) => {
+  await page.goto('/dang-nhap');
+  await page.getByLabel('Số điện thoại').fill('0901000003');
+  await page.getByLabel('Mật khẩu').fill('demo1234');
+  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await expect(page.getByText('Lê Văn Cố Vấn · Cố vấn dịch vụ')).toBeVisible();
+
+  // Tạo một xe có thật để có cái mà gợi ý
+  const seed = Date.now().toString().slice(-5);
+  const real = `43C-${seed}`;
+  await page.getByLabel('Biển số xe').fill(real);
+  await page.getByRole('button', { name: 'Tra cứu' }).click();
+  await page.getByRole('button', { name: 'Tạo khách hàng và xe mới' }).click();
+  await page.getByLabel('Họ tên').fill('Nguyễn Văn Gợi Ý');
+  await page.getByLabel('Số điện thoại', { exact: false }).last().fill(`098${Date.now().toString().slice(-7)}`);
+  await page.getByRole('button', { name: /Lưu khách hàng và xe/ }).click();
+  await expect(page.getByRole('heading', { name: 'Đã có hồ sơ xe' })).toBeVisible({ timeout: 15_000 });
+
+  // Gõ nhầm một ký tự cuối -> phải ra gợi ý
+  const typo = real.slice(0, -1) + (real.endsWith('9') ? '8' : '9');
+  await page.getByLabel('Biển số xe').fill(typo);
+  await page.getByRole('button', { name: 'Tra cứu' }).click();
+  await expect(page.getByRole('heading', { name: /Không khớp chính xác/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Chọn' }).first().click();
+
+  // Phải nhảy sang hồ sơ của biển ĐƯỢC CHỌN
+  await expect(page.getByRole('heading', { name: 'Đã có hồ sơ xe' })).toBeVisible();
+  await expect(page.getByText('Nguyễn Văn Gợi Ý')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Không khớp chính xác/ })).toHaveCount(0);
+});

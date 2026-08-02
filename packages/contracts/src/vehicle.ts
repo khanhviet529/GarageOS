@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { boundedInt, moneyAmount } from './money.js';
 
 /** 🔒 Khớp enum `powertrain` trong DB. Chi phối hạng mục, chứng chỉ, khoang. */
 export const Powertrain = z.enum(['ICE', 'HYBRID', 'BEV']);
@@ -18,8 +19,10 @@ export const CreateCustomerInput = z
     email: z.string().trim().email().optional(),
     address: z.string().trim().max(500).optional(),
     taxCode: z.string().trim().max(20).optional(),
-    creditLimitAmount: z.number().int().nonnegative().default(0),
-    paymentTermDays: z.number().int().nonnegative().default(0),
+    // 🔒 MONEY-001 (codex-review): số nhận từ client phải có chặn trên.
+    //    Xem ./money.ts để biết vì sao `.int()` một mình là không đủ.
+    creditLimitAmount: moneyAmount.default(0),
+    paymentTermDays: boundedInt(365, 'Số ngày công nợ không hợp lệ').default(0),
   })
   // 🔒 Khớp CHECK customer_company_needs_tax_code ở DB. Validate ở cả hai tầng:
   //    Zod cho thông báo lỗi tử tế, DB là chốt chặn thật.
@@ -41,7 +44,9 @@ export const CreateVehicleInput = z
     powertrain: Powertrain,
     batteryCapacityKwh: z.number().positive().optional(),
     color: z.string().trim().max(50).optional(),
-    lastOdometer: z.number().int().nonnegative().default(0),
+    // Xe chạy nhiều nhất thế giới chưa tới 5 triệu km. Ngưỡng này để chặn
+    // số rác, không phải để chặn xe chạy nhiều.
+    lastOdometer: boundedInt(5_000_000, 'Số km không hợp lệ').default(0),
   })
   .refine((d) => d.powertrain !== 'ICE' || d.batteryCapacityKwh === undefined, {
     message: 'Xe động cơ đốt trong không có dung lượng pin',

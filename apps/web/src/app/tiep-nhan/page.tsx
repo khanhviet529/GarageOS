@@ -35,9 +35,17 @@ export default function IntakePage() {
     setWho(auth.user());
   }, []);
 
-  async function lookup(e?: FormEvent) {
-    e?.preventDefault();
-    const p = normalizePlate(plate);
+  /**
+   * 🔒 Biển số phải TRUYỀN VÀO, không đọc từ state.
+   *
+   * codex-review WEB-001: bản đầu gọi `setPlate(x); lookup()` — `lookup` đọc
+   * state `plate` nên vẫn tra giá trị CŨ (setState của React không đồng bộ).
+   * Hậu quả: bấm "Chọn" ở danh sách gợi ý thì màn hình đứng yên, nhân viên
+   * tưởng gợi ý hỏng và tạo hồ sơ trùng — đúng thứ tính năng này sinh ra để
+   * chặn. Khoá bằng test E2E "WEB-001".
+   */
+  async function runLookup(raw: string) {
+    const p = normalizePlate(raw);
     if (p.length < 5) { setError('Biển số quá ngắn'); return; }
     setError(null); setBusy(true); setShowNew(false); setResult(null);
     try {
@@ -47,6 +55,11 @@ export default function IntakePage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    void runLookup(plate);
   }
 
   const notFound = result !== null && result.exact === null;
@@ -66,7 +79,7 @@ export default function IntakePage() {
       </header>
 
       <div className="container stack">
-        <form className="card" onSubmit={lookup}>
+        <form className="card" onSubmit={onSubmit}>
           <h2>Tra cứu biển số</h2>
           <div className="row">
             <div className="field">
@@ -131,7 +144,7 @@ export default function IntakePage() {
                     <td className="mono">{formatPlate(s.plateNumber)}</td>
                     <td>{s.displayName}</td>
                     <td>
-                      <button className="secondary" onClick={() => { setPlate(s.plateNumber); void lookup(); }}>
+                      <button className="secondary" onClick={() => { setPlate(s.plateNumber); void runLookup(s.plateNumber); }}>
                         Chọn
                       </button>
                     </td>
@@ -150,7 +163,7 @@ export default function IntakePage() {
             ) : (
               <NewCustomerVehicle
                 plate={plate}
-                onDone={() => { setShowNew(false); void lookup(); }}
+                onDone={() => { setShowNew(false); void runLookup(plate); }}
               />
             )}
           </div>

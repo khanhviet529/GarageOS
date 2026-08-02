@@ -180,3 +180,38 @@ describe('INV-T-01 — tra cứu bị giới hạn theo tenant', () => {
     assert.equal(r.status, 401);
   });
 });
+
+describe('MONEY-001 — số nhận từ client phải có chặn trên', () => {
+  test('hạn mức công nợ vượt giới hạn số nguyên an toàn bị chặn', async () => {
+    // JSON.parse làm tròn 9007199254740993 -> 9007199254740992 TRƯỚC khi tới
+    // Zod. Nếu chỉ kiểm tra .int() thì giá trị đã sai vẫn được ghi vào bigint.
+    const r = await call('POST', '/api/v1/customers', {
+      type: 'INDIVIDUAL',
+      displayName: 'Khach han muc rac',
+      phone: `07${uniq}77`,
+      creditLimitAmount: 9007199254740993,
+    });
+    assert.equal(r.status, 400, 'ghi được số tiền đã bị làm tròn sai vào DB');
+    assert.equal(r.body.error.code, 'VALIDATION_FAILED');
+  });
+
+  test('hạn mức công nợ hợp lệ vẫn tạo được', async () => {
+    const r = await call('POST', '/api/v1/customers', {
+      type: 'INDIVIDUAL',
+      displayName: 'Khach han muc that',
+      phone: `07${uniq}88`,
+      creditLimitAmount: 50_000_000,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+  });
+
+  test('số km vô lý bị chặn', async () => {
+    const r = await call('POST', '/api/v1/vehicles', {
+      customerId,
+      plateNumber: `28A-${uniq}`,
+      powertrain: 'ICE',
+      lastOdometer: 99_999_999,
+    });
+    assert.equal(r.status, 400);
+  });
+});

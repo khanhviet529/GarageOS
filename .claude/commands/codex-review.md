@@ -35,6 +35,10 @@ tự chọn bên rồi coi như đã chốt.
 CODEX=$(bash .claude/codex-review/resolve-codex.sh) || exit 1
 
 git rev-parse --is-inside-work-tree >/dev/null || { echo "❌ Không phải git repo"; exit 1; }
+
+# 🔒 Xoá kết quả lần trước. Nếu Codex lỗi giữa chừng mà file cũ còn nằm đó,
+#    ta sẽ đọc lại phát hiện của lần review TRƯỚC và tưởng là đã review lần này.
+rm -f .claude/codex-review/round*.json
 ```
 
 **Cờ bắt buộc cho MỌI lệnh gọi Codex trong quy trình này:**
@@ -134,7 +138,7 @@ cat > .claude/codex-review/finding-schema.json <<'JSON'
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id","severity","file","line","claim","failure_scenario","evidence","confidence"],
+        "required": ["id","severity","file","line","claim","failure_scenario","evidence","confidence","violated_invariant","suggested_fix"],
         "properties": {
           "id":       { "type": "string" },
           "severity": { "type": "string", "enum": ["BLOCKER","MAJOR","MINOR"] },
@@ -144,6 +148,7 @@ cat > .claude/codex-review/finding-schema.json <<'JSON'
           "failure_scenario": { "type": "string" },
           "evidence": { "type": "string" },
           "confidence": { "type": "string", "enum": ["HIGH","MEDIUM","LOW"] },
+          "violated_invariant": { "type": ["string","null"] },
           "suggested_fix": { "type": "string" }
         }
       }
@@ -373,6 +378,8 @@ Ghi lại để không phải chẩn đoán lại. Tất cả đều đã kiểm
 | Chạy treo, không sinh file output | MCP server (`node_repl`, `pencil`) không khởi động được khi headless | `-c 'mcp_servers={}'` |
 | Log đỏ `AuthRequired ... mcp.figma.com` | Plugin Figma/Slack/Drive đòi OAuth | **Nhiễu, không phải lỗi.** Lọc bằng `grep -viE "$NOISE"` |
 | `failed to load models cache: unknown variant 'max'` | Cache model của bản CLI cũ | Biến mất khi dùng bản mới |
+| `invalid_json_schema: 'required' ... Missing 'suggested_fix'` | API bắt `required` phải liệt kê **mọi** key trong `properties` — kể cả key tuỳ chọn | Đưa hết key vào `required`; key tuỳ chọn thì cho phép `null` trong `type` |
+| Codex lỗi nhưng `round1.json` vẫn có nội dung | Đó là **file của lần chạy TRƯỚC**. Đọc nhầm sẽ tưởng đã review | 🔒 `rm -f .claude/codex-review/round*.json` trước mỗi lần gọi |
 
 ⚠️ Đường dẫn binary app **chứa mã hash và sẽ đổi khi app cập nhật** — đó là lý do
 phải dò động bằng `resolve-codex.sh` thay vì hardcode.
