@@ -187,3 +187,63 @@ describe('🔒 INV-A-02 — trigger nhật ký trạng thái phải tồn tại'
     assert.ok(rows.length > 0, 'repair_order thiếu trigger ghi nhật ký đổi trạng thái');
   });
 });
+
+describe('CAT-001 — cột tiền có chặn trên trong vùng an toàn của JavaScript', () => {
+  const TENANT_A = '11111111-1111-1111-1111-111111111111';
+
+  async function aBranch(): Promise<string> {
+    const { rows } = await pool.query<{ id: string }>(
+      'SELECT id FROM branch WHERE tenant_id = $1 LIMIT 1',
+      [TENANT_A],
+    );
+    assert.ok(rows[0], 'seed phải có chi nhánh');
+    return rows[0].id;
+  }
+
+  test('không ghi được số tiền vượt Number.MAX_SAFE_INTEGER', async () => {
+    // `bigint` chứa tới 2^63, JavaScript biểu diễn chính xác tới 2^53-1.
+    // Khoảng giữa là vùng ghi được nhưng đọc ra SAI mà không báo gì.
+    const branch = await aBranch();
+    await assert.rejects(
+      () =>
+        pool.query(
+          `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour, effective_from)
+           VALUES ($1, $2, 'Bang gia rac', 9007199254740993, '2099-01-01')`,
+          [TENANT_A, branch],
+        ),
+      /price_list_rate_within_safe_range/,
+      'Ghi được số tiền không đọc lại chính xác được',
+    );
+  });
+
+  test('số tiền lớn nhưng biểu diễn được vẫn ghi bình thường', async () => {
+    // 9 tỷ đồng/giờ vô lý về nghiệp vụ nhưng KHÔNG bị chặn ở tầng này — ràng
+    // buộc chỉ nói về giới hạn biểu diễn, không nói về nghiệp vụ.
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour, effective_from)
+       VALUES ($1, $2, 'Bang gia kiem thu', 9000000000, '2099-01-01') RETURNING id`,
+      [TENANT_A, await aBranch()],
+    );
+    await pool.query('DELETE FROM price_list WHERE id = $1', [rows[0]!.id]);
+  });
+});
+
+describe('🔒 Bảng giá không chồng thời gian', () => {
+  const TENANT_A = '11111111-1111-1111-1111-111111111111';
+
+  test('hai bảng giá cùng phạm vi chồng thời gian bị chặn', async () => {
+    // Seed đã có một bảng giá toàn chuỗi mở ngỏ (effective_to = NULL). Nếu thêm
+    // được bảng thứ hai, câu hỏi "giá giờ công hôm nay là bao nhiêu" có hai đáp
+    // án và hệ thống chọn theo thứ tự dòng trả về — tức là ngẫu nhiên.
+    await assert.rejects(
+      () =>
+        pool.query(
+          `INSERT INTO price_list (tenant_id, name, labor_rate_per_hour, effective_from)
+           VALUES ($1, 'Bang gia chong lan', 300000, '2026-06-01')`,
+          [TENANT_A],
+        ),
+      /no_overlapping_price_list/,
+      'Hai bảng giá cùng hiệu lực -> giá bán phụ thuộc thứ tự dòng trả về',
+    );
+  });
+});

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { TenantAwareDb } from '@garageos/db';
+import { parseAmountFromDb } from '@garageos/domain';
 import {
   ErrorCode,
   type ActorContext,
@@ -101,7 +102,9 @@ export class CatalogService {
     return {
       id: pl.id,
       name: pl.name,
-      laborRatePerHour: Number(pl.labor_rate_per_hour),
+      // 🔒 CAT-001: `Number()` thẳng lên chuỗi bigint sẽ âm thầm làm tròn mọi
+      //    giá trị vượt 2^53. parseAmountFromDb dừng ngay thay vì trả số khác.
+      laborRatePerHour: parseAmountFromDb(pl.labor_rate_per_hour, 'laborRatePerHour'),
     };
   }
 
@@ -133,7 +136,10 @@ function toPartItem(p: Record<string, unknown>): PartItem {
     isHighVoltage: p.is_high_voltage as boolean,
     warrantyMonths: Number(p.warranty_months),
     warrantyKilometers: p.warranty_kilometers === null ? null : Number(p.warranty_kilometers),
-    sellPrice: p.sell_price === null || p.sell_price === undefined ? null : Number(p.sell_price),
+    sellPrice:
+      p.sell_price === null || p.sell_price === undefined
+        ? null
+        : parseAmountFromDb(p.sell_price, `sellPrice(${String(p.sku)})`),
     taxRatePercent:
       p.tax_rate_percent === null || p.tax_rate_percent === undefined
         ? null
