@@ -10,6 +10,7 @@ import {
   type QuotationLine,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { resolveActivePriceList } from '../common/price-list';
 
 @Injectable()
 export class QuotationService {
@@ -24,10 +25,14 @@ export class QuotationService {
    */
   async create(actor: ActorContext, repairOrderId: string): Promise<{ id: string; seq: number }> {
     return this.db.withTenant(actor, async (tx) => {
-      const { rows: roRows } = await tx.query<{ id: string; status: string }>(
+      const { rows: roRows } = await tx.query<{
+        id: string;
+        status: string;
+        branch_id: string;
+      }>(
         // 🔒 Khoá dòng ĐƠN, không phải bảng báo giá: hai người cùng lập báo giá
         //    cho một đơn phải xếp hàng, còn hai đơn khác nhau thì chạy song song.
-        `SELECT id, status FROM repair_order WHERE id = $1 FOR UPDATE`,
+        `SELECT id, status, branch_id FROM repair_order WHERE id = $1 FOR UPDATE`,
         [repairOrderId],
       );
       const order = roRows[0];
@@ -41,18 +46,9 @@ export class QuotationService {
         );
       }
 
-      const { rows: plRows } = await tx.query<{ labor_rate_per_hour: string }>(
-        `SELECT labor_rate_per_hour FROM price_list
-          WHERE effective_from <= now() AND (effective_to IS NULL OR effective_to > now())
-          ORDER BY branch_id NULLS LAST LIMIT 1`,
-      );
-      const priceList = plRows[0];
-      if (priceList === undefined) {
-        throw new BusinessError(
-          ErrorCode.NOT_FOUND,
-          'Chưa có bảng giá nào đang hiệu lực. Liên hệ quản lý để thiết lập.',
-        );
-      }
+      // 🔒 Q-002: bảng giá phải là bảng giá CỦA CHI NHÁNH nhận xe, không phải
+      //    bảng giá nào đó cùng tenant.
+      const priceList = await resolveActivePriceList(tx, order.branch_id);
 
       // 🔒 INV-Q-04 — seq liên tục trong đơn. An toàn vì transaction này đang
       //    giữ khoá dòng đơn ở trên; ngoài ra uq_quotation_seq là chốt chặn cuối.
@@ -71,7 +67,7 @@ export class QuotationService {
           actor.tenantId,
           repairOrderId,
           seq,
-          parseAmountFromDb(priceList.labor_rate_per_hour, 'laborRatePerHour'),
+          priceList.laborRatePerHour,
           actor.userId,
         ],
       );
@@ -97,7 +93,7 @@ export class QuotationService {
       const priced =
         input.lineType === 'LABOR'
           ? await this.priceLabor(tx, input, quotation.laborRatePerHour)
-          : await this.pricePart(tx, input);
+          : await this.pricePart(tx, input, quotation.priceListId);
 
       if (input.parentLineId !== undefined) {
         const { rows } = await tx.query(
@@ -193,15 +189,25 @@ export class QuotationService {
       const days = tRows[0]?.quotation_validity_days ?? 7;
 
       try {
+        // 🔒 Q-005: điều kiện trạng thái phải nằm TRONG câu UPDATE.
+        //    Kiểm tra ở `loadDraft` rồi mới update là hai bước tách rời: hai
+        //    request bấm "Gửi khách" cùng lúc đều qua được bước kiểm tra, và
+        //    request thứ hai sẽ gửi lại một báo giá đã gửi.
         const { rows } = await tx.query<{ valid_until: Date }>(
           `UPDATE quotation
               SET status = 'SENT',
                   sent_at = now(),
                   valid_until = now() + ($2 || ' days')::interval
-            WHERE id = $1
+            WHERE id = $1 AND status = 'DRAFT'
             RETURNING valid_until`,
           [quotationId, String(days)],
         );
+        if (rows.length === 0) {
+          throw new BusinessError(
+            ErrorCode.INVALID_STATE_TRANSITION,
+            'Báo giá này vừa được gửi bởi một thao tác khác.',
+          );
+        }
 
         // Đơn chuyển sang chờ khách duyệt — trigger nhật ký ghi lại cả hai lần đổi
         await tx.query(
@@ -230,15 +236,40 @@ export class QuotationService {
     return this.db.withTenant(actor, (tx) => this.readQuotation(tx, quotationId));
   }
 
+  /**
+   * Mọi báo giá của một đơn.
+   *
+   * codex-review Q-006: bản đầu gọi `readQuotation` trong vòng lặp — 1 + 2N
+   * truy vấn. Ở đây chỉ cần HAI truy vấn: một cho báo giá, một cho toàn bộ
+   * dòng, rồi ghép trong bộ nhớ.
+   */
   async listForOrder(actor: ActorContext, repairOrderId: string): Promise<Quotation[]> {
     return this.db.withTenant(actor, async (tx) => {
-      const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM quotation WHERE repair_order_id = $1 ORDER BY seq DESC`,
+      const { rows: quotations } = await tx.query<Record<string, unknown>>(
+        `SELECT id, repair_order_id, seq, status, labor_rate_per_hour, subtotal_amount,
+                discount_amount, tax_amount, total_amount, valid_until, sent_at, created_at
+           FROM quotation WHERE repair_order_id = $1 ORDER BY seq DESC`,
         [repairOrderId],
       );
-      const out: Quotation[] = [];
-      for (const r of rows) out.push(await this.readQuotation(tx, r.id));
-      return out;
+      if (quotations.length === 0) return [];
+
+      const { rows: lines } = await tx.query<Record<string, unknown>>(
+        `SELECT quotation_id, id, seq, line_type, parent_line_id, description, quantity,
+                unit_price, discount_amount, tax_rate_percent, line_total, status,
+                reject_reason, is_warranty
+           FROM quotation_line WHERE quotation_id = ANY($1) ORDER BY seq`,
+        [quotations.map((q) => q.id as string)],
+      );
+
+      const byQuotation = new Map<string, QuotationLine[]>();
+      for (const l of lines) {
+        const key = l.quotation_id as string;
+        const list = byQuotation.get(key) ?? [];
+        list.push(toLine(l));
+        byQuotation.set(key, list);
+      }
+
+      return quotations.map((q) => toQuotation(q, byQuotation.get(q.id as string) ?? []));
     });
   }
 
@@ -247,15 +278,28 @@ export class QuotationService {
   private async loadDraft(
     tx: PoolClient,
     quotationId: string,
-  ): Promise<{ id: string; repairOrderId: string; laborRatePerHour: number }> {
+  ): Promise<{
+    id: string;
+    repairOrderId: string;
+    branchId: string;
+    laborRatePerHour: number;
+    priceListId: string;
+  }> {
     const { rows } = await tx.query<{
       id: string;
       repair_order_id: string;
+      branch_id: string;
       status: string;
       labor_rate_per_hour: string;
-    }>(`SELECT id, repair_order_id, status, labor_rate_per_hour FROM quotation WHERE id = $1`, [
-      quotationId,
-    ]);
+    }>(
+      // FOR UPDATE: mọi thao tác sửa báo giá đều đi qua đây, nên khoá ở một chỗ
+      // là đủ để hai người sửa cùng lúc phải xếp hàng.
+      `SELECT q.id, q.repair_order_id, q.status, q.labor_rate_per_hour, ro.branch_id
+         FROM quotation q
+         JOIN repair_order ro ON ro.id = q.repair_order_id
+        WHERE q.id = $1 FOR UPDATE OF q`,
+      [quotationId],
+    );
     const q = rows[0];
     if (q === undefined) {
       throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy báo giá');
@@ -266,10 +310,14 @@ export class QuotationService {
         `Báo giá đã gửi khách (${q.status}). Muốn đổi thì lập bản mới.`,
       );
     }
+    const priceList = await resolveActivePriceList(tx, q.branch_id);
     return {
       id: q.id,
       repairOrderId: q.repair_order_id,
+      branchId: q.branch_id,
+      // Đơn giá giờ lấy từ SNAPSHOT trên báo giá, không lấy từ bảng giá hiện tại
       laborRatePerHour: parseAmountFromDb(q.labor_rate_per_hour, 'laborRatePerHour'),
+      priceListId: priceList.id,
     };
   }
 
@@ -297,18 +345,24 @@ export class QuotationService {
   private async pricePart(
     tx: PoolClient,
     input: AddQuotationLineInput,
+    priceListId: string,
   ): Promise<{ unitPrice: number; description: string }> {
+    /*
+     * 🔒 Q-001: bản đầu dùng LEFT JOIN price_list với điều kiện hiệu lực đặt
+     * trong mệnh đề ON. Dòng của bảng giá ĐÃ HẾT HẠN vẫn còn `pli.sell_price`
+     * (chỉ có cột của `pl` là NULL), nên `ORDER BY pli.sell_price` chọn ngay
+     * mức giá cũ nếu nó rẻ hơn — và snapshot vào báo giá gửi khách.
+     *
+     * Bản này bám thẳng vào ĐÚNG bảng giá đã snapshot trên báo giá, nên không
+     * còn chỗ để chọn nhầm.
+     */
     const { rows } = await tx.query<{ name: string; sell_price: string | null }>(
       `SELECT p.name, pli.sell_price
          FROM part p
-         LEFT JOIN price_list_item pli ON pli.part_id = p.id
-         LEFT JOIN price_list pl ON pl.id = pli.price_list_id
-          AND pl.effective_from <= now()
-          AND (pl.effective_to IS NULL OR pl.effective_to > now())
-        WHERE p.id = $1 AND p.is_active
-        ORDER BY pli.sell_price NULLS LAST
-        LIMIT 1`,
-      [input.partId],
+         LEFT JOIN price_list_item pli
+           ON pli.part_id = p.id AND pli.price_list_id = $2
+        WHERE p.id = $1 AND p.is_active`,
+      [input.partId, priceListId],
     );
     const part = rows[0];
     if (part === undefined) {
@@ -345,22 +399,26 @@ export class QuotationService {
       [quotationId],
     );
 
-    return {
-      id: q.id as string,
-      repairOrderId: q.repair_order_id as string,
-      seq: Number(q.seq),
-      status: q.status as Quotation['status'],
-      laborRatePerHour: parseAmountFromDb(q.labor_rate_per_hour, 'laborRatePerHour'),
-      subtotalAmount: parseAmountFromDb(q.subtotal_amount, 'subtotal'),
-      discountAmount: parseAmountFromDb(q.discount_amount, 'discount'),
-      taxAmount: parseAmountFromDb(q.tax_amount, 'tax'),
-      totalAmount: parseAmountFromDb(q.total_amount, 'total'),
-      validUntil: q.valid_until === null ? null : (q.valid_until as Date).toISOString(),
-      sentAt: q.sent_at === null ? null : (q.sent_at as Date).toISOString(),
-      createdAt: (q.created_at as Date).toISOString(),
-      lines: lines.map(toLine),
-    };
+    return toQuotation(q, lines.map(toLine));
   }
+}
+
+function toQuotation(q: Record<string, unknown>, lines: QuotationLine[]): Quotation {
+  return {
+    id: q.id as string,
+    repairOrderId: q.repair_order_id as string,
+    seq: Number(q.seq),
+    status: q.status as Quotation['status'],
+    laborRatePerHour: parseAmountFromDb(q.labor_rate_per_hour, 'laborRatePerHour'),
+    subtotalAmount: parseAmountFromDb(q.subtotal_amount, 'subtotal'),
+    discountAmount: parseAmountFromDb(q.discount_amount, 'discount'),
+    taxAmount: parseAmountFromDb(q.tax_amount, 'tax'),
+    totalAmount: parseAmountFromDb(q.total_amount, 'total'),
+    validUntil: q.valid_until === null ? null : (q.valid_until as Date).toISOString(),
+    sentAt: q.sent_at === null ? null : (q.sent_at as Date).toISOString(),
+    createdAt: (q.created_at as Date).toISOString(),
+    lines,
+  };
 }
 
 function toLine(l: Record<string, unknown>): QuotationLine {

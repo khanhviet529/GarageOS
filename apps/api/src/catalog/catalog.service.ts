@@ -10,6 +10,7 @@ import {
   type ServiceItem,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { resolveActivePriceList } from '../common/price-list';
 
 @Injectable()
 export class CatalogService {
@@ -37,7 +38,10 @@ export class CatalogService {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy xe');
       }
 
-      const priceList = await this.activePriceList(tx);
+      // Danh mục là màn tra cứu, chưa gắn với một đơn cụ thể -> dùng chi nhánh
+      // đầu tiên của người dùng. Lúc lập báo giá thì bảng giá được chọn theo
+      // chi nhánh của chính cái đơn đó (xem quotation.service.ts).
+      const priceList = await resolveActivePriceList(tx, actor.branchIds[0] ?? null);
 
       const { rows: services } = await tx.query<Record<string, unknown>>(
         `SELECT id, code, name, category, standard_hours,
@@ -70,42 +74,6 @@ export class CatalogService {
         parts: parts.map(toPartItem),
       };
     });
-  }
-
-  /**
-   * Bảng giá đang hiệu lực.
-   *
-   * Ràng buộc EXCLUDE ở migration 0008 bảo đảm không có hai bảng giá cùng phạm
-   * vi chồng thời gian, nên câu này trả về nhiều nhất một dòng cho mỗi phạm vi.
-   * Bảng giá riêng của chi nhánh (nếu có) được ưu tiên hơn bảng giá toàn chuỗi.
-   */
-  private async activePriceList(tx: {
-    query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>;
-  }): Promise<{ id: string; name: string; laborRatePerHour: number }> {
-    const { rows } = (await tx.query(
-      `SELECT id, name, labor_rate_per_hour
-         FROM price_list
-        WHERE effective_from <= now()
-          AND (effective_to IS NULL OR effective_to > now())
-        ORDER BY branch_id NULLS LAST
-        LIMIT 1`,
-    )) as { rows: { id: string; name: string; labor_rate_per_hour: string }[] };
-
-    const pl = rows[0];
-    if (pl === undefined) {
-      // Không có bảng giá thì mọi con số hiển thị sau đó đều là bịa.
-      throw new BusinessError(
-        ErrorCode.NOT_FOUND,
-        'Chưa có bảng giá nào đang hiệu lực. Liên hệ quản lý để thiết lập.',
-      );
-    }
-    return {
-      id: pl.id,
-      name: pl.name,
-      // 🔒 CAT-001: `Number()` thẳng lên chuỗi bigint sẽ âm thầm làm tròn mọi
-      //    giá trị vượt 2^53. parseAmountFromDb dừng ngay thay vì trả số khác.
-      laborRatePerHour: parseAmountFromDb(pl.labor_rate_per_hour, 'laborRatePerHour'),
-    };
   }
 
   private toServiceItem(s: Record<string, unknown>, ratePerHour: number): ServiceItem {

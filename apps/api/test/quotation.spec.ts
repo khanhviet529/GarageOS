@@ -529,3 +529,210 @@ describe('🔒 Phép tính tiền của database và của TypeScript phải kh�
     assert.equal(q.body.totalAmount, expectedTotal, 'tổng báo giá lệch');
   });
 });
+
+describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => {
+  const TENANT_A = '11111111-1111-1111-1111-111111111111';
+
+  test('🔒 Q-001: giá phụ tùng lấy từ bảng giá ĐANG hiệu lực, không lấy giá cũ rẻ hơn', async () => {
+    // Dựng một bảng giá đã hết hạn với giá rẻ hơn hẳn. Nếu câu truy vấn chọn
+    // giá thấp nhất thay vì giá của bảng giá đang hiệu lực, nó sẽ lấy 1.000đ.
+    const { rows: br } = await pool.query<{ id: string }>(
+      'SELECT id FROM branch WHERE tenant_id = $1 ORDER BY code LIMIT 1',
+      [TENANT_A],
+    );
+    const { rows: old } = await pool.query<{ id: string }>(
+      `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour,
+                               effective_from, effective_to)
+       VALUES ($1, $2, 'Bang gia cu da het han', 1000,
+               now() - interval '2 year', now() - interval '1 year')
+       RETURNING id`,
+      [TENANT_A, br[0]!.id],
+    );
+    const { rows: partRows } = await pool.query<{ id: string }>(
+      `SELECT id FROM part WHERE tenant_id = $1 AND sku = 'PT-OIL-5W30'`,
+      [TENANT_A],
+    );
+    await pool.query(
+      `INSERT INTO price_list_item (price_list_id, tenant_id, part_id, sell_price)
+       VALUES ($1, $2, $3, 1000)`,
+      [old[0]!.id, TENANT_A, partRows[0]!.id],
+    );
+
+    try {
+      const { quotationId } = await newQuotation('ICE', 'U');
+      const oilPart = await partId('PT-OIL-5W30');
+      const r = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+        lineType: 'PART', partId: oilPart, quantity: 1,
+      });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+
+      const q = await call('GET', `/api/v1/quotations/${quotationId}`);
+      assert.equal(
+        q.body.lines[0].unitPrice,
+        185_000,
+        'lấy giá từ bảng giá đã hết hiệu lực -> báo giá gửi khách sai giá',
+      );
+    } finally {
+      await pool.query('DELETE FROM price_list_item WHERE price_list_id = $1', [old[0]!.id]);
+      await pool.query('DELETE FROM price_list WHERE id = $1', [old[0]!.id]);
+    }
+  });
+
+  test('🔒 Q-002: báo giá dùng bảng giá CỦA CHI NHÁNH nhận xe', async () => {
+    // Chi nhánh thứ hai có bảng giá riêng đắt gấp đôi. Đơn nhận ở chi nhánh đó
+    // phải snapshot đúng đơn giá của nó.
+    const owner = await call('POST', '/api/v1/auth/login', {
+      phone: '0901000001',
+      password: 'demo1234',
+    });
+    const saved = token;
+    token = owner.body.accessToken;
+    const otherBranch = owner.body.user.branchIds.find((b: string) => b !== branchId);
+    assert.ok(otherBranch, 'seed phải có ít nhất hai chi nhánh');
+
+    const { rows: pl } = await pool.query<{ id: string }>(
+      `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour, effective_from)
+       VALUES ($1, $2, 'Bang gia chi nhanh hai', 500000, now() - interval '1 day')
+       RETURNING id`,
+      [TENANT_A, otherBranch],
+    );
+
+    try {
+      const v = await call('POST', '/api/v1/vehicles', {
+        customerId, plateNumber: `77C-${uniq}V`, powertrain: 'ICE',
+      });
+      const o = await call('POST', '/api/v1/repair-orders', {
+        vehicleId: v.body.id,
+        branchId: otherBranch,
+        customerComplaint: 'Đơn ở chi nhánh có bảng giá riêng',
+        odometerIn: 1,
+      });
+      assert.equal(o.status, 201, JSON.stringify(o.body));
+
+      const q = await call('POST', `/api/v1/repair-orders/${o.body.id}/quotations`);
+      assert.equal(q.status, 201, JSON.stringify(q.body));
+
+      const detail = await call('GET', `/api/v1/quotations/${q.body.id}`);
+      assert.equal(
+        detail.body.laborRatePerHour,
+        500_000,
+        'đơn ở chi nhánh có bảng giá riêng phải dùng bảng giá đó',
+      );
+
+      // Chiều ngược lại mới là chiều bắt được lỗi cũ: chi nhánh KHÔNG có bảng
+      // giá riêng phải rơi về bảng giá toàn chuỗi, chứ không mượn bảng giá của
+      // chi nhánh khác chỉ vì nó có `branch_id` khác NULL.
+      const v2 = await call('POST', '/api/v1/vehicles', {
+        customerId, plateNumber: `77C-${uniq}W`, powertrain: 'ICE',
+      });
+      const o2 = await call('POST', '/api/v1/repair-orders', {
+        vehicleId: v2.body.id,
+        branchId,
+        customerComplaint: 'Đơn ở chi nhánh dùng bảng giá toàn chuỗi',
+        odometerIn: 1,
+      });
+      const q2 = await call('POST', `/api/v1/repair-orders/${o2.body.id}/quotations`);
+      const detail2 = await call('GET', `/api/v1/quotations/${q2.body.id}`);
+      assert.equal(
+        detail2.body.laborRatePerHour,
+        250_000,
+        'mượn bảng giá của chi nhánh khác -> báo giá sai giá công',
+      );
+    } finally {
+      await pool.query('DELETE FROM price_list WHERE id = $1', [pl[0]!.id]);
+      token = saved;
+    }
+  });
+
+  test('🔒 Q-003: bật cờ bảo hành sau khi gửi bị chặn', async () => {
+    // Cờ này đưa cả dòng về 0đ. Không đóng băng nó thì một lệnh UPDATE biến
+    // báo giá 5 triệu khách đã nhận thành 0 mà không vi phạm ràng buộc nào.
+    const { quotationId } = await newQuotation('ICE', 'W');
+    const brake = await serviceItemId('ICE', 'SV-BRAKE-PAD');
+    const line = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR', serviceItemId: brake, quantity: 1,
+    });
+    await call('POST', `/api/v1/quotations/${quotationId}/send`);
+
+    const before = await call('GET', `/api/v1/quotations/${quotationId}`);
+    assert.ok(before.body.totalAmount > 0);
+
+    await assert.rejects(
+      () => pool.query('UPDATE quotation_line SET is_warranty = true WHERE id = $1', [line.body.id]),
+      /INV-Q-05/,
+      'bật được cờ bảo hành sau khi gửi -> tổng báo giá về 0',
+    );
+
+    const after = await call('GET', `/api/v1/quotations/${quotationId}`);
+    assert.equal(after.body.totalAmount, before.body.totalAmount);
+  });
+
+  test('🔒 Q-004: không duyệt riêng dòng phụ tùng khi dòng công cha chưa duyệt', async () => {
+    // Phụ tùng APPROVED trong khi công còn PENDING nghĩa là kho được phép xuất
+    // hàng cho một việc khách chưa đồng ý làm.
+    const { quotationId } = await newQuotation('ICE', 'X');
+    const oil = await serviceItemId('ICE', 'SV-OIL-ENGINE');
+    const oilPart = await partId('PT-OIL-5W30');
+
+    const labor = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR', serviceItemId: oil, quantity: 1,
+    });
+    const part = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'PART', partId: oilPart, parentLineId: labor.body.id, quantity: 4,
+    });
+    await call('POST', `/api/v1/quotations/${quotationId}/send`);
+
+    await assert.rejects(
+      () => pool.query(`UPDATE quotation_line SET status = 'APPROVED' WHERE id = $1`, [part.body.id]),
+      /INV-Q-02/,
+      'duyệt được phụ tùng khi công cha chưa duyệt',
+    );
+
+    // Duyệt cha thì con tự theo — chiều lan vẫn phải hoạt động
+    await pool.query(`UPDATE quotation_line SET status = 'APPROVED' WHERE id = $1`, [labor.body.id]);
+    const q = await call('GET', `/api/v1/quotations/${quotationId}`);
+    for (const l of q.body.lines) assert.equal(l.status, 'APPROVED');
+  });
+
+  test('🔒 Q-005: gửi hai lần đồng thời thì lần sau báo xung đột, không phải lỗi 500', async () => {
+    const { quotationId } = await newQuotation('ICE', 'Y');
+    const brake = await serviceItemId('ICE', 'SV-BRAKE-PAD');
+    await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR', serviceItemId: brake, quantity: 1,
+    });
+
+    const [a, b] = await Promise.all([
+      call('POST', `/api/v1/quotations/${quotationId}/send`),
+      call('POST', `/api/v1/quotations/${quotationId}/send`),
+    ]);
+
+    const codes = [a.status, b.status].sort((x, y) => x - y);
+    assert.equal(codes[0], 201, 'phải có đúng một request gửi thành công');
+    assert.equal(codes[1], 409, `request thứ hai trả ${codes[1]} thay vì 409`);
+  });
+
+  test('Q-006: danh sách báo giá của một đơn trả đủ dòng của từng bản', async () => {
+    const { quotationId, orderId } = await newQuotation('ICE', 'Z');
+    const brake = await serviceItemId('ICE', 'SV-BRAKE-PAD');
+    await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR', serviceItemId: brake, quantity: 1,
+    });
+    await call('POST', `/api/v1/quotations/${quotationId}/send`);
+
+    const second = await call('POST', `/api/v1/repair-orders/${orderId}/quotations`);
+    await call('POST', `/api/v1/quotations/${second.body.id}/lines`, {
+      lineType: 'LABOR', serviceItemId: brake, quantity: 2,
+    });
+
+    const list = await call('GET', `/api/v1/repair-orders/${orderId}/quotations`);
+    assert.equal(list.status, 200);
+    assert.equal(list.body.length, 2);
+    // Ghép dòng theo báo giá phải đúng, không được trộn lẫn giữa hai bản
+    for (const q of list.body) {
+      assert.equal(q.lines.length, 1, `báo giá #${q.seq} có ${q.lines.length} dòng`);
+    }
+    assert.equal(list.body[0].seq, 2, 'sắp xếp theo seq giảm dần');
+    assert.equal(list.body[0].lines[0].quantity, 2);
+    assert.equal(list.body[1].lines[0].quantity, 1);
+  });
+});
