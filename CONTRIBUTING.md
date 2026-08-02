@@ -126,3 +126,21 @@ Trích từ [docs/README.md](docs/README.md):
 3. Tiền **luôn là số nguyên**, đơn vị đồng
 4. Mọi truy vấn **giới hạn theo `tenant_id`** — enforce ở hạ tầng
 5. Nghiệp vụ ở tầng service thuần, **không phụ thuộc framework**
+
+## 5. 🔒 Vì sao test chạy tuần tự
+
+Trong mỗi package, test chạy với `node --test --test-concurrency=1` — tuần tự
+từng file (xem `infra/run-tests.mjs`).
+
+Đây là test **tích hợp**: chúng dùng chung một database và một tiến trình API.
+Chạy song song là để chúng giẫm lên nhau. Ví dụ đã xảy ra thật: một test đóng
+bảng giá hiện hành rồi mở bảng giá mới; trong khoảnh khắc giữa hai lệnh đó, mọi
+test khác đang đọc giá đều nhận "chưa có bảng giá nào đang hiệu lực".
+
+Lỗi loại này xanh trên máy này và đỏ trên CI chỉ vì số lõi CPU khác nhau — loại
+lỗi tốn nhiều thời gian nhất để chẩn đoán. Đổi lấy vài giây chạy lâu hơn là một
+đánh đổi rẻ.
+
+💡 Kèm theo: thao tác nhiều bước lên dữ liệu dùng chung phải nằm trong **một
+giao dịch**, kể cả trong test. Không có giao dịch thì vẫn còn khe hở, chỉ là hẹp
+hơn.

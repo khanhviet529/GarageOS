@@ -287,7 +287,10 @@ describe('🔒 INV-Q-05 — giá đã gửi thì đóng băng', () => {
 
     const before = await call('GET', `/api/v1/quotations/${quotationId}`);
 
-    // Đóng bảng giá cũ, mở bảng giá mới đắt gấp đôi
+    // Đóng bảng giá cũ và mở bảng giá mới đắt gấp đôi — trong MỘT giao dịch.
+    // Tách ra hai lệnh sẽ để lại một khoảnh khắc không có bảng giá nào hiệu lực,
+    // và mọi truy vấn giá chạy đúng lúc đó đều nhận lỗi "chưa có bảng giá".
+    await pool.query('BEGIN');
     await pool.query(
       `UPDATE price_list SET effective_to = now()
         WHERE tenant_id = '11111111-1111-1111-1111-111111111111' AND effective_to IS NULL`,
@@ -296,6 +299,7 @@ describe('🔒 INV-Q-05 — giá đã gửi thì đóng băng', () => {
       `INSERT INTO price_list (tenant_id, name, labor_rate_per_hour, effective_from)
        VALUES ('11111111-1111-1111-1111-111111111111', 'Bang gia moi', 500000, now())`,
     );
+    await pool.query('COMMIT');
 
     const after = await call('GET', `/api/v1/quotations/${quotationId}`);
     assert.equal(
@@ -305,7 +309,8 @@ describe('🔒 INV-Q-05 — giá đã gửi thì đóng băng', () => {
     );
     assert.equal(after.body.laborRatePerHour, 250_000, 'đơn giá giờ không được snapshot');
 
-    // Trả lại bảng giá cũ cho các test sau
+    // Trả lại bảng giá cũ cho các test sau — cũng trong một giao dịch
+    await pool.query('BEGIN');
     await pool.query(
       `DELETE FROM price_list WHERE tenant_id = '11111111-1111-1111-1111-111111111111'
         AND name = 'Bang gia moi'`,
@@ -314,6 +319,7 @@ describe('🔒 INV-Q-05 — giá đã gửi thì đóng băng', () => {
       `UPDATE price_list SET effective_to = NULL
         WHERE tenant_id = '11111111-1111-1111-1111-111111111111' AND name = 'Bảng giá 2026'`,
     );
+    await pool.query('COMMIT');
   });
 
   test('sửa giá bằng SQL trực tiếp cũng bị trigger chặn', async () => {

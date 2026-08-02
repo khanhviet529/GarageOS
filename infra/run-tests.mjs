@@ -33,5 +33,23 @@ if (files.length === 0) {
 }
 
 console.log(`Chạy ${files.length} file test`);
-const r = spawnSync('npx', ['tsx', '--test', ...files], { stdio: 'inherit', shell: true });
+
+/*
+ * 🔒 `--test-concurrency=1` — chạy TUẦN TỰ từng file.
+ *
+ * Mặc định `node --test` chạy các file song song theo số lõi CPU. Đây là test
+ * TÍCH HỢP: chúng dùng chung MỘT database và MỘT tiến trình API, nên chạy song
+ * song là để chúng giẫm lên nhau. Ví dụ thật đã xảy ra: một test đóng bảng giá
+ * hiện hành rồi mở bảng giá mới; trong khoảnh khắc giữa hai lệnh đó, mọi test
+ * khác đang đọc bảng giá đều nhận "chưa có bảng giá nào đang hiệu lực".
+ *
+ * Lỗi kiểu này xanh trên máy này và đỏ trên CI chỉ vì số lõi khác nhau — loại
+ * lỗi tốn nhiều thời gian nhất để chẩn đoán. Đổi lấy vài giây chạy lâu hơn là
+ * đánh đổi rẻ.
+ */
+const r = spawnSync(
+  'npx',
+  ['tsx', '--test', '--test-concurrency=1', ...files],
+  { stdio: 'inherit', shell: true },
+);
 process.exit(r.status ?? 1);
