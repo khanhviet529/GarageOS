@@ -9,6 +9,7 @@ import {
   type VehicleLookupResult,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { assertCan } from '../common/permissions';
 
 @Injectable()
 export class VehicleService {
@@ -90,6 +91,7 @@ export class VehicleService {
     actor: ActorContext,
     input: CreateCustomerInput,
   ): Promise<{ id: string }> {
+    assertCan(actor, 'customer:create');
     return this.db.withTenant(actor, async (tx) => {
       const { rows } = await tx.query<{ id: string }>(
         `INSERT INTO customer (tenant_id, type, display_name, phone, approver_phone,
@@ -113,6 +115,7 @@ export class VehicleService {
   }
 
   async createVehicle(actor: ActorContext, input: CreateVehicleInput): Promise<{ id: string }> {
+    assertCan(actor, 'vehicle:create');
     return this.db.withTenant(actor, async (tx) => {
       try {
         const { rows } = await tx.query<{ id: string }>(

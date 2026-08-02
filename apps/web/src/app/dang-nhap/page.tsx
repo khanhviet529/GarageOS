@@ -54,6 +54,14 @@ export default function LoginPage() {
           {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
         </button>
 
+        {/*
+          🔒 Danh sách tài khoản demo chỉ hiện khi được BẬT TƯỜNG MINH.
+          Không có rào này thì khoảnh khắc bản build lên bất kỳ URL nào người
+          ngoài chạm tới — staging cho khách xem thử, demo cho nhà đầu tư, máy
+          chủ LAN mở port — ai mở trang đăng nhập cũng đăng nhập được bằng
+          quyền chủ chuỗi.
+        */}
+        {process.env.NEXT_PUBLIC_DEMO_HINTS === '1' && (
         <div className="alert info small">
           <strong>Tài khoản demo</strong> — mật khẩu <code>demo1234</code>
           <div style={{ marginTop: 6, lineHeight: 1.7 }}>
@@ -61,6 +69,7 @@ export default function LoginPage() {
             <code>0901000004</code> Thợ · <code>0902000001</code> Tenant khác (kiểm tra cô lập)
           </div>
         </div>
+        )}
       </form>
     </div>
   );

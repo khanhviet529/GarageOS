@@ -33,14 +33,18 @@ jobs:
       DATABASE_URL: postgresql://garageos_app:garageos_app_dev@localhost:5433/garageos
       DATABASE_ADMIN_URL: postgresql://garageos:garageos_dev@localhost:5433/garageos
       REDIS_URL: redis://localhost:6380
-      JWT_ACCESS_SECRET: ci-access-secret-khong-dung-that
-      JWT_REFRESH_SECRET: ci-refresh-secret-khong-dung-that
+      # 🔒 Giá trị chỉ dùng cho CI, đủ dài và khác nhau — assertSecretsUsable()
+      #    từ chối khởi động nếu hai bí mật trùng nhau hoặc là giá trị mẫu.
+      JWT_ACCESS_SECRET: ci-only-6Qx2vN8pLmT4wZ1jR7yB3kH5sD9fA0cE
+      JWT_REFRESH_SECRET: ci-only-9Wp3zK7nQ2mV5xJ8tY4bC6hL1dS0gF3r
       # Nới rate limit CHỈ trong CI để test tích hợp chạy được.
       # ⚠️ Không bao giờ đặt biến này ở production.
       LOGIN_RATE_LIMIT_MAX: '1000'
       # Trả mã OTP trong response để test luồng duyệt báo giá chạy được.
       # ⚠️ Chỉ ở CI. Không bao giờ đặt ở production.
       OTP_DEV_ECHO: 'true'
+      # E2E cần danh sách tài khoản demo hiển thị trên trang đăng nhập
+      NEXT_PUBLIC_DEMO_HINTS: '1'
 
     steps:
       - uses: actions/checkout@v4
