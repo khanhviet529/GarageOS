@@ -138,12 +138,33 @@ describe('INV-T-01 — cô lập tenant', () => {
     assert.equal(rows[0]?.name, 'Chi nhánh B1', 'Dữ liệu tenant B đã bị sửa');
   });
 
-  test('XOÁ dữ liệu tenant khác không ảnh hưởng dòng nào', async () => {
+  test('XOÁ dữ liệu tenant khác bị chặn ở tầng THẤP HƠN cả RLS', async () => {
+    // Bản đầu của test này kỳ vọng `DELETE FROM branch` chạy được nhưng ảnh
+    // hưởng 0 dòng — tức là RLS lọc. Sau migration 0017, quyền DELETE trên
+    // `branch` bị thu hồi hẳn, nên câu lệnh bị từ chối TRƯỚC khi RLS phải làm
+    // gì. Đó là kết quả TỐT HƠN: một lớp phòng thủ nữa, và nó chặn cả trường
+    // hợp `app.tenant_id` bị đặt sai.
+    await assert.rejects(
+      () =>
+        db.withTenant(actorA, (tx) =>
+          tx.query('DELETE FROM branch WHERE tenant_id = $1', [TENANT_B]),
+        ),
+      /permission denied/,
+      'DELETE trên branch phải bị từ chối ở tầng quyền',
+    );
+  });
+
+  test('SỬA dữ liệu tenant khác không ảnh hưởng dòng nào (RLS)', async () => {
+    // Vẫn cần một ca chứng minh RLS lọc thật ở đường GHI, trên một bảng và một
+    // cột mà ứng dụng CÓ quyền sửa.
     const affected = await db.withTenant(actorA, async (tx) => {
-      const r = await tx.query('DELETE FROM branch WHERE tenant_id = $1', [TENANT_B]);
+      const r = await tx.query(
+        'UPDATE branch SET name = $2 WHERE tenant_id = $1',
+        [TENANT_B, 'Ten bi sua trai phep'],
+      );
       return r.rowCount;
     });
-    assert.equal(affected, 0);
+    assert.equal(affected, 0, 'RÒ RỈ: sửa được dữ liệu của tenant khác');
   });
 });
 
