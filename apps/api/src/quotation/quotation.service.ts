@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { TenantAwareDb } from '@garageos/db';
-import { parseAmountFromDb } from '@garageos/domain';
+import { calculateGross, parseAmountFromDb } from '@garageos/domain';
 import {
   ErrorCode,
   type ActorContext,
@@ -522,8 +522,9 @@ export class QuotationService {
   ): void {
     if (input.discountAmount === 0 || input.isWarranty) return;
 
-    // Cùng công thức với trigger `tinh_tien_dong()`: round(quantity * unit_price).
-    const gross = Math.round(input.quantity * unitPrice);
+    // Cùng MỘT hàm với `calculateLineTotal`, không chép lại công thức — trigger
+    // `tinh_tien_dong()` đã là bản cài đặt thứ hai rồi.
+    const gross = calculateGross(input.quantity, unitPrice);
     if (gross === 0) {
       // Dòng 0đ mà vẫn có chiết khấu: INV-M-07 sẽ chặn ở DB. Không tự chia 0.
       return;

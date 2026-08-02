@@ -192,3 +192,36 @@ describe('🔒 Trigger dùng chung không được gán cột mà bảng không 
     );
   });
 });
+
+describe('🔒 PR-03 không đi vòng được bằng SQL', () => {
+  test('vai ứng dụng KHÔNG sửa được cột tiền của dòng báo giá', async () => {
+    /*
+     * PR-03 (chiết khấu vượt ngưỡng cần quản lý duyệt) là kiểm tra theo VAI,
+     * mà database không biết vai — nên nó chỉ enforce được ở tầng service.
+     *
+     * Đó không phải lý do để DB đứng ngoài. Việc DB làm được là ĐÓNG MỌI ĐƯỜNG
+     * KHÁC, để `assertDiscountWithinAuthority()` là lối vào duy nhất chứ không
+     * phải một trong nhiều lối.
+     *
+     * Danh sách dưới đây là các cột KHÔNG có đường code nào ghi sau khi dòng đã
+     * tạo. `status`, `reject_reason`, `approval_source` cố tình không có mặt —
+     * luồng khách duyệt cần chúng.
+     */
+    const COT_TIEN = [
+      'description', 'quantity', 'unit_price', 'discount_amount',
+      'tax_rate_percent', 'gross_amount', 'tax_amount', 'line_total', 'is_warranty',
+    ];
+    const { rows } = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.column_privileges
+        WHERE grantee = 'garageos_app' AND table_name = 'quotation_line'
+          AND privilege_type = 'UPDATE' AND column_name = ANY($1)
+        ORDER BY 1`,
+      [COT_TIEN],
+    );
+    assert.deepEqual(
+      rows.map((r) => r.column_name),
+      [],
+      'Cột tiền của dòng báo giá còn cấp UPDATE — một câu SQL ở bất kỳ đâu là đi vòng qua PR-03',
+    );
+  });
+});
