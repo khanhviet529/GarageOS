@@ -16,6 +16,7 @@ import {
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorState, Loading } from '@/components/ErrorState';
+import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
 
 export default function WorkshopPage() {
@@ -73,7 +74,10 @@ export default function WorkshopPage() {
                   Cập nhật {capNhatLuc.toLocaleTimeString('vi-VN')}
                 </span>
               )}
-              <button className="secondary" onClick={taiLai}>Làm mới</button>
+              <button className="secondary co-icon" onClick={taiLai}>
+                <IconLamMoi />
+                Làm mới
+              </button>
               <Link href="/tiep-nhan"><button>Tiếp nhận xe mới</button></Link>
             </div>
           </div>

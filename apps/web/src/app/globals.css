@@ -36,6 +36,22 @@
   --c-hyb:  #8a5a00;
   --c-bev:  #17683b;
 
+  /* Trạng thái vô hiệu: MÀU RIÊNG, không phải `opacity`.
+     `opacity` kéo mọi thứ bên dưới xuống cùng lúc — kể cả viền và chữ vốn đã
+     nhạt — nên nút bị vô hiệu tụt dưới ngưỡng tương phản 4.5:1. Token này giữ
+     nút đọc được mà vẫn rõ là không bấm được. */
+  --c-disabled-bg:     #eef0f3;
+  --c-disabled-text:   #6b7583;
+  --c-disabled-border: #cdd3da;
+
+  /* 🔒 Thời lượng chuyển cảnh — skill ui-ux-pro-max mục "Animation timing":
+     150–300ms cho vi tương tác. Đổi trạng thái tức thì (0ms) là ANTI-PATTERN:
+     người dùng không chắc thao tác đã được ghi nhận nên bấm lại.
+
+     Đây KHÔNG mâu thuẫn với quyết định "không animation trang trí" của dự án —
+     phản hồi tương tác không phải trang trí. */
+  --thoi-luong: 150ms;
+
   --r-sm: 3px;
   --r-md: 5px;
 
@@ -98,6 +114,7 @@ body {
 
 input, select, textarea {
   font: inherit;
+  transition: border-color var(--thoi-luong) ease, background-color var(--thoi-luong) ease;
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--c-border-strong);
   border-radius: var(--r-sm);
@@ -129,8 +146,14 @@ button {
   background: var(--c-primary); color: #fff;
   cursor: pointer;
 }
+button { transition: background-color var(--thoi-luong) ease, border-color var(--thoi-luong) ease, color var(--thoi-luong) ease; }
 button:hover:not(:disabled) { background: var(--c-primary-hover); }
-button:disabled { opacity: .5; cursor: not-allowed; }
+button:disabled {
+  background: var(--c-disabled-bg);
+  color: var(--c-disabled-text);
+  border-color: var(--c-disabled-border);
+  cursor: not-allowed;
+}
 button.secondary { background: #fff; color: var(--c-text); border-color: var(--c-border-strong); }
 button.secondary:hover:not(:disabled) { background: var(--c-bg); }
 button.lg { min-height: 44px; font-size: var(--fs-lg); padding: 0 var(--sp-5); }
@@ -158,6 +181,7 @@ table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 th, td { text-align: left; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--c-border); }
 th { font-weight: 600; color: var(--c-text-muted); background: var(--c-bg); font-size: var(--fs-xs);
      text-transform: uppercase; letter-spacing: .4px; }
+tbody tr { transition: background-color var(--thoi-luong) ease; }
 tbody tr:hover { background: var(--c-primary-soft); }
 td.mono { font-family: var(--font-mono); }
 
@@ -176,6 +200,7 @@ td.mono { font-family: var(--font-mono); }
   padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm);
   font-size: var(--fs-sm); font-weight: 600;
 }
+.app-header .nav a { transition: background-color var(--thoi-luong) ease, opacity var(--thoi-luong) ease; }
 .app-header .nav a:hover  { opacity: 1; background: rgba(255,255,255,.12); }
 .app-header .nav a.active { opacity: 1; background: rgba(255,255,255,.2); }
 
@@ -306,6 +331,8 @@ tr.rejected td { text-decoration: line-through; color: var(--c-text-muted); }
   background: #fff; color: var(--c-text);
   border: 1px solid var(--c-border-strong);
   min-height: 44px; min-width: 92px; font-size: var(--fs-md);
+  transition: background-color var(--thoi-luong) ease, border-color var(--thoi-luong) ease,
+              color var(--thoi-luong) ease;
 }
 .pick.on      { background: var(--c-success); border-color: var(--c-success); color: #fff; }
 .pick.off-btn { background: var(--c-text-muted); border-color: var(--c-text-muted); color: #fff; }
@@ -346,3 +373,23 @@ input.otp {
   z-index: 100; font-weight: 600;
 }
 .skip-link:focus { left: var(--sp-3); top: var(--sp-3); }
+
+/*
+ * 🔒 Tôn trọng lựa chọn của hệ điều hành.
+ *
+ * Người bị rối loạn tiền đình bật "giảm chuyển động" ở cấp hệ thống. Bỏ qua nó
+ * không phải là chuyện thẩm mỹ — với họ, chuyển động ngoài ý muốn gây chóng mặt
+ * và buồn nôn thật. Skill ui-ux-pro-max liệt kê "No reduced-motion" là
+ * anti-pattern ở mục Animation.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Icon đi kèm chữ: căn theo đường chân chữ, khoảng cách cố định */
+.co-icon { display: inline-flex; align-items: center; gap: 6px; }

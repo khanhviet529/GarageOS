@@ -19,6 +19,7 @@ import {
   type VehicleLookup,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { IconBo } from '@/components/Icon';
 import { normalizePlate, formatPlate } from '@garageos/domain';
 
 type Powertrain = 'ICE' | 'HYBRID' | 'BEV';
@@ -332,7 +333,9 @@ function IntakeForm({
             <li key={`${a}-${i}`}>
               {a}
               <button type="button" aria-label={`Bỏ ${a}`}
-                      onClick={() => setAssets(assets.filter((_, j) => j !== i))}>×</button>
+                      onClick={() => setAssets(assets.filter((_, j) => j !== i))}>
+                <IconBo />
+              </button>
             </li>
           ))}
         </ul>
