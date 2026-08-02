@@ -20,7 +20,7 @@ export class ApiCallError extends Error {
 
 export const auth = {
   token: (): string | null => globalThis.localStorage?.getItem(TOKEN_KEY) ?? null,
-  user: (): { fullName: string; roles: string[] } | null => {
+  user: (): { fullName: string; roles: string[]; branchIds: string[] } | null => {
     const raw = globalThis.localStorage?.getItem(USER_KEY);
     return raw === null || raw === undefined ? null : JSON.parse(raw);
   },
@@ -61,9 +61,37 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   return json as T;
 }
 
+export interface RepairOrderListItem {
+  id: string; code: string; status: string;
+  plateNumber: string; powertrain: 'ICE' | 'HYBRID' | 'BEV';
+  customerName: string; customerComplaint: string; receivedAt: string;
+}
+
+export interface RepairOrderDetail {
+  id: string; code: string; status: string;
+  customerComplaint: string;
+  odometerIn: number | null;
+  odometerUnavailable: boolean;
+  odometerOverrideReason: string | null;
+  energyLevelIn: number | null;
+  receivedAt: string;
+  promisedAt: string | null;
+  broughtByName: string | null;
+  broughtByPhone: string | null;
+  customerAccessToken: string;
+  vehicle: {
+    id: string; plateNumber: string;
+    powertrain: 'ICE' | 'HYBRID' | 'BEV';
+    makeName: string | null; modelName: string | null;
+  };
+  customer: { id: string; displayName: string; phone: string };
+  assets: { id: string; description: string; returnedAt: string | null }[];
+  photos: { id: string; phase: string; storageKey: string; caption: string | null }[];
+}
+
 export const api = {
   login: (phone: string, password: string) =>
-    call<{ accessToken: string; user: { fullName: string; roles: string[] } }>(
+    call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
       'POST',
       '/api/v1/auth/login',
       { phone, password },
@@ -72,6 +100,10 @@ export const api = {
     call<VehicleLookup>('GET', `/api/v1/vehicles/lookup?plate=${encodeURIComponent(plate)}`),
   createCustomer: (input: unknown) => call<{ id: string }>('POST', '/api/v1/customers', input),
   createVehicle: (input: unknown) => call<{ id: string }>('POST', '/api/v1/vehicles', input),
+  createRepairOrder: (input: unknown) =>
+    call<{ id: string; code: string }>('POST', '/api/v1/repair-orders', input),
+  listRepairOrders: () => call<RepairOrderListItem[]>('GET', '/api/v1/repair-orders?open=true'),
+  getRepairOrder: (id: string) => call<RepairOrderDetail>('GET', `/api/v1/repair-orders/${id}`),
 };
 
 export interface VehicleLookup {
@@ -111,3 +143,31 @@ export const POWERTRAIN_CLASS: Record<string, string> = {
   HYBRID: 'hyb',
   BEV: 'bev',
 };
+
+/** 🔒 Phải khớp enum `repair_order_status` — docs/06-state-machines.md */
+export const ORDER_STATUS_LABEL: Record<string, string> = {
+  RECEIVED: 'Đã tiếp nhận',
+  DIAGNOSING: 'Đang kiểm tra',
+  QUOTED: 'Đã lập báo giá',
+  AWAITING_APPROVAL: 'Chờ khách duyệt',
+  AWAITING_PARTS: 'Chờ phụ tùng',
+  IN_PROGRESS: 'Đang sửa',
+  QUALITY_CHECK: 'Kiểm tra chất lượng',
+  AWAITING_PAYMENT: 'Chờ thanh toán',
+  AWAITING_DELIVERY: 'Chờ giao xe',
+  DELIVERED: 'Đã giao xe',
+  CANCELLED: 'Đã huỷ',
+};
+
+export const ODOMETER_REASON_LABEL: Record<string, string> = {
+  ODOMETER_REPLACED: 'Đã thay cụm đồng hồ',
+  PREVIOUS_ENTRY_WRONG: 'Lần trước nhập sai',
+  OTHER: 'Lý do khác',
+};
+
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}

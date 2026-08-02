@@ -27,7 +27,10 @@ const APP_ROLE = 'garageos_app';
  * Bảng sổ và chứng từ — 🔒 KHÔNG BAO GIỜ được cấp UPDATE/DELETE.
  * Thêm bảng sổ mới thì thêm tên vào đây.
  */
-const LEDGER_TABLES = ['audit_log'] as const;
+const LEDGER_TABLES = ['audit_log', 'repair_order_photo'] as const;
+// repair_order_photo: ảnh hiện trạng là BẰNG CHỨNG PHÁP LÝ (BR-01-3). Không cấp
+// UPDATE cũng quan trọng như không cấp DELETE — sửa `storage_key` chính là tráo
+// ảnh, tinh vi hơn xoá và khó phát hiện hơn nhiều.
 // Sẽ bổ sung khi có: stock_movement, invoice (sau ISSUED), warranty_coverage
 
 let pool: Pool;
