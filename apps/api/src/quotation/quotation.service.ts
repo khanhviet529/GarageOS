@@ -11,6 +11,7 @@ import {
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { resolveActivePriceList } from '../common/price-list';
+import { appendBranchScope, assertCan } from '../common/permissions';
 
 @Injectable()
 export class QuotationService {
@@ -24,7 +25,14 @@ export class QuotationService {
    * đã gửi tuần trước vẫn giữ nguyên con số khách đã nhìn thấy.
    */
   async create(actor: ActorContext, repairOrderId: string): Promise<{ id: string; seq: number }> {
+    assertCan(actor, 'quotation:write');
     return this.db.withTenant(actor, async (tx) => {
+      // Pham vi chi nhanh cho CA module nay. Ban dau chi RepairOrderService co
+      // (codex-review GARAGEOS-001); module bao gia viet sau khong huong duoc,
+      // nen mot co van chi nhanh A biet UUID don cua chi nhanh B la lap duoc
+      // bao gia cho don do va day trang thai don ay di.
+      const roParams: unknown[] = [repairOrderId];
+      const roScope = appendBranchScope(actor, roParams);
       const { rows: roRows } = await tx.query<{
         id: string;
         status: string;
@@ -32,8 +40,9 @@ export class QuotationService {
       }>(
         // 🔒 Khoá dòng ĐƠN, không phải bảng báo giá: hai người cùng lập báo giá
         //    cho một đơn phải xếp hàng, còn hai đơn khác nhau thì chạy song song.
-        `SELECT id, status, branch_id FROM repair_order WHERE id = $1 FOR UPDATE`,
-        [repairOrderId],
+        `SELECT ro.id, ro.status, ro.branch_id FROM repair_order ro
+          WHERE ro.id = $1${roScope} FOR UPDATE OF ro`,
+        roParams,
       );
       const order = roRows[0];
       if (order === undefined) {
@@ -112,8 +121,9 @@ export class QuotationService {
     quotationId: string,
     input: AddQuotationLineInput,
   ): Promise<{ id: string; seq: number }> {
+    assertCan(actor, 'quotation:write');
     return this.db.withTenant(actor, async (tx) => {
-      const quotation = await this.loadDraft(tx, quotationId);
+      const quotation = await this.loadDraft(tx, actor, quotationId);
 
       const priced =
         input.lineType === 'LABOR'
@@ -171,10 +181,16 @@ export class QuotationService {
   }
 
   async removeLine(actor: ActorContext, quotationId: string, lineId: string): Promise<void> {
+    assertCan(actor, 'quotation:write');
     await this.db.withTenant(actor, async (tx) => {
-      await this.loadDraft(tx, quotationId);
+      await this.loadDraft(tx, actor, quotationId);
       // Xoá dòng công thì phụ tùng con mất chỗ dựa -> xoá kèm.
-      await tx.query(`DELETE FROM quotation_line WHERE parent_line_id = $1`, [lineId]);
+      // Dieu kien quotation_id o CA hai cau: xoa truoc roi moi kiem la thu tu
+      // sai, chi can mot lan refactor tach transaction la thanh xoa nham that.
+      await tx.query(
+        `DELETE FROM quotation_line WHERE parent_line_id = $1 AND quotation_id = $2`,
+        [lineId, quotationId],
+      );
       const { rowCount } = await tx.query(
         `DELETE FROM quotation_line WHERE id = $1 AND quotation_id = $2`,
         [lineId, quotationId],
@@ -193,8 +209,9 @@ export class QuotationService {
    * không có hạn thì INV-Q-07 (hết hạn không duyệt được) trở thành vô nghĩa.
    */
   async send(actor: ActorContext, quotationId: string): Promise<{ validUntil: string }> {
+    assertCan(actor, 'quotation:send');
     return this.db.withTenant(actor, async (tx) => {
-      const quotation = await this.loadDraft(tx, quotationId);
+      const quotation = await this.loadDraft(tx, actor, quotationId);
 
       const { rows: lineRows } = await tx.query<{ n: string }>(
         `SELECT count(*) AS n FROM quotation_line WHERE quotation_id = $1`,
@@ -261,7 +278,7 @@ export class QuotationService {
   }
 
   async getById(actor: ActorContext, quotationId: string): Promise<Quotation> {
-    return this.db.withTenant(actor, (tx) => this.readQuotation(tx, quotationId));
+    return this.db.withTenant(actor, (tx) => this.readQuotation(tx, actor, quotationId));
   }
 
   /**
@@ -273,11 +290,16 @@ export class QuotationService {
    */
   async listForOrder(actor: ActorContext, repairOrderId: string): Promise<Quotation[]> {
     return this.db.withTenant(actor, async (tx) => {
+      const listParams: unknown[] = [repairOrderId];
+      const listScope = appendBranchScope(actor, listParams);
       const { rows: quotations } = await tx.query<Record<string, unknown>>(
-        `SELECT id, repair_order_id, seq, status, labor_rate_per_hour, subtotal_amount,
-                discount_amount, tax_amount, total_amount, valid_until, sent_at, created_at
-           FROM quotation WHERE repair_order_id = $1 ORDER BY seq DESC`,
-        [repairOrderId],
+        `SELECT q.id, q.repair_order_id, q.seq, q.status, q.labor_rate_per_hour,
+                q.subtotal_amount, q.discount_amount, q.tax_amount, q.total_amount,
+                q.valid_until, q.sent_at, q.created_at
+           FROM quotation q
+           JOIN repair_order ro ON ro.id = q.repair_order_id
+          WHERE q.repair_order_id = $1${listScope} ORDER BY q.seq DESC`,
+        listParams,
       );
       if (quotations.length === 0) return [];
 
@@ -305,6 +327,7 @@ export class QuotationService {
 
   private async loadDraft(
     tx: PoolClient,
+    actor: ActorContext,
     quotationId: string,
   ): Promise<{
     id: string;
@@ -313,6 +336,8 @@ export class QuotationService {
     laborRatePerHour: number;
     priceListId: string;
   }> {
+    const draftParams: unknown[] = [quotationId];
+    const draftScope = appendBranchScope(actor, draftParams);
     const { rows } = await tx.query<{
       id: string;
       repair_order_id: string;
@@ -325,8 +350,8 @@ export class QuotationService {
       `SELECT q.id, q.repair_order_id, q.status, q.labor_rate_per_hour, ro.branch_id
          FROM quotation q
          JOIN repair_order ro ON ro.id = q.repair_order_id
-        WHERE q.id = $1 FOR UPDATE OF q`,
-      [quotationId],
+        WHERE q.id = $1${draftScope} FOR UPDATE OF q`,
+      draftParams,
     );
     const q = rows[0];
     if (q === undefined) {
@@ -408,12 +433,21 @@ export class QuotationService {
     };
   }
 
-  private async readQuotation(tx: PoolClient, quotationId: string): Promise<Quotation> {
+  private async readQuotation(
+    tx: PoolClient,
+    actor: ActorContext,
+    quotationId: string,
+  ): Promise<Quotation> {
+    const readParams: unknown[] = [quotationId];
+    const readScope = appendBranchScope(actor, readParams);
     const { rows } = await tx.query<Record<string, unknown>>(
-      `SELECT id, repair_order_id, seq, status, labor_rate_per_hour, subtotal_amount,
-              discount_amount, tax_amount, total_amount, valid_until, sent_at, created_at
-         FROM quotation WHERE id = $1`,
-      [quotationId],
+      `SELECT q.id, q.repair_order_id, q.seq, q.status, q.labor_rate_per_hour,
+              q.subtotal_amount, q.discount_amount, q.tax_amount, q.total_amount,
+              q.valid_until, q.sent_at, q.created_at
+         FROM quotation q
+         JOIN repair_order ro ON ro.id = q.repair_order_id
+        WHERE q.id = $1${readScope}`,
+      readParams,
     );
     const q = rows[0];
     if (q === undefined) {

@@ -14,6 +14,7 @@ import {
 } from '@garageos/contracts';
 import { REPAIR_ORDER_STATUS_LABEL, ORDER_ACTION_LABEL } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { assertCan, branchScope } from '../common/permissions';
 
 /**
  * Số km chênh lệch lớn bất thường — BC-01 mục 4.
@@ -39,6 +40,8 @@ export class RepairOrderService {
     // 🔒 Chi nhánh phải nằm trong quyền của người dùng. Không kiểm ở đây thì
     //    một cố vấn chi nhánh A tạo được đơn cho chi nhánh B — RLS không chặn
     //    vì cùng tenant.
+    assertCan(actor, 'repairOrder:create');
+
     if (!actor.branchIds.includes(input.branchId)) {
       throw new BusinessError(
         ErrorCode.FORBIDDEN,
@@ -242,28 +245,9 @@ export class RepairOrderService {
     return err;
   }
 
-  /**
-   * 🔒 Phạm vi chi nhánh — docs/02-actors-and-permissions.md mục 1.
-   *
-   * `OWNER` có phạm vi TENANT: thấy mọi chi nhánh. Các vai còn lại phạm vi
-   * BRANCH: chỉ thấy chi nhánh được gán.
-   *
-   * codex-review GARAGEOS-001: bản đầu chỉ kiểm chi nhánh lúc TẠO đơn, không
-   * kiểm lúc ĐỌC. RLS không cứu được vì các chi nhánh nằm chung một tenant —
-   * biết UUID đơn là đọc được đơn của chi nhánh khác.
-   *
-   * ⚠️ `TECHNICIAN` theo tài liệu là phạm vi SELF (chỉ đơn được giao). Bảng
-   * phân công thuộc Phase 2, nên tạm thời thợ dùng chung phạm vi BRANCH. Thu
-   * hẹp lại khi có `work_assignment`.
-   */
-  private branchScope(actor: ActorContext): { sql: string; params: string[] } {
-    if (actor.roles.includes('OWNER')) return { sql: '', params: [] };
-    return { sql: 'ro.branch_id = ANY($#)', params: [...actor.branchIds] };
-  }
-
   async getById(actor: ActorContext, id: string): Promise<RepairOrderDetail> {
     return this.db.withTenant(actor, async (tx) => {
-      const scope = this.branchScope(actor);
+      const scope = branchScope(actor);
       const scopeSql =
         scope.sql === '' ? '' : ` AND ${scope.sql.replace('$#', '$2')}`;
       const { rows } = await tx.query<Record<string, unknown>>(
@@ -356,7 +340,7 @@ export class RepairOrderService {
 
       // 🔒 Phạm vi áp TRƯỚC, bộ lọc của client áp SAU. `branchId` trong query
       //    chỉ THU HẸP được kết quả, không bao giờ mở rộng được phạm vi.
-      const scope = this.branchScope(actor);
+      const scope = branchScope(actor);
       if (scope.sql !== '') {
         params.push(scope.params);
         where.push(scope.sql.replace('$#', `$${params.length}`));
@@ -408,7 +392,7 @@ export class RepairOrderService {
     input: ChangeOrderStatusInput,
   ): Promise<{ status: RepairOrderStatus; version: number }> {
     return this.db.withTenant(actor, async (tx) => {
-      const scope = this.branchScope(actor);
+      const scope = branchScope(actor);
       const scopeSql = scope.sql === '' ? '' : ` AND ${scope.sql.replace('$#', '$2')}`;
 
       const { rows } = await tx.query<{

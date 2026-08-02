@@ -6,8 +6,13 @@ import type { Request, Response, NextFunction } from 'express';
 import { TenantAwareDb } from '@garageos/db';
 import { AppModule } from './app.module';
 import { ErrorFilter } from './common/errors';
+import { assertSecretsUsable } from './common/startup-checks';
 
 async function bootstrap(): Promise<void> {
+  // 🔒 Kiểm tra bí mật TRƯỚC khi dựng app: không cần kết nối gì để biết cấu
+  //    hình sai, và hỏng sớm thì thông báo lỗi sạch hơn.
+  assertSecretsUsable();
+
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
 
   // 🔒 Chốt chặn cuối: từ chối khởi động nếu role DB có đặc quyền bỏ qua RLS.
