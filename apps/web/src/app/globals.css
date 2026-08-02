@@ -243,3 +243,59 @@ tbody tr.group-row:hover td { background: var(--c-bg); }
   border-top: 2px solid var(--c-border-strong); border-bottom: none;
 }
 tr.rejected td { text-decoration: line-through; color: var(--c-text-muted); }
+
+/* =========================================================================
+   Trang công khai cho KHÁCH — nguyên tắc khác hẳn phần nội bộ.
+   Mở trên điện thoại, ngoài trời, người dùng không được đào tạo: chữ to,
+   nút to, ít chữ, số tiền rõ ràng tuyệt đối.
+   ========================================================================= */
+.public { max-width: 640px; margin: 0 auto; padding: var(--sp-4); }
+.public .card { margin-bottom: var(--sp-4); }
+.public table th { white-space: nowrap; }
+
+.public-header {
+  background: var(--c-primary); color: #fff;
+  border-radius: var(--r-md); padding: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.public-header .garage { font-size: var(--fs-sm); opacity: .85; }
+.public-header .plate {
+  font-size: var(--fs-2xl); letter-spacing: 1px; margin-top: 2px;
+}
+.public-foot { font-size: var(--fs-xs); color: var(--c-text-muted); text-align: center; }
+
+/* Danh sách hạng mục để khách chọn */
+.choices { list-style: none; margin-top: var(--sp-3); }
+.choices li {
+  border-top: 1px solid var(--c-border);
+  padding: var(--sp-3) 0;
+  display: flex; flex-wrap: wrap; gap: var(--sp-3);
+  justify-content: space-between; align-items: center;
+}
+.choices li.off { opacity: .5; }
+.choice-main { flex: 1 1 240px; }
+.choice-name { font-weight: 600; font-size: var(--fs-lg); display: flex; gap: 8px; align-items: center; }
+/* 🔒 INV-Q-02: phụ tùng nằm BÊN TRONG hạng mục công, không có công tắc riêng */
+.choice-parts { list-style: none; margin-top: 4px; }
+.choice-parts li { font-size: var(--fs-sm); color: var(--c-text-muted); }
+.choice-amount { font-size: var(--fs-lg); font-weight: 700; margin-top: 6px; }
+.choice-actions { display: flex; gap: var(--sp-2); }
+
+/* Nút to, dễ bấm bằng ngón cái */
+.pick {
+  background: #fff; color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  min-height: 44px; min-width: 92px; font-size: var(--fs-md);
+}
+.pick.on      { background: var(--c-success); border-color: var(--c-success); color: #fff; }
+.pick.off-btn { background: var(--c-text-muted); border-color: var(--c-text-muted); color: #fff; }
+.decided { font-weight: 700; font-size: var(--fs-sm); }
+.decided.yes { color: var(--c-success); }
+.decided.no  { color: var(--c-text-muted); }
+
+button.block { width: 100%; margin-top: var(--sp-3); }
+.totals tr.grand.selected th, .totals tr.grand.selected td { color: var(--c-primary); }
+input.otp {
+  font-size: var(--fs-2xl); letter-spacing: 8px; text-align: center;
+  min-height: 56px; width: 100%;
+}

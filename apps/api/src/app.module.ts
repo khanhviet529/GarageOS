@@ -5,10 +5,11 @@ import { VehicleModule } from './vehicle/vehicle.module';
 import { RepairOrderModule } from './repair-order/repair-order.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { QuotationModule } from './quotation/quotation.module';
+import { PublicTrackingModule } from './public/public-tracking.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
-  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule],
+  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, PublicTrackingModule],
   controllers: [HealthController],
 })
 export class AppModule {}
