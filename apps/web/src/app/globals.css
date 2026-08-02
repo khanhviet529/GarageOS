@@ -218,3 +218,28 @@ td.nowrap, th.nowrap { white-space: nowrap; }
   color: var(--c-text-muted);
 }
 tbody tr.group-row:hover td { background: var(--c-bg); }
+
+/* Hai cột: danh mục để chọn bên trái, báo giá đang hình thành bên phải.
+   Tổng tiền phải luôn trong tầm mắt khi cố vấn ngồi cạnh khách. */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); align-items: start; }
+@media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+
+.tabs { display: flex; gap: var(--sp-1); border-bottom: 1px solid var(--c-border); }
+.tab {
+  background: none; color: var(--c-text-muted);
+  border: none; border-bottom: 2px solid transparent;
+  border-radius: 0; padding: var(--sp-2) var(--sp-3);
+}
+.tab:hover:not(:disabled) { background: var(--c-bg); }
+.tab.active { color: var(--c-primary); border-bottom-color: var(--c-primary); }
+
+/* Bảng tổng tiền: căn phải, dòng cuối nổi bật vì đó là con số khách nhìn */
+.totals { width: auto; margin-left: auto; }
+.totals th { background: none; text-transform: none; letter-spacing: 0;
+             font-size: var(--fs-sm); text-align: right; padding-right: var(--sp-4); }
+.totals td { text-align: right; min-width: 140px; }
+.totals tr.grand th, .totals tr.grand td {
+  font-size: var(--fs-lg); font-weight: 700; color: var(--c-text);
+  border-top: 2px solid var(--c-border-strong); border-bottom: none;
+}
+tr.rejected td { text-decoration: line-through; color: var(--c-text-muted); }

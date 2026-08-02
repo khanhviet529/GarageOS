@@ -18,3 +18,4 @@ Vì sao giữ lại:
 | 2026-08-02 | [Phase 1.1 — API và giao diện](2026-08-02-phase-1.1-api-va-web.md) | 2 | 2 CONFIRMED, mỗi cái có một test đỏ làm bằng chứng |
 | 2026-08-02 | [Phase 1.2 — tiếp nhận xe](2026-08-02-phase-1.2-tiep-nhan-xe.md) | 2 | 2 CONFIRMED — thiếu phạm vi chi nhánh lúc đọc, và `GRANT UPDATE` toàn bảng lặp lại lỗi cũ |
 | 2026-08-02 | [Phase 1.3 — danh mục dịch vụ](2026-08-02-phase-1.3-danh-muc.md) | 1 | 1 CONFIRMED — `Number()` trên cột `bigint` làm mất chính xác âm thầm |
+| 2026-08-02 | [Phase 1.4 — lập báo giá](2026-08-02-phase-1.4-bao-gia.md) | 6 | 6 CONFIRMED — vòng nặng nhất; 3 phát hiện nằm đúng chỗ tôi đã tự ghi là "nghi ngờ nhất" mà không kiểm chứng |
