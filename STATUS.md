@@ -27,10 +27,11 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 162 (domain 12, db 29, api 121) |
-| E2E Playwright | 17 kịch bản |
-| Migration | 15 |
-| Vòng codex-review đã chạy | 6, tổng 17 phát hiện, **17 CONFIRMED** |
+| Test tự động | 215 (domain 12, db 40, api 163) |
+| E2E Playwright | 21 kịch bản (4 kiểm accessibility bằng axe-core) |
+| Migration | 21 |
+| Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
+| Phát hiện đã xử lý | 17 + ~50 |
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -73,6 +74,9 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | Chưa gửi SMS/Zalo thật | Dịch vụ ngoài. Dev/CI dùng `OTP_DEV_ECHO=true` — ⚠️ không bao giờ bật ở production |
 | `TECHNICIAN` đang dùng phạm vi `BRANCH` thay vì `SELF` | Bảng phân công thuộc Phase 2; thu hẹp khi có `work_assignment` |
 | `apps/web/src/lib/api.ts` chép lại bảng chuyển trạng thái thay vì import từ `packages/contracts` | Có test đối chiếu TypeScript ↔ database, nhưng **chưa** đối chiếu bản sao của web. Đúng loại lỗi "hai bản cài đặt" mà chính lát cắt 1.6 sinh ra để chống |
+| Mỗi màn hình web tự dựng lại vòng đời dữ liệu của riêng nó | 5 bản sao của `useState(null) + useEffect + .catch`, mỗi bản thiếu một mảnh khác nhau. Một lớp server state (SWR/React Query) xử lý cùng lúc retry, refetch và trạng thái tải — đáng làm nhưng chưa cấp bách |
+| Thuế suất và chiết khấu vẫn nhận từ client | `tenant.discount_threshold_percent` có cột từ 0001 nhưng chưa bao giờ được đọc. PR-03 (chiết khấu vượt ngưỡng cần quản lý duyệt) chưa enforce |
+| Bảng giá phụ tùng chưa snapshot theo báo giá | Chỉ `labor_rate_per_hour` được chép vào `quotation`. Mở bản nháp cũ sau khi bảng giá đổi thì dòng công và dòng phụ tùng dùng hai bảng giá khác nhau |
 | Máy trạng thái `Quotation` chưa có trigger riêng | Các đường của báo giá đang được chặn gián tiếp bằng `one_pending_quotation`, trigger đóng băng sau khi gửi, và điều kiện `status='SENT'` trong câu UPDATE |
 | Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
 
@@ -95,3 +99,8 @@ Ba nguyên tắc rút ra sau 5 vòng:
    Ba phát hiện nặng nhất của Phase 1.2, 1.5 và 1.6 đều là quy tắc **đã nằm
    trong docs** mà không được cài: phạm vi chi nhánh lúc đọc, hạn 30 ngày của
    link tra cứu, và ma trận quyền theo vai.
+5. **Quét toàn bộ, đừng liệt kê tay.** Bốn vòng liên tiếp sửa cùng một lỗi
+   `GRANT UPDATE` không kèm cột, mỗi vòng một bảng khác — vì test chỉ kiểm những
+   bảng được viết tên vào danh sách. Test quét toàn bộ viết ở vòng rà soát tìm
+   ra ngay bốn bảng nữa mà không ai nghĩ tới. Xem
+   [nhật ký rà soát](docs/reviews/2026-08-02-ra-soat-toan-du-an.md).
