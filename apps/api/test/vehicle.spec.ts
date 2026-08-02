@@ -189,7 +189,11 @@ describe('MONEY-001 — số nhận từ client phải có chặn trên', () => 
       type: 'INDIVIDUAL',
       displayName: 'Khach han muc rac',
       phone: `07${uniq}77`,
-      creditLimitAmount: 9007199254740993,
+      // CHÍNH LÀ điều đang kiểm: JavaScript làm tròn số này thành ...992, và
+      // test đòi API phải từ chối. Viết dưới dạng chuỗi rồi Number() để linter
+      // không phải bỏ qua một quy tắc đúng — con số vẫn mất chính xác y hệt khi
+      // JSON.parse chạy ở phía server, đó mới là thứ đang được kiểm.
+      creditLimitAmount: Number('9007199254740993'),
     });
     assert.equal(r.status, 400, 'ghi được số tiền đã bị làm tròn sai vào DB');
     assert.equal(r.body.error.code, 'VALIDATION_FAILED');

@@ -78,7 +78,10 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const groups = view?.quotation?.groups ?? [];
+  // `?? []` sinh mảng MỚI mỗi lần render, nên useMemo bên dưới không bao giờ
+  // dùng lại được kết quả. Bọc luôn ở đây để phụ thuộc là `view` chứ không phải
+  // một mảng đổi danh tính liên tục. (react-hooks/exhaustive-deps bắt được.)
+  const groups = useMemo(() => view?.quotation?.groups ?? [], [view]);
   const allDecided = groups.length > 0 && groups.every((g) => decisions[g.lineId] !== undefined);
 
   // Tổng của phần khách ĐANG CHỌN — con số quan trọng nhất trên màn hình này

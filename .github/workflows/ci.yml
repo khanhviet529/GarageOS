@@ -61,11 +61,25 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm db:seed
 
+      # Build TRƯỚC khi chạy test, và khởi động API bằng BẢN ĐÃ BIÊN DỊCH.
+      #
+      # Bản trước chạy `pnpm --filter @garageos/api dev` (tsx watch) nên toàn bộ
+      # test đi qua loader của tsx, còn `node dist/main.js` — thứ thật sự chạy ở
+      # production — không bao giờ được khởi động. Mọi lỗi chỉ có ở artifact đã
+      # biên dịch (file bị tsconfig.build loại ra, đường import mà tsx phân giải
+      # được còn Node thuần thì không, khác biệt emitDecoratorMetadata giữa tsx
+      # và tsc — đúng cái bẫy `this.xxx is undefined` đã ghi trong STATUS.md)
+      # sẽ đi qua CI xanh và chết ở lần deploy đầu tiên.
+      #
+      # Web đã làm đúng từ đầu (`next start`); API thì chưa.
+      - name: Build production
+        run: pnpm build
+
       # GARAGEOS-004: test tích hợp của API cần API ĐANG CHẠY. Thiếu bước này
       # thì `before` hook ném lỗi connection refused và CI đỏ.
-      - name: Khởi động API nền
+      - name: Khởi động API nền (bản đã biên dịch)
         run: |
-          pnpm --filter @garageos/api dev &
+          pnpm --filter @garageos/api start &
           for i in $(seq 1 40); do
             curl -sf http://localhost:3001/health && break
             sleep 2
@@ -76,14 +90,26 @@ jobs:
 
       # 🔒 Job không được phép bỏ qua: kiểm tra thuộc tính TOÀN HỆ THỐNG.
       #    Tự động áp dụng cho bảng thêm mới sau này.
+      #    (Trước đây script này trỏ vào cùng tập test với `pnpm test` — chạy lại
+      #     y nguyên, thêm 0 độ phủ. Giờ nó trỏ vào schema-invariants.spec.ts.)
       - name: Kiểm tra bất biến kiến trúc
         run: pnpm test:invariants
 
-      # Build production KHÁC dev server: dev bỏ qua nhiều lỗi mà build thì không.
-      # Ví dụ thật: thiếu `resolve.extensionAlias` làm web sập, dev vẫn chạy được
-      # vì trang đó chưa được truy cập.
-      - name: Build production
-        run: pnpm build
+      # Seed phải chạy lại được SAU KHI test đã sinh dữ liệu.
+      # CI trước luôn seed trên database rỗng, nên không bao giờ phát hiện việc
+      # danh sách bảng cần dọn bị thiếu — lỗi chỉ xuất hiện ở máy dev.
+      - name: Seed lại trên database đã có dữ liệu
+        run: pnpm db:seed
+
+      # Migration phải chỉ-tiến: chạy lại không được đổi gì.
+      - name: Migration chạy lại phải không có gì mới
+        run: |
+          out=$(pnpm db:migrate)
+          echo "$out"
+          echo "$out" | grep -q "Không có migration mới" || {
+            echo "❌ Chạy lại migration lại thực thi thêm — migration không idempotent"
+            exit 1
+          }
 
       # E2E là nơi DUY NHẤT kiểm chứng được các lỗi chỉ xuất hiện trong trình
       # duyệt — ví dụ WEB-001 (đọc state cũ của React). Không chạy ở CI thì test

@@ -7,9 +7,13 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint: contracts ok'",
+    "lint": "eslint src --max-warnings 0",
     "test": "echo 'no tests yet'"
   },
-  "dependencies": { "zod": "^3.24.1" },
-  "devDependencies": { "typescript": "^5.7.3" }
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
 }

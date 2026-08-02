@@ -24,7 +24,9 @@ export function hashPassword(plain: string): string {
 const TENANT_A = '11111111-1111-1111-1111-111111111111';
 const TENANT_B = '22222222-2222-2222-2222-222222222222';
 
-const DEMO_PASSWORD = 'demo1234';
+// Mật khẩu demo đọc từ môi trường được, để bản chạy thử cho người ngoài xem
+// không dùng chuỗi đã công khai trong repo.
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD ?? 'demo1234';
 
 interface SeedUser {
   phone: string;
@@ -127,7 +129,37 @@ const PARTS: {
     highVoltage: true, price: 6_800_000, warrantyMonths: 12, warrantyKm: null },
 ];
 
+/**
+ * 🔒 Chặn chạy seed nhầm môi trường.
+ *
+ * `main()` bắt đầu bằng việc XOÁ SẠCH mọi bảng, kể cả `audit_log` — bảng mà
+ * INV-A-01 tuyên bố là chỉ-thêm (role migration bỏ qua được điều đó). Không có
+ * `WHERE`, không hỏi xác nhận. `DATABASE_ADMIN_URL` là biến môi trường thường,
+ * nên chỉ cần một `.env` trỏ staging là `pnpm db:seed` xoá toàn bộ mọi tenant —
+ * rồi tạo lại tài khoản chủ chuỗi với mật khẩu đã công khai trong repo.
+ *
+ * Chặn theo host là chặn ở đúng chỗ: người vận hành phải nói tường minh rằng họ
+ * biết mình đang làm gì.
+ */
+function assertMoiTruongAnToan(url: string): void {
+  const host = new URL(url).hostname;
+  const laCucBo = ['localhost', '127.0.0.1', '::1', 'postgres', 'db'].includes(host);
+
+  if (laCucBo || process.env.SEED_ALLOW_REMOTE === 'yes-toi-hieu-se-xoa-sach') {
+    return;
+  }
+  throw new Error(
+    [
+      `Tu choi seed: DATABASE_ADMIN_URL tro toi "${host}", khong phai may cuc bo.`,
+      'Seed XOA SACH moi bang cua moi tenant truoc khi tao lai du lieu mau.',
+      'Neu that su muon: SEED_ALLOW_REMOTE=yes-toi-hieu-se-xoa-sach',
+    ].join(String.fromCharCode(10)),
+  );
+}
+
 async function main(): Promise<void> {
+  assertMoiTruongAnToan(ADMIN_URL);
+
   const db = new Client({ connectionString: ADMIN_URL });
   await db.connect();
 
@@ -135,27 +167,32 @@ async function main(): Promise<void> {
   // 🔒 Thứ tự xoá phải NGƯỢC chiều khoá ngoại. Thêm bảng mới mà quên thêm vào
   //    đây thì `pnpm db:seed` gãy — và gãy ở giữa chừng, sau khi đã xoá một
   //    nửa dữ liệu. Danh sách này là một phần của việc thêm bảng.
-  for (const table of [
-    'repair_order_asset',
-    'repair_order_photo',
-    'repair_order',
-    'doc_counter',
-    'price_list_item',
-    'price_list',
-    'part',
-    'service_item',
-    'vehicle_ownership',
-    'vehicle',
-    'customer',
-    'user_branch',
-    'refresh_token',
-    'audit_log',
-    'app_user',
-    'branch',
-    'tenant',
-  ]) {
-    await db.query(`DELETE FROM ${table}`);
-  }
+  // 🔒 Toàn bộ phần dọn + tạo lại nằm trong MỘT giao dịch. Bản trước không có,
+  //    nên khi `DELETE FROM repair_order` bị khoá ngoại của `quotation` chặn,
+  //    script chết sau khi đã xoá xong hai bảng đầu — database ở trạng thái nửa
+  //    vời, chỉ cứu được bằng `pnpm db:reset`.
+  await db.query('BEGIN');
+
+  /*
+   * TRUNCATE thay vì DELETE, và MỘT câu cho tất cả bảng.
+   *
+   * Hai lý do, cả hai đều là bài học từ chính dự án này:
+   *
+   * 1. `DELETE FROM quotation_line` kích trigger `trg_qline_no_add_remove` —
+   *    trigger đúng (INV-Q-05: không bớt dòng khỏi báo giá đã gửi khách) nhưng
+   *    nó chặn luôn việc dọn dẹp. TRUNCATE không kích trigger dòng.
+   *
+   * 2. Liệt kê tất cả trong MỘT câu, KHÔNG dùng CASCADE: nếu quên một bảng có
+   *    khoá ngoại trỏ vào, PostgreSQL báo lỗi và NÊU TÊN bảng đó. CASCADE thì
+   *    im lặng xoá luôn — tức là quên một bảng sẽ không bao giờ bị phát hiện.
+   */
+  await db.query(`TRUNCATE
+    otp_challenge, quotation_line, quotation,
+    repair_order_asset, repair_order_photo, repair_order, doc_counter,
+    price_list_item, price_list, part, service_item,
+    vehicle_ownership, vehicle, customer,
+    user_branch, refresh_token, audit_log, app_user, branch, tenant
+    RESTART IDENTITY`);
 
   console.log('Tạo tenant...');
   await db.query(
@@ -248,6 +285,8 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  await db.query('COMMIT');
 
   console.log('');
   console.log('  Xong. Tài khoản demo (mật khẩu: %s)', DEMO_PASSWORD);
