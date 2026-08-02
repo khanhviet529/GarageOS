@@ -132,20 +132,20 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
 
   if (error !== null && view === null) {
     return (
-      <div className="public">
+      <main className="public">
         <div className="card">
           <h1>Không mở được trang</h1>
           <p className="muted">{error}</p>
         </div>
-      </div>
+      </main>
     );
   }
-  if (view === null) return <div className="public"><p className="muted">Đang tải…</p></div>;
+  if (view === null) return <main className="public"><p className="muted">Đang tải…</p></main>;
 
   const q = view.quotation;
 
   return (
-    <div className="public">
+    <main className="public">
       <header className="public-header">
         <div className="garage">{view.garageName}</div>
         <div className="plate mono">{formatPlate(view.vehicle.plateNumber)}</div>
@@ -202,9 +202,12 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
               const chosen = decisions[g.lineId];
               const decided = g.status !== 'PENDING';
               return (
-                <li key={g.lineId} className={decided && g.status === 'REJECTED' ? 'off' : undefined}>
+                <li
+                  key={g.lineId}
+                  className={decided && g.status === 'REJECTED' ? 'off' : undefined}
+                >
                   <div className="choice-main">
-                    <div className="choice-name">
+                    <div className="choice-name" id={`hm-${g.lineId}`}>
                       {g.description}
                       {g.isWarranty && <span className="tag bev">Bảo hành</span>}
                     </div>
@@ -225,18 +228,36 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
                       {g.status === 'APPROVED' ? 'Đã đồng ý' : 'Đã từ chối'}
                     </span>
                   ) : q.canRespond && step === 'choose' ? (
-                    <div className="choice-actions">
+                    <div className="choice-actions" role="group" aria-labelledby={`hm-${g.lineId}`}>
+                      {/*
+                        🔒 `role="group"` đặt ở CẶP NÚT, không đặt ở <li>: đặt ở
+                        <li> thì phần tử đó không còn là `listitem` và axe báo
+                        lỗi quy tắc `list` — bản đầu của tôi làm đúng như vậy, và
+                        chính test accessibility mới thêm đã bắt được.
+
+                        🔒 `aria-label` theo TỪNG hạng mục.
+                        Không có nó, khách dùng trình đọc màn hình duyệt theo nút
+                        chỉ nghe "Đồng ý, nút — Không, nút — Đồng ý, nút…" và
+                        không biết đang duyệt hạng mục nào. Đây là màn hình
+                        QUYẾT ĐỊNH CHI TIỀN: duyệt nhầm hạng mục 5 triệu là hậu
+                        quả tài chính, không phải hậu quả thẩm mỹ.
+
+                        Dạng updater cho setDecisions: đọc state của lần render
+                        hiện tại là đúng mẫu đã gây ra WEB-001 ở file khác.
+                      */}
                       <button
                         className={chosen === true ? 'pick on' : 'pick'}
                         aria-pressed={chosen === true}
-                        onClick={() => setDecisions({ ...decisions, [g.lineId]: true })}
+                        aria-label={`Đồng ý làm: ${g.description}`}
+                        onClick={() => setDecisions((d) => ({ ...d, [g.lineId]: true }))}
                       >
                         Đồng ý
                       </button>
                       <button
                         className={chosen === false ? 'pick off-btn' : 'pick'}
                         aria-pressed={chosen === false}
-                        onClick={() => setDecisions({ ...decisions, [g.lineId]: false })}
+                        aria-label={`Không làm: ${g.description}`}
+                        onClick={() => setDecisions((d) => ({ ...d, [g.lineId]: false }))}
                       >
                         Không
                       </button>
@@ -304,6 +325,11 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
                 <label htmlFor="otp">Nhập mã 6 chữ số</label>
                 <input
                   id="otp" className="otp mono" inputMode="numeric" maxLength={6}
+                  // Cho iOS/Android gợi ý mã từ SMS ngay trên bàn phím. Không có
+                  // nó, khách đang đứng ngoài trời phải thoát trình duyệt, mở
+                  // Tin nhắn, nhớ 6 số, quay lại — và Safari có thể huỷ trang,
+                  // mất sạch lựa chọn vừa bấm.
+                  autoComplete="one-time-code"
                   value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   autoFocus
                 />
@@ -318,7 +344,15 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
           )}
 
           {step === 'done' && (
-            <div className="alert success" style={{ marginTop: 16 }}>
+            <div
+              className="alert success"
+              style={{ marginTop: 16 }}
+              // Mọi thông báo LỖI trong dự án đều có role="alert", nhưng khối
+              // xác nhận thành công quan trọng nhất — khách vừa duyệt báo giá —
+              // lại im lặng hoàn toàn với trình đọc màn hình. `role="status"`
+              // đọc lên mà không cắt ngang, đúng mức độ khẩn cho tin tốt.
+              role="status"
+            >
               <strong>Đã ghi nhận phản hồi của bạn.</strong>
               <div style={{ marginTop: 6 }}>
                 Garage sẽ tiến hành các hạng mục bạn đã đồng ý. Bạn có thể mở lại trang
@@ -333,6 +367,6 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
         Trang này dành riêng cho xe {formatPlate(view.vehicle.plateNumber)}. Đừng chia sẻ
         đường dẫn cho người khác.
       </p>
-    </div>
+    </main>
   );
 }

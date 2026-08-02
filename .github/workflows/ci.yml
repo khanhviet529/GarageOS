@@ -126,6 +126,10 @@ jobs:
           done
           curl -sf http://localhost:3000/dang-nhap >/dev/null || { echo "Web không khởi động được"; exit 1; }
 
+      # E2E gồm cả kiểm tra accessibility tự động bằng axe-core trên 4 màn hình.
+      # Lỗi accessibility nặng nhất của dự án (nút duyệt báo giá không có tên
+      # riêng theo hạng mục) đã lọt qua 17 kịch bản E2E viết tay — chính chúng
+      # phải chọn theo class CSS để vòng qua vấn đề thay vì phát hiện nó.
       - name: E2E
         run: pnpm e2e
 

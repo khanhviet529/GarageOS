@@ -63,7 +63,7 @@ export default function IntakePage() {
     <>
       <AppHeader current="tiep-nhan" />
 
-      <div className="container stack">
+      <main id="noi-dung" className="container stack">
         <form className="card" onSubmit={onSubmit}>
           <h2>Tra cứu biển số</h2>
           <div className="row">
@@ -157,7 +157,7 @@ export default function IntakePage() {
             )}
           </div>
         )}
-      </div>
+      </main>
     </>
   );
 }
@@ -356,6 +356,16 @@ function NewCustomerVehicle({ plate, onDone }: { plate: string; onDone: () => vo
   const [battery, setBattery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /*
+   * Giữ lại khách đã tạo được.
+   *
+   * Bản trước gọi `createCustomer` rồi `createVehicle`. Bước hai lỗi (biển trùng,
+   * validate, mạng) thì người dùng sửa dữ liệu và bấm lưu lần nữa — và
+   * `createCustomer` chạy LẠI, sinh khách hàng thứ hai cùng số điện thoại.
+   * Đúng loại rác dữ liệu mà cả màn gợi ý biển gần giống được dựng ra để chống:
+   * vài tháng sau tra số điện thoại ra hai hồ sơ, lịch sử xe chia đôi.
+   */
+  const [customerId, setCustomerId] = useState<string | null>(null);
 
   // 🔒 ADR-0004: xe xăng KHÔNG có dung lượng pin. Ẩn hẳn trường thay vì để
   //    người dùng nhập rồi báo lỗi — dẫn dắt đúng ngay từ đầu.
@@ -365,11 +375,15 @@ function NewCustomerVehicle({ plate, onDone }: { plate: string; onDone: () => vo
     e.preventDefault();
     setError(null); setBusy(true);
     try {
-      const c = await api.createCustomer({
-        type: 'INDIVIDUAL', displayName: name.trim(), phone: phone.trim(),
-      });
+      const id =
+        customerId ??
+        (await api.createCustomer({
+          type: 'INDIVIDUAL', displayName: name.trim(), phone: phone.trim(),
+        })).id;
+      setCustomerId(id);
+
       await api.createVehicle({
-        customerId: c.id,
+        customerId: id,
         plateNumber: plate,
         powertrain,
         ...(make.trim() === '' ? {} : { makeName: make.trim() }),

@@ -21,8 +21,17 @@ export class ApiCallError extends Error {
 export const auth = {
   token: (): string | null => globalThis.localStorage?.getItem(TOKEN_KEY) ?? null,
   user: (): { fullName: string; roles: string[]; branchIds: string[] } | null => {
-    const raw = globalThis.localStorage?.getItem(USER_KEY);
-    return raw === null || raw === undefined ? null : JSON.parse(raw);
+    // 🔒 `JSON.parse` KHÔNG được để trần ở đây: hàm này chạy trong useEffect của
+    //    AppHeader, tức là trên mọi màn hình nội bộ. Dữ liệu phiên hỏng (ghi dở
+    //    do tab bị kill, phiên bản cũ lưu cấu trúc khác) sẽ ném lỗi và làm trắng
+    //    màn hình — cùng lúc mất luôn nút Đăng xuất để tự thoát.
+    try {
+      const raw = globalThis.localStorage?.getItem(USER_KEY);
+      return raw === null || raw === undefined ? null : JSON.parse(raw);
+    } catch {
+      auth.clear();
+      return null;
+    }
   },
   save: (token: string, user: unknown): void => {
     localStorage.setItem(TOKEN_KEY, token);

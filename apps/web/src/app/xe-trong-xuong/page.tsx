@@ -7,7 +7,7 @@
  * hình. Không phân trang ở Phase 1 vì một garage hiếm khi có quá 100 xe cùng
  * lúc; khi nào chạm ngưỡng thì mới cần, và lúc đó sẽ thấy rõ cần lọc theo gì.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   api, ApiCallError,
@@ -15,40 +15,78 @@ import {
   type RepairOrderListItem,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorState, Loading } from '@/components/ErrorState';
 import { formatPlate } from '@garageos/domain';
 
 export default function WorkshopPage() {
   const [orders, setOrders] = useState<RepairOrderListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [capNhatLuc, setCapNhatLuc] = useState<Date | null>(null);
+
+  const taiLai = useCallback(() => {
+    setError(null);
     api
       .listRepairOrders()
-      .then(setOrders)
+      .then((r) => {
+        setOrders(r);
+        setCapNhatLuc(new Date());
+      })
       .catch((err) => {
         setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
         setOrders([]);
       });
   }, []);
 
+  useEffect(() => {
+    taiLai();
+
+    /*
+     * Màn hình này "mở cả ngày" theo đúng comment ở đầu file — nhưng bản trước
+     * chỉ tải đúng một lần lúc mount. Cố vấn để tab từ sáng, 3 giờ chiều nhìn
+     * vào thấy trạng thái của 9 giờ sáng, rồi nói với khách "xe anh đang chờ
+     * phụ tùng" trong khi thợ đã sửa xong từ trưa.
+     *
+     * Tải lại khi tab được nhìn lại: đúng lúc người dùng sắp đọc dữ liệu, và
+     * không tốn request nào khi tab đang ẩn.
+     */
+    const khiHienLai = () => {
+      if (document.visibilityState === 'visible') taiLai();
+    };
+    document.addEventListener('visibilitychange', khiHienLai);
+    return () => document.removeEventListener('visibilitychange', khiHienLai);
+  }, [taiLai]);
+
   return (
     <>
       <AppHeader current="xe-trong-xuong" />
 
-      <div className="container stack">
+      <main id="noi-dung" className="container stack">
         <div className="card">
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0 }}>
               Xe trong xưởng{orders !== null && orders.length > 0 && ` (${orders.length})`}
             </h2>
-            <Link href="/tiep-nhan"><button>Tiếp nhận xe mới</button></Link>
+            <div className="row">
+              {capNhatLuc !== null && (
+                <span className="hint" style={{ alignSelf: 'center' }}>
+                  Cập nhật {capNhatLuc.toLocaleTimeString('vi-VN')}
+                </span>
+              )}
+              <button className="secondary" onClick={taiLai}>Làm mới</button>
+              <Link href="/tiep-nhan"><button>Tiếp nhận xe mới</button></Link>
+            </div>
           </div>
 
           {error !== null && (
-            <div className="alert error" style={{ marginTop: 12 }} role="alert">{error}</div>
+            <div style={{ marginTop: 12 }}>
+              <ErrorState message={error} onRetry={taiLai} />
+            </div>
           )}
 
-          {orders === null && <p className="muted" style={{ marginTop: 12 }}>Đang tải…</p>}
+          {orders === null && error === null && (
+            <div style={{ marginTop: 12 }}><Loading what="danh sách xe" /></div>
+          )}
 
           {orders !== null && orders.length === 0 && error === null && (
             <div className="alert info" style={{ marginTop: 12 }}>
@@ -91,7 +129,7 @@ export default function WorkshopPage() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </>
   );
 }
