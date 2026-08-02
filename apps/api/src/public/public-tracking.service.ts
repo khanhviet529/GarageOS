@@ -208,12 +208,24 @@ export class PublicTrackingService {
     const scope = await this.resolveToken(token);
 
     return this.db.withTenantId(scope.tenantId, null, async (tx) => {
+      /*
+       * 🔒 GARAGEOS-002: khoá dòng báo giá TRƯỚC khi đếm.
+       *
+       * `SELECT count(*)` rồi `INSERT` là hai bước tách rời: hai request xin mã
+       * cùng lúc đều đọc thấy 4 và đều ghi, thành 6 mã trong một giờ. Kẻ tấn
+       * công lặp lại việc đó để có nhiều mã sống song song, tức là mở rộng bề
+       * mặt dò mã đúng theo cấp số nhân của số lần bắn song song.
+       *
+       * `FOR UPDATE` ở đây bắt mọi request cho CÙNG một báo giá phải xếp hàng;
+       * báo giá khác nhau vẫn chạy song song bình thường.
+       */
       const { rows } = await tx.query<{ status: string; valid_until: Date | null; phone: string }>(
         `SELECT q.status, q.valid_until, COALESCE(c.approver_phone, c.phone) AS phone
            FROM quotation q
            JOIN repair_order ro ON ro.id = q.repair_order_id
            JOIN customer c ON c.id = ro.customer_id
-          WHERE q.id = $1 AND q.repair_order_id = $2`,
+          WHERE q.id = $1 AND q.repair_order_id = $2
+          FOR UPDATE OF q`,
         [quotationId, scope.repairOrderId],
       );
       const q = rows[0];
@@ -334,6 +346,21 @@ export class PublicTrackingService {
       );
       const validIds = new Set(laborLines.map((l) => l.id));
 
+      /*
+       * 🔒 GARAGEOS-001: phải kiểm TẬP HỢP, không kiểm số lượng.
+       *
+       * Bản đầu chỉ so `decisions.length === laborLines.length`. Gửi hai quyết
+       * định cho CÙNG một hạng mục là qua được: số lượng khớp, nhưng hạng mục
+       * còn lại vẫn PENDING trong khi báo giá đã bị chốt là PARTIALLY_APPROVED
+       * và đơn đã chuyển sang đang sửa. Khách chưa bao giờ trả lời hạng mục đó.
+       */
+      const decidedIds = new Set(input.decisions.map((d) => d.lineId));
+      if (decidedIds.size !== input.decisions.length) {
+        throw new BusinessError(
+          ErrorCode.VALIDATION_FAILED,
+          'Có hạng mục được trả lời hai lần',
+        );
+      }
       for (const d of input.decisions) {
         if (!validIds.has(d.lineId)) {
           throw new BusinessError(
@@ -342,7 +369,7 @@ export class PublicTrackingService {
           );
         }
       }
-      if (input.decisions.length !== laborLines.length) {
+      if (decidedIds.size !== validIds.size) {
         throw new BusinessError(
           ErrorCode.VALIDATION_FAILED,
           'Phải trả lời tất cả hạng mục trước khi xác nhận',
@@ -368,17 +395,39 @@ export class PublicTrackingService {
         );
       }
 
+      /*
+       * 🔒 Trạng thái và số tiền đọc LẠI TỪ DATABASE sau khi ghi, không suy từ
+       * mảng `decisions` gửi lên.
+       *
+       * Hai lý do:
+       *  - GARAGEOS-001: dữ liệu vào có thể không phủ hết hạng mục; nguồn chân
+       *    lý phải là những gì thật sự nằm trong bảng.
+       *  - Trigger lan trạng thái xuống dòng phụ tùng chạy SAU lệnh UPDATE, nên
+       *    chỉ đọc lại mới thấy kết quả cuối cùng.
+       */
       const { rows: after } = await tx.query<{ status: string; total: string | null }>(
         `SELECT status, sum(line_total)::text AS total FROM quotation_line
           WHERE quotation_id = $1 GROUP BY status`,
         [input.quotationId],
       );
-      const totals = new Map(after.map((r) => [r.status, Number(r.total ?? 0)]));
+      // 🔒 GARAGEOS-004: tổng của bigint cũng là bigint và cũng vượt 2^53 được.
+      //    `Number()` mù ở đây làm hỏng đúng con số khách vừa đồng ý trả.
+      const totals = new Map(
+        after.map((r) => [r.status, parseAmountFromDb(r.total ?? 0, `total(${r.status})`)]),
+      );
       const approvedAmount = totals.get('APPROVED') ?? 0;
       const rejectedAmount = totals.get('REJECTED') ?? 0;
+
+      const { rows: laborAfter } = await tx.query<{ status: string; n: string }>(
+        `SELECT status, count(*)::text AS n FROM quotation_line
+          WHERE quotation_id = $1 AND line_type = 'LABOR' GROUP BY status`,
+        [input.quotationId],
+      );
+      const laborByStatus = new Map(laborAfter.map((r) => [r.status, Number(r.n)]));
       const newStatus = deriveQuotationStatus(
-        laborLines.length,
-        input.decisions.filter((d) => d.approved).length,
+        laborByStatus.get('APPROVED') ?? 0,
+        laborByStatus.get('REJECTED') ?? 0,
+        laborByStatus.get('PENDING') ?? 0,
       );
 
       /*
@@ -496,12 +545,21 @@ function assertRespondable(status: string, validUntil: Date | null): void {
 }
 
 /**
- * 🔒 `Quotation.status` là giá trị SUY RA từ các dòng, không phải người dùng
- * đặt — BC-02 mục 3.
+ * 🔒 `Quotation.status` là giá trị SUY RA từ trạng thái thật của các dòng,
+ * không phải người dùng đặt — BC-02 mục 3.
+ *
+ * Nhận vào số dòng theo TỪNG trạng thái thay vì "tổng và số đã duyệt": còn dòng
+ * nào chưa quyết thì báo giá vẫn đang chờ, và cách ký hiệu cũ không diễn đạt
+ * được tình huống đó.
  */
-export function deriveQuotationStatus(total: number, approved: number): string {
+export function deriveQuotationStatus(
+  approved: number,
+  rejected: number,
+  pending: number,
+): string {
+  if (pending > 0) return 'SENT';
   if (approved === 0) return 'REJECTED';
-  if (approved === total) return 'APPROVED';
+  if (rejected === 0) return 'APPROVED';
   return 'PARTIALLY_APPROVED';
 }
 

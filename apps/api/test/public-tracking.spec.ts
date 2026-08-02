@@ -403,3 +403,127 @@ describe('🔒 INV-T-01 — token của tenant này không mở được đơn c
     assert.notEqual(r.body.garageName, 'Garage Đối Chứng');
   });
 });
+
+describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => {
+  test('🔒 GARAGEOS-001: gửi hai quyết định cho CÙNG một hạng mục bị chặn', async () => {
+    // Số lượng khớp nhưng tập hợp không phủ hết: hạng mục còn lại chưa bao giờ
+    // được khách trả lời, mà báo giá đã bị chốt và đơn đã chuyển sang đang sửa.
+    const s = await newSentQuotation('O');
+    const otp = await getOtp(s.trackingToken, s.quotationId);
+
+    const r = await call(
+      'POST', `/api/v1/public/tracking/${s.trackingToken}/respond`,
+      {
+        quotationId: s.quotationId,
+        otp,
+        decisions: [
+          { lineId: s.laborLineIds[0], approved: true },
+          { lineId: s.laborLineIds[0], approved: false },
+        ],
+      },
+      false,
+    );
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.match(r.body.error.message, /hai lần/);
+
+    // Và báo giá phải còn nguyên trạng thái chờ
+    const view = await call('GET', `/api/v1/public/tracking/${s.trackingToken}`, undefined, false);
+    assert.equal(view.body.quotation.status, 'SENT');
+    for (const g of view.body.quotation.groups) assert.equal(g.status, 'PENDING');
+  });
+
+  test('🔒 GARAGEOS-002: xin mã đồng thời không vượt được giới hạn 5 mã/giờ', async () => {
+    const s = await newSentQuotation('P');
+
+    // Bắn 8 request song song. Không có khoá thì nhiều request cùng đọc thấy
+    // số cũ và cùng ghi -> nhiều hơn 5 mã sống song song, tức là mở rộng bề mặt
+    // dò mã.
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        call('POST', `/api/v1/public/tracking/${s.trackingToken}/otp`,
+             { quotationId: s.quotationId }, false),
+      ),
+    );
+    const created = results.filter((r) => r.status === 201).length;
+    assert.equal(created, 5, `tạo được ${created} mã trong khi giới hạn là 5`);
+
+    const { rows } = await pool.query<{ n: string }>(
+      `SELECT count(*) AS n FROM otp_challenge
+        WHERE quotation_id = $1 AND created_at > now() - interval '1 hour'`,
+      [s.quotationId],
+    );
+    assert.equal(Number(rows[0]!.n), 5, 'số bản ghi trong database vượt giới hạn');
+  });
+
+  test('🔒 GARAGEOS-003: link hết hạn 30 ngày sau khi bàn giao xe', async () => {
+    // docs/02-actors-and-permissions.md mục 2.1. Không có điều kiện này thì một
+    // link phát năm ngoái vẫn mở được biển số, tên chủ xe và toàn bộ báo giá.
+    const s = await newSentQuotation('Q');
+
+    const before = await call('GET', `/api/v1/public/tracking/${s.trackingToken}`, undefined, false);
+    assert.equal(before.status, 200);
+
+    const { rows: ro } = await pool.query<{ id: string }>(
+      `SELECT repair_order_id AS id FROM quotation WHERE id = $1`,
+      [s.quotationId],
+    );
+    // Giao xe 31 ngày trước
+    await pool.query(
+      `UPDATE repair_order
+          SET status = 'DELIVERED', odometer_out = 46000,
+              delivered_at = now() - interval '31 days'
+        WHERE id = $1`,
+      [ro[0]!.id],
+    );
+
+    const after = await call('GET', `/api/v1/public/tracking/${s.trackingToken}`, undefined, false);
+    assert.equal(after.status, 404, 'link vẫn mở được sau khi hết hạn');
+
+    // Giao xe hôm qua thì vẫn còn xem được lịch sử
+    await pool.query(
+      `UPDATE repair_order SET delivered_at = now() - interval '1 day' WHERE id = $1`,
+      [ro[0]!.id],
+    );
+    const recent = await call('GET', `/api/v1/public/tracking/${s.trackingToken}`, undefined, false);
+    assert.equal(recent.status, 200, 'link đóng quá sớm sau khi giao xe');
+  });
+
+  test('🔒 GARAGEOS-003: đơn đã huỷ thì link đóng ngay', async () => {
+    const s = await newSentQuotation('R');
+    const { rows: ro } = await pool.query<{ id: string }>(
+      `SELECT repair_order_id AS id FROM quotation WHERE id = $1`,
+      [s.quotationId],
+    );
+    await pool.query(
+      `UPDATE repair_order SET status = 'CANCELLED', cancelled_at = now(),
+                               cancel_reason = 'Khach doi y'
+        WHERE id = $1`,
+      [ro[0]!.id],
+    );
+    const r = await call('GET', `/api/v1/public/tracking/${s.trackingToken}`, undefined, false);
+    assert.equal(r.status, 404);
+  });
+
+  test('GARAGEOS-001b: trạng thái báo giá suy từ DATABASE, không từ dữ liệu gửi lên', async () => {
+    // Duyệt một nửa qua đường công khai, rồi đọc lại bằng API nội bộ để đối
+    // chiếu: hai đường phải cho cùng một kết luận.
+    const s = await newSentQuotation('S');
+    const otp = await getOtp(s.trackingToken, s.quotationId);
+    await call(
+      'POST', `/api/v1/public/tracking/${s.trackingToken}/respond`,
+      {
+        quotationId: s.quotationId, otp,
+        decisions: [
+          { lineId: s.laborLineIds[0], approved: true },
+          { lineId: s.laborLineIds[1], approved: false },
+        ],
+      },
+      false,
+    );
+
+    const internal = await call('GET', `/api/v1/quotations/${s.quotationId}`);
+    assert.equal(internal.body.status, 'PARTIALLY_APPROVED');
+    const pending = internal.body.lines.filter((l: any) => l.status === 'PENDING');
+    assert.equal(pending.length, 0, 'còn dòng chưa quyết mà báo giá đã chốt');
+  });
+});
