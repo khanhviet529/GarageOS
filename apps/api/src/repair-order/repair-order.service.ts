@@ -3,11 +3,16 @@ import { randomBytes } from 'node:crypto';
 import { TenantAwareDb } from '@garageos/db';
 import {
   ErrorCode,
+  canTransitionRepairOrder,
+  canRoleTransition,
+  type ChangeOrderStatusInput,
+  type RepairOrderStatus,
   type ActorContext,
   type CreateRepairOrderInput,
   type RepairOrderDetail,
   type RepairOrderListItem,
 } from '@garageos/contracts';
+import { REPAIR_ORDER_STATUS_LABEL, ORDER_ACTION_LABEL } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 
 /**
@@ -262,7 +267,7 @@ export class RepairOrderService {
       const scopeSql =
         scope.sql === '' ? '' : ` AND ${scope.sql.replace('$#', '$2')}`;
       const { rows } = await tx.query<Record<string, unknown>>(
-        `SELECT ro.id, ro.code, ro.status, ro.customer_complaint, ro.odometer_in,
+        `SELECT ro.id, ro.code, ro.status, ro.version, ro.customer_complaint, ro.odometer_in,
                 ro.odometer_unavailable, ro.odometer_override_reason, ro.energy_level_in,
                 ro.received_at, ro.promised_at, ro.brought_by_name, ro.brought_by_phone,
                 ro.customer_access_token,
@@ -296,6 +301,7 @@ export class RepairOrderService {
         id: r.id as string,
         code: r.code as string,
         status: r.status as RepairOrderDetail['status'],
+        version: Number(r.version),
         customerComplaint: r.customer_complaint as string,
         odometerIn: (r.odometer_in ?? null) as number | null,
         odometerUnavailable: r.odometer_unavailable as boolean,
@@ -382,6 +388,145 @@ export class RepairOrderService {
         customerComplaint: r.customer_complaint as string,
         receivedAt: (r.received_at as Date).toISOString(),
       }));
+    });
+  }
+
+  /**
+   * Chuyển trạng thái đơn — 🔒 docs/06-state-machines.md.
+   *
+   * Ba lớp bảo vệ, cố ý chồng nhau:
+   *  1. Bảng chuyển đổi dùng chung ở `packages/contracts` — web chỉ vẽ nút hợp lệ
+   *  2. Kiểm tra ở đây — chặn request thẳng vào API
+   *  3. Trigger ở database — chặn cả script bảo trì và import
+   *
+   * Lớp 1 là trải nghiệm, lớp 2 là thông báo lỗi tử tế, lớp 3 mới là ràng buộc
+   * thật. Bỏ lớp 3 thì hai lớp trên chỉ bảo vệ những đường đi qua chúng.
+   */
+  async changeStatus(
+    actor: ActorContext,
+    id: string,
+    input: ChangeOrderStatusInput,
+  ): Promise<{ status: RepairOrderStatus; version: number }> {
+    return this.db.withTenant(actor, async (tx) => {
+      const scope = this.branchScope(actor);
+      const scopeSql = scope.sql === '' ? '' : ` AND ${scope.sql.replace('$#', '$2')}`;
+
+      const { rows } = await tx.query<{
+        status: RepairOrderStatus;
+        version: string;
+        odometer_in: number | null;
+        vehicle_id: string;
+      }>(
+        `SELECT ro.status, ro.version, ro.odometer_in, ro.vehicle_id
+           FROM repair_order ro
+          WHERE ro.id = $1${scopeSql}
+          FOR UPDATE OF ro`,
+        scope.params.length === 0 ? [id] : [id, scope.params],
+      );
+      const order = rows[0];
+      if (order === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy đơn');
+      }
+
+      /*
+       * 🔒 Khoá lạc quan trước khi kiểm tra bất cứ thứ gì khác.
+       *
+       * Hai cố vấn mở cùng một đơn trên hai máy, cùng bấm một nút: nếu không có
+       * bước này thì người bấm sau ghi đè lên việc người bấm trước vừa làm mà
+       * không ai biết. Thông báo phải nói rõ để họ mở lại và nhìn tình trạng
+       * mới, chứ không phải bấm lại.
+       */
+      if (Number(order.version) !== input.version) {
+        throw new BusinessError(
+          ErrorCode.STALE_VERSION,
+          'Đơn vừa được người khác cập nhật. Mở lại để xem tình trạng mới nhất.',
+        );
+      }
+
+      /*
+       * 🔒 GARAGEOS-REV-002 — kiểm VAI, không chỉ kiểm phạm vi.
+       *
+       * Hỏi trước cả câu hỏi về đường chuyển: thợ không được huỷ đơn, và câu
+       * trả lời đó không phụ thuộc đơn đang ở trạng thái nào.
+       */
+      if (!canRoleTransition(actor.roles, input.to)) {
+        throw new BusinessError(
+          ErrorCode.FORBIDDEN,
+          `Vai trò của bạn không được thực hiện thao tác "${ORDER_ACTION_LABEL[input.to]}".`,
+        );
+      }
+
+      if (!canTransitionRepairOrder(order.status, input.to)) {
+        throw new BusinessError(
+          ErrorCode.INVALID_STATE_TRANSITION,
+          `Không chuyển từ "${REPAIR_ORDER_STATUS_LABEL[order.status]}" sang ` +
+            `"${REPAIR_ORDER_STATUS_LABEL[input.to]}" được.`,
+          { from: order.status, to: input.to },
+        );
+      }
+
+      // 🔒 INV-V-04 vẫn áp cho số km RA: xe không chạy lùi trong lúc nằm xưởng
+      if (
+        input.to === 'DELIVERED' &&
+        input.odometerOut !== undefined &&
+        order.odometer_in !== null &&
+        input.odometerOut < order.odometer_in
+      ) {
+        throw new BusinessError(
+          ErrorCode.VALIDATION_FAILED,
+          `Số km lúc giao (${input.odometerOut.toLocaleString('vi-VN')}) nhỏ hơn lúc nhận ` +
+            `(${order.odometer_in.toLocaleString('vi-VN')}).`,
+        );
+      }
+
+      // Các mốc thời gian tính ở TypeScript chứ không dùng CASE trong SQL: tham
+      // số $2 khi đó vừa phải là enum `repair_order_status` vừa phải so sánh với
+      // chuỗi, và PostgreSQL từ chối ("inconsistent types deduced for parameter").
+      const now = new Date();
+      await tx.query(
+        `UPDATE repair_order
+            SET status = $2,
+                version = version + 1,
+                odometer_out = COALESCE($3, odometer_out),
+                odometer_out_unavailable = COALESCE($9, odometer_out_unavailable),
+                cancel_reason = COALESCE($4, cancel_reason),
+                cancel_category = COALESCE($5, cancel_category),
+                cancelled_at = COALESCE($6, cancelled_at),
+                ready_for_delivery_at = COALESCE($7, ready_for_delivery_at),
+                delivered_at = COALESCE($8, delivered_at)
+          WHERE id = $1`,
+        [
+          id,
+          input.to,
+          input.odometerOut ?? null,
+          input.cancelReason ?? null,
+          input.cancelCategory ?? null,
+          input.to === 'CANCELLED' ? now : null,
+          input.to === 'AWAITING_DELIVERY' ? now : null,
+          input.to === 'DELIVERED' ? now : null,
+          /*
+           * 🔒 GARAGEOS-REV-001: hợp đồng API cho phép giao xe khi đồng hồ hỏng,
+           * nhưng bản đầu không ghi cột nào cả -> ràng buộc từ chối và người
+           * dùng nhận lỗi 500 cho một việc hoàn toàn hợp lệ.
+           *
+           * Cột này là `odometer_out_unavailable`, KHÁC với
+           * `odometer_unavailable` của lúc tiếp nhận — xem migration 0015.
+           */
+          input.to === 'DELIVERED' && input.odometerUnavailable === true ? true : null,
+        ],
+      );
+
+      // Số km của xe cập nhật lúc GIAO, vì đó là con số mới nhất đọc được
+      if (input.to === 'DELIVERED' && input.odometerOut !== undefined) {
+        await tx.query(
+          `UPDATE vehicle SET last_odometer = GREATEST(last_odometer, $1),
+                              last_service_at = now()
+            WHERE id = $2`,
+          [input.odometerOut, order.vehicle_id],
+        );
+      }
+
+      return { status: input.to, version: Number(order.version) + 1 };
     });
   }
 }
