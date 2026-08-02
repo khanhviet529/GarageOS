@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-02 · Nhánh `main` · CI xanh · **Phase 1 hoàn thành (1.1 → 1.6)**
+> Cập nhật: 2026-08-02 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1 (kho) xong**
 
 ## Đang ở đâu
 
@@ -21,15 +21,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 1.4 | Lập báo giá, snapshot giá, thuế theo dòng | ✅ merged |
 | 1.5 | Trang tra cứu công khai + OTP + duyệt từng phần | ✅ merged |
 | 1.6 | Máy trạng thái `RepairOrder` (3 lớp: contracts → service → trigger) | ✅ merged |
-| 2 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.1 | Kho: sổ kho chỉ-thêm, tồn được ràng buộc, giá vốn bình quân | ✅ merged |
+| 2.2 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 215 (domain 12, db 40, api 163) |
-| E2E Playwright | 21 kịch bản (4 kiểm accessibility bằng axe-core) |
-| Migration | 21 |
+| Test tự động | 236 (domain 12, db 42, api 182) |
+| E2E Playwright | 42 kịch bản (5 accessibility bằng axe-core, 16 điểm ngắt responsive) |
+| Migration | 25 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -87,6 +88,15 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | PR-03 không được enforce | `assertDiscountWithinAuthority()` trong `QuotationService`. Kiểm theo TỪNG DÒNG: chiết khấu % của cả tờ báo giá là trung bình có trọng số của các dòng, nên kiểm từng dòng vừa chặt hơn vừa không tách nhỏ để lách được |
 | Bảng giá phụ tùng chưa snapshot | 0022 mục A. `quotation.price_list_id` + khoá ngoại. Comment trong `pricePart()` **đã tuyên bố** là nó bám vào bảng giá đã snapshot — điều đó chưa bao giờ đúng, chưa từng có cột để bám. Comment sống qua sáu vòng review vì người đọc tin comment |
 | `UPDATE tenant` / `UPDATE vehicle_ownership` lỗi 42703 | 0023. `touch_row()` gán `NEW.version` cho 10 bảng, hai bảng không có cột đó. Chưa ai biết vì chưa có màn hình nào sửa chúng — nhưng sang tên xe (BC-01) ở Phase sau sẽ chết ngay lần bấm đầu |
+
+## Bẫy đã gặp ở Phase 2.1 — kho
+
+| Bẫy | Vì sao |
+|---|---|
+| `ALTER DEFAULT PRIVILEGES` ở 0003 tự cấp `SELECT, INSERT` cho MỌI bảng mới | Nghĩa là `stock_balance` được cấp INSERT mà không ai gõ dòng nào — ứng dụng dựng được một dòng tồn từ hư không, không chứng từ đối ứng. Phải `REVOKE INSERT` tường minh |
+| Trigger function THƯỜNG chạy bằng quyền người gọi | `cong_vao_ton_kho()` ghi `stock_balance` mà `garageos_app` không có quyền ghi. Phải `SECURITY DEFINER` + `SET search_path` — nếu không thì hỏng ngay lần nhập kho đầu tiên |
+| `min-width: auto` của flexbox | `<select>` danh mục phụ tùng tự giãn theo option dài nhất và đẩy cả trang trượt ngang ở 375px, dù `.row` có `flex-wrap` và `.field` không đặt chiều rộng. Chỉ test điểm ngắt bắt được |
+| `ROLE_LABEL` ở web sai 3/6 khoá từ Phase 1 | `MANAGER`/`WAREHOUSE_KEEPER`/`ACCOUNTANT` thay vì `BRANCH_MANAGER`/`STORE_KEEPER`/`CASHIER`. Sống sót vì mọi ảnh chụp và mọi E2E đều đăng nhập bằng cố vấn dịch vụ — vai duy nhất đúng nhãn. Đã chuyển về `contracts` với kiểu `Record<Role, string>` để trình biên dịch bắt |
 
 ## Quy trình bắt buộc
 

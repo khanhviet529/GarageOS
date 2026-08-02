@@ -10,3 +10,4 @@ export * from './quotation.js';
 export * from './public-tracking.js';
 export * from './state-machine.js';
 export * from './permissions.js';
+export * from './stock.js';

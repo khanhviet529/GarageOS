@@ -37,6 +37,36 @@ export const ACTION_ROLES = {
    * Cố vấn áp được chiết khấu trong ngưỡng; vượt ngưỡng cần quản lý duyệt.
    */
   'quotation:discountOverThreshold': ['BRANCH_MANAGER', 'OWNER'],
+
+  /*
+   * Kho — docs/02 mục 3, nhóm hàng "Kho".
+   *
+   * Cố vấn dịch vụ KHÔNG có mặt ở đây, kể cả ở `stock:read`: ma trận cho cố vấn
+   * dấu 👁 (xem tồn) chứ không phải ✅. Phase 2.1 chưa có endpoint chỉ-đọc-hạn-chế
+   * nên để cố vấn ngoài; mở đúng lúc làm màn "kiểm tra còn hàng không" ở 2.2,
+   * đi kèm test — chứ không mở sẵn.
+   *
+   * 🔒 `stock:readCost` tách riêng khỏi `stock:read` vì giá vốn là bí mật kinh
+   * doanh: nó cho biết xưởng lãi bao nhiêu trên mỗi phụ tùng. docs/02 mục 2.4
+   * cho thủ kho xem giá vốn, mục 2.3 cấm thợ thấy MỌI số tiền.
+   */
+  'stock:read': ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'],
+  'stock:readCost': ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'],
+  'stock:receive': ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Điều chỉnh tồn — KHÔNG cho thủ kho.
+   *
+   * Ma trận docs/02 để thủ kho ✅ ở "Kiểm kê" nhưng ❌ ở "Duyệt điều chỉnh >
+   * ngưỡng", và mục 2.4 ghi rõ thủ kho không được "điều chỉnh tồn vượt ngưỡng
+   * giá trị mà không có duyệt của quản lý".
+   *
+   * Điều chỉnh trực tiếp (khác với kiểm kê có quy trình ở 5.4) là đường duy
+   * nhất để một dòng tồn đổi mà không có chứng từ mua bán nào — tức là đường
+   * che một mất mát. Người đếm hàng và người duyệt chênh lệch phải là hai
+   * người; ngưỡng giá trị sẽ thêm ở 5.4 cùng luồng kiểm kê.
+   */
+  'stock:adjust': ['BRANCH_MANAGER', 'OWNER'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -53,4 +83,8 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'quotation:write': 'lập hoặc sửa báo giá',
   'quotation:send': 'gửi báo giá cho khách',
   'quotation:discountOverThreshold': 'áp chiết khấu vượt ngưỡng',
+  'stock:read': 'xem tồn kho',
+  'stock:readCost': 'xem giá vốn',
+  'stock:receive': 'nhập kho',
+  'stock:adjust': 'điều chỉnh tồn kho',
 };

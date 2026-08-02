@@ -62,4 +62,22 @@ for (const bp of DIEM_NGAT) {
       await page.screenshot({ path: `${SHOTS}/30-xe-trong-xuong-375.png`, fullPage: true, caret: 'initial' });
     }
   });
+
+  test(`màn kho không trượt ngang ở ${bp.ten}`, async ({ page }) => {
+    // Bảng tồn kho có 6 cột và là trang dễ trượt ngang nhất trong toàn ứng
+    // dụng. `.table-scroll` phải cuộn RIÊNG chứ không đẩy cả trang.
+    await page.setViewportSize({ width: bp.width, height: bp.height });
+    await page.goto('/dang-nhap');
+    await page.getByLabel('Số điện thoại').fill('0901000005');
+    await page.getByLabel('Mật khẩu').fill('demo1234');
+    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.waitForURL((u) => !u.pathname.includes('dang-nhap'));
+
+    await page.goto('/kho');
+    await expect(page.getByRole('columnheader', { name: 'Mã' })).toBeVisible();
+    await khongTruotNgang(page, `kho @${bp.width}`);
+    if (bp.width === 375) {
+      await page.screenshot({ path: `${SHOTS}/40-kho-375.png`, fullPage: true, caret: 'initial' });
+    }
+  });
 }

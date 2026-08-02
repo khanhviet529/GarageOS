@@ -187,6 +187,7 @@ async function main(): Promise<void> {
    *    im lặng xoá luôn — tức là quên một bảng sẽ không bao giờ bị phát hiện.
    */
   await db.query(`TRUNCATE
+    stock_movement, stock_balance, warehouse,
     otp_challenge, quotation_line, quotation,
     repair_order_asset, repair_order_photo, repair_order, doc_counter,
     price_list_item, price_list, part, service_item,
@@ -283,6 +284,74 @@ async function main(): Promise<void> {
          VALUES ($1,$2,$3,$4)`,
         [priceListId, t, partIds.get(p.sku), p.price],
       );
+    }
+  }
+
+  /*
+   * Kho và tồn đầu kỳ — Phase 2.1.
+   *
+   * 🔒 Tồn đầu kỳ đi qua `stock_movement` với `ref_type = 'OPENING'`, KHÔNG
+   * `INSERT` thẳng `stock_balance`. Đó là quy tắc ở docs/10 mục 5 và EC-M-01,
+   * và từ migration 0025 thì cũng là điều duy nhất làm được — `stock_balance`
+   * chỉ nhận ghi từ trigger.
+   *
+   * Giá vốn đặt bằng ~70% giá bán để bảng lãi/lỗ ở Phase 6 có số thật để hiển
+   * thị, thay vì mọi đơn đều lãi 100%.
+   */
+  console.log('Tạo kho và tồn đầu kỳ...');
+  const khoIds: string[] = [];
+  for (const [i, b] of branchesA.entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO warehouse (tenant_id, branch_id, code, name, is_default)
+       VALUES ($1,$2,$3,$4,true) RETURNING id`,
+      [TENANT_A, b.id, `KHO-${String(i + 1).padStart(2, '0')}`, 'Kho chính'],
+    );
+    khoIds.push(rows[0]!.id);
+  }
+  const { rows: khoB } = await db.query<{ id: string }>(
+    `INSERT INTO warehouse (tenant_id, branch_id, code, name, is_default)
+     SELECT $1, id, 'KHO-B01', 'Kho đối chứng', true FROM branch WHERE tenant_id = $1
+     RETURNING id`,
+    [TENANT_B],
+  );
+
+  const { rows: thuKho } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 AND 'STORE_KEEPER' = ANY(roles) LIMIT 1`,
+    [TENANT_A],
+  );
+  const { rows: nguoiB } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1`,
+    [TENANT_B],
+  );
+
+  // Kho chi nhánh 1 đủ hàng; chi nhánh 2 để MỘT mã dưới mức tối thiểu, để màn
+  // cảnh báo sắp hết hàng có dữ liệu thật thay vì luôn rỗng khi demo.
+  const TON_DAU_KY: Record<string, number> = {
+    'PT-OIL-5W30': 120, 'PT-FILTER-OIL': 40, 'PT-BRAKE-PAD-F': 12,
+    'PT-SPARK-PLUG': 60, 'PT-CABIN-FILTER': 25,
+    'PT-HV-MODULE': 2, 'PT-HV-COOLANT': 18, 'PT-CHARGE-PORT': 3,
+  };
+  for (const [ti, t] of [TENANT_A, TENANT_B].entries()) {
+    const khoCuaTenant = ti === 0 ? khoIds : [khoB[0]!.id];
+    const nguoiGhi = ti === 0 ? thuKho[0]!.id : nguoiB[0]!.id;
+    const { rows: parts } = await db.query<{ id: string; sku: string }>(
+      'SELECT id, sku FROM part WHERE tenant_id = $1',
+      [t],
+    );
+    for (const [ki, kho] of khoCuaTenant.entries()) {
+      for (const p of parts) {
+        const goc = TON_DAU_KY[p.sku] ?? 10;
+        // Kho thứ hai trở đi giữ 1/4 lượng -> có mã tụt dưới min_stock_level (5)
+        const luong = ki === 0 ? goc : Math.max(1, Math.round(goc / 4));
+        const gia = PARTS.find((x) => x.sku === p.sku)?.price ?? 100_000;
+        await db.query(
+          `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type,
+                                       quantity, unit_cost, ref_type, reason,
+                                       created_by_user_id)
+           VALUES ($1,$2,$3,'RECEIPT',$4,$5,'OPENING','Tồn đầu kỳ chuyển từ sổ Excel',$6)`,
+          [t, kho, p.id, luong, Math.round(gia * 0.7), nguoiGhi],
+        );
+      }
     }
   }
 

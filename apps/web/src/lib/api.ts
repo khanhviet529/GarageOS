@@ -1,5 +1,7 @@
 'use client';
 
+import { ROLE_LABEL } from '@garageos/contracts';
+
 /** Client gọi API — giữ token trong localStorage cho Phase 1 (đủ cho demo). */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const TOKEN_KEY = 'garageos.accessToken';
@@ -143,6 +145,41 @@ export interface Quotation {
   lines: QuotationLine[];
 }
 
+
+// --- Kho (Phase 2.1) --------------------------------------------------------
+
+export interface Warehouse {
+  id: string; branchId: string; code: string; name: string; isDefault: boolean;
+}
+
+export interface StockBalance {
+  warehouseId: string; warehouseName: string;
+  partId: string; sku: string; partName: string; unit: string;
+  onHand: number; reserved: number; available: number;
+  /** 🔒 `null` khi vai đăng nhập không được xem giá vốn — API lọc, không phải giao diện */
+  avgCost: number | null;
+  minStockLevel: number;
+  belowMinimum: boolean;
+}
+
+export interface StockMovementItem {
+  id: string; warehouseId: string; partId: string;
+  sku: string; partName: string;
+  type: string; quantity: number;
+  unitCost: number | null;
+  refType: string | null; refId: string | null; reason: string | null;
+  createdByName: string; createdAt: string;
+}
+
+export const MOVEMENT_TYPE_LABEL: Record<string, string> = {
+  RECEIPT: 'Nhập kho',
+  ISSUE: 'Xuất cho đơn',
+  RETURN: 'Trả về kho',
+  TRANSFER_IN: 'Chuyển đến',
+  TRANSFER_OUT: 'Chuyển đi',
+  ADJUSTMENT: 'Điều chỉnh',
+};
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -171,6 +208,27 @@ export const api = {
     call<void>('DELETE', `/api/v1/quotations/${quotationId}/lines/${lineId}`),
   sendQuotation: (quotationId: string) =>
     call<{ validUntil: string }>('POST', `/api/v1/quotations/${quotationId}/send`),
+  listWarehouses: () => call<Warehouse[]>('GET', '/api/v1/warehouses'),
+  listStockParts: () =>
+    call<{ id: string; sku: string; name: string; unit: string }[]>('GET', '/api/v1/stock/parts'),
+  listStockBalances: (q: { warehouseId?: string; search?: string; belowMinimum?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.warehouseId !== undefined) p.set('warehouseId', q.warehouseId);
+    if (q.search !== undefined && q.search !== '') p.set('search', q.search);
+    if (q.belowMinimum === true) p.set('belowMinimum', '1');
+    const qs = p.toString();
+    return call<StockBalance[]>('GET', `/api/v1/stock/balances${qs === '' ? '' : `?${qs}`}`);
+  },
+  listStockMovements: (q: { warehouseId?: string; partId?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (q.warehouseId !== undefined) p.set('warehouseId', q.warehouseId);
+    if (q.partId !== undefined) p.set('partId', q.partId);
+    const qs = p.toString();
+    return call<StockMovementItem[]>('GET', `/api/v1/stock/movements${qs === '' ? '' : `?${qs}`}`);
+  },
+  receiveStock: (input: unknown) =>
+    call<{ id: string; onHand: number; avgCost: number }>('POST', '/api/v1/stock/receipts', input),
+
   changeOrderStatus: (orderId: string, input: unknown) =>
     call<{ status: string; version: number }>(
       'POST', `/api/v1/repair-orders/${orderId}/status`, input,
@@ -199,15 +257,9 @@ export const POWERTRAIN_LABEL: Record<string, string> = {
  * Nhãn vai trò — người dùng là cố vấn dịch vụ ở xưởng, không phải lập trình
  * viên: họ không nên nhìn thấy tên hằng số trong mã nguồn trên giao diện.
  */
-export const ROLE_LABEL: Record<string, string> = {
-  OWNER: 'Chủ garage',
-  MANAGER: 'Quản lý',
-  SERVICE_ADVISOR: 'Cố vấn dịch vụ',
-  TECHNICIAN: 'Kỹ thuật viên',
-  WAREHOUSE_KEEPER: 'Thủ kho',
-  ACCOUNTANT: 'Kế toán',
-};
-export const roleLabel = (r: string): string => ROLE_LABEL[r] ?? r;
+export { ROLE_LABEL };
+export const roleLabel = (r: string): string =>
+  (ROLE_LABEL as Record<string, string>)[r] ?? r;
 
 export const POWERTRAIN_CLASS: Record<string, string> = {
   ICE: 'ice',

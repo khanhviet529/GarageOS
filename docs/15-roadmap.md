@@ -62,7 +62,7 @@ môi trường thật.
 
 | Lát cắt | Nội dung | Case |
 |---|---|---|
-| 2.1 | Kho: nhập, sổ kho chỉ-thêm, `stock_balance` có ràng buộc | [BC-04](07-business-cases/BC-04-giu-cho-xuat-kho.md) |
+| 2.1 | ✅ Kho: nhập, sổ kho chỉ-thêm, `stock_balance` có ràng buộc | [BC-04](07-business-cases/BC-04-giu-cho-xuat-kho.md) |
 | 2.2 | 🔒 Giữ chỗ khi duyệt + khoá dòng + thứ tự khoá chống deadlock | [BC-04](07-business-cases/BC-04-giu-cho-xuat-kho.md) |
 | 2.3 | 🔒 Phân công: exclusion constraint khoang + thợ + chứng chỉ | [BC-05](07-business-cases/BC-05-xep-khoang-tho.md) |
 | 2.4 | Xuất kho, `CONSUMED`, hết hạn giữ chỗ (job nền) | [BC-04](07-business-cases/BC-04-giu-cho-xuat-kho.md) |

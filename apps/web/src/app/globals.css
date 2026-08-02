@@ -393,3 +393,39 @@ input.otp {
 
 /* Icon đi kèm chữ: căn theo đường chân chữ, khoảng cách cố định */
 .co-icon { display: inline-flex; align-items: center; gap: 6px; }
+
+/* --- Kho (Phase 2.1) --- */
+
+/* Số lượng và tiền căn phải: mắt so sánh hàng nghìn theo cột, không theo chữ */
+td.phai, th.phai { text-align: right; }
+
+/* Dòng sổ có dấu âm là XUẤT kho. Màu KHÔNG phải kênh thông tin duy nhất —
+   dấu trừ đứng ngay đó, nên người mù màu vẫn phân biệt được. */
+td.am { color: var(--c-danger); }
+
+/* Nhãn "sắp hết" cạnh tên phụ tùng */
+.tag.canh-bao { background: var(--c-warning-soft); color: var(--c-warning); margin-left: var(--sp-2); }
+
+/* Ô chọn đi cùng nhãn nằm ngang — khác `.field` vốn xếp dọc */
+.hop-kiem {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-sm); align-self: flex-end;
+  /* Vùng bấm đủ lớn cho ngón tay — WCAG 2.2 mục 2.5.8 */
+  min-height: 32px;
+}
+.hop-kiem input { width: 18px; height: 18px; min-height: 18px; }
+
+/* --- Flex item phải được phép co lại --- */
+
+/*
+ * Mặc định của flexbox là `min-width: auto`, nghĩa là một flex item KHÔNG co
+ * nhỏ hơn nội dung của nó. Với `<select>` thì "nội dung" là option DÀI NHẤT —
+ * danh sách phụ tùng có "PT-BRAKE-PAD-F — Má phanh trước (bộ)", đủ để đẩy cả
+ * trang trượt ngang ở 375px trong khi `.row` vẫn ngoan ngoãn xuống dòng.
+ *
+ * Lỗi này không nhìn ra được từ code: `.row` CÓ `flex-wrap`, `.field` KHÔNG có
+ * chiều rộng cố định. Chỉ test điểm ngắt mới bắt được, và nó bắt ngay lần chạy
+ * đầu tiên sau khi màn kho được thêm.
+ */
+.row > .field { min-width: 0; }
+.field select, .field input { max-width: 100%; }
