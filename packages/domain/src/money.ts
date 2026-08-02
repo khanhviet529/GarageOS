@@ -82,3 +82,33 @@ export function sumLineTotals(lines: readonly LineTotals[]): LineTotals {
     { gross: 0, discount: 0, net: 0, tax: 0, total: 0 },
   );
 }
+
+/**
+ * Đọc số tiền từ PostgreSQL.
+ *
+ * node-pg trả cột `bigint` về dưới dạng CHUỖI để không mất chính xác. Gọi
+ * `Number()` thẳng lên nó sẽ âm thầm làm tròn mọi giá trị vượt 2^53 — không
+ * lỗi, không cảnh báo, chỉ là một con số khác.
+ *
+ * codex-review CAT-001. ADR-0003 chốt tiền là `number` trong TypeScript vì
+ * mọi số tiền THẬT của một garage đều cách giới hạn đó nhiều bậc độ lớn. Hàm
+ * này giữ nguyên quyết định đó nhưng biến "âm thầm sai" thành "dừng ngay":
+ * nếu database chứa một giá trị không biểu diễn được, ta muốn biết ở đúng dòng
+ * đọc nó, chứ không phải ở hoá đơn của khách.
+ */
+export function parseAmountFromDb(value: unknown, label = 'amount'): Amount {
+  if (value === null || value === undefined) {
+    throw new Error(`${label}: thiếu giá trị tiền`);
+  }
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${label}: giá trị tiền không hợp lệ (${String(value)})`);
+  }
+  if (!Number.isSafeInteger(n)) {
+    throw new Error(
+      `${label}: giá trị tiền trong database vượt giới hạn số nguyên an toàn ` +
+        `(${String(value)}). Đọc tiếp sẽ trả về con số KHÁC với dữ liệu thật.`,
+    );
+  }
+  return n;
+}

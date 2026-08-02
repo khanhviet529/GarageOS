@@ -1,6 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateLineTotal, sumLineTotals, assertAmount } from './money.js';
+import {
+  calculateLineTotal, sumLineTotals, assertAmount, parseAmountFromDb,
+} from './money.js';
 
 describe('INV-M-01 — tiền là số nguyên đơn vị đồng', () => {
   test('từ chối đơn giá không nguyên', () => {
@@ -84,5 +86,25 @@ describe('Ví dụ nghiệp vụ thật', () => {
     assert.equal(labor.gross, 300_000);      // 1.2 × 250.000
     assert.equal(labor.total, 330_000);      // 300.000 + 30.000
     assert.equal(total.total, 1_265_000);
+  });
+});
+
+describe('parseAmountFromDb — CAT-001', () => {
+  test('đọc chuỗi bigint bình thường', () => {
+    assert.equal(parseAmountFromDb('250000'), 250_000);
+    assert.equal(parseAmountFromDb(250_000), 250_000);
+  });
+
+  test('🔒 giá trị vượt giới hạn an toàn thì DỪNG, không làm tròn âm thầm', () => {
+    // Number('9007199254740993') === 9007199254740992 — sai một đồng, không báo gì
+    assert.throws(
+      () => parseAmountFromDb('9007199254740993', 'sellPrice'),
+      /vượt giới hạn số nguyên an toàn/,
+    );
+  });
+
+  test('null và giá trị rác bị chặn', () => {
+    assert.throws(() => parseAmountFromDb(null));
+    assert.throws(() => parseAmountFromDb('abc'));
   });
 });

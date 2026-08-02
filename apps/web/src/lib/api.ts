@@ -89,6 +89,25 @@ export interface RepairOrderDetail {
   photos: { id: string; phase: string; storageKey: string; caption: string | null }[];
 }
 
+export interface CatalogForVehicle {
+  powertrain: 'ICE' | 'HYBRID' | 'BEV';
+  laborRatePerHour: number;
+  priceListName: string;
+  serviceItems: {
+    id: string; code: string; name: string;
+    category: 'MAINTENANCE' | 'REPAIR' | 'DIAGNOSIS' | 'HV_SYSTEM';
+    standardHours: number;
+    requiredCertifications: string[];
+    warrantyMonths: number;
+    laborAmount: number;
+  }[];
+  parts: {
+    id: string; sku: string; name: string; unit: string;
+    category: string | null; isHighVoltage: boolean;
+    sellPrice: number | null;
+  }[];
+}
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -104,6 +123,8 @@ export const api = {
     call<{ id: string; code: string }>('POST', '/api/v1/repair-orders', input),
   listRepairOrders: () => call<RepairOrderListItem[]>('GET', '/api/v1/repair-orders?open=true'),
   getRepairOrder: (id: string) => call<RepairOrderDetail>('GET', `/api/v1/repair-orders/${id}`),
+  getCatalog: (vehicleId: string) =>
+    call<CatalogForVehicle>('GET', `/api/v1/catalog/vehicle/${vehicleId}`),
 };
 
 export interface VehicleLookup {
@@ -164,6 +185,23 @@ export const ODOMETER_REASON_LABEL: Record<string, string> = {
   PREVIOUS_ENTRY_WRONG: 'Lần trước nhập sai',
   OTHER: 'Lý do khác',
 };
+
+export const SERVICE_CATEGORY_LABEL: Record<string, string> = {
+  MAINTENANCE: 'Bảo dưỡng',
+  REPAIR: 'Sửa chữa',
+  DIAGNOSIS: 'Chẩn đoán',
+  HV_SYSTEM: 'Hệ thống cao áp',
+};
+
+export const CERTIFICATION_LABEL: Record<string, string> = {
+  HV_ELECTRICAL: 'An toàn điện cao áp',
+  EV_DIAGNOSTICS: 'Chẩn đoán xe điện',
+};
+
+/** Tiền — 🔒 luôn là số nguyên đồng (ADR-0003), không có phần thập phân */
+export function formatMoney(amount: number): string {
+  return amount.toLocaleString('vi-VN') + 'đ';
+}
 
 export function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('vi-VN', {
