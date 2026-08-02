@@ -100,7 +100,10 @@ export class AuthService {
         branches: branchIds,
       },
       requireSecret('JWT_ACCESS_SECRET'),
-      { expiresIn: process.env.JWT_ACCESS_TTL ?? '15m' },
+      // Kiểu của `expiresIn` trong @types/jsonwebtoken là template literal
+      // (vd '15m'), không nhận `string` chung. Giá trị đến từ env nên phải
+      // ép kiểu tường minh tại đúng biên này.
+      { expiresIn: (process.env['JWT_ACCESS_TTL'] ?? '15m') as jwt.SignOptions['expiresIn'] },
     );
   }
 

@@ -12,7 +12,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pool } from 'pg';
-import { TenantAwareDb, createAppPool } from '../src/tenant-client.ts';
+import { TenantAwareDb, createAppPool } from '../src/tenant-client.js';
 import type { ActorContext } from '@garageos/contracts';
 
 // 🔒 UUID RIÊNG cho test — KHÔNG trùng seed (11111111.../22222222...),

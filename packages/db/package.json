@@ -8,9 +8,17 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "echo 'lint: db ok'",
-    "test": "tsx --test test/*.spec.ts",
-    "test:invariants": "tsx --test test/*.spec.ts"
+    "test": "node ../../infra/run-tests.mjs test",
+    "test:invariants": "node ../../infra/run-tests.mjs test"
   },
-  "dependencies": { "@garageos/contracts": "workspace:*", "pg": "^8.13.1" },
-  "devDependencies": { "typescript": "^5.7.3", "@types/node": "^22.13.1", "@types/pg": "^8.11.11", "tsx": "^4.20.3" }
+  "dependencies": {
+    "@garageos/contracts": "workspace:*",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "@types/node": "^22.13.1",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.20.3"
+  }
 }
