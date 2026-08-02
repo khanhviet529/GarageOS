@@ -237,8 +237,30 @@ export class RepairOrderService {
     return err;
   }
 
+  /**
+   * 🔒 Phạm vi chi nhánh — docs/02-actors-and-permissions.md mục 1.
+   *
+   * `OWNER` có phạm vi TENANT: thấy mọi chi nhánh. Các vai còn lại phạm vi
+   * BRANCH: chỉ thấy chi nhánh được gán.
+   *
+   * codex-review GARAGEOS-001: bản đầu chỉ kiểm chi nhánh lúc TẠO đơn, không
+   * kiểm lúc ĐỌC. RLS không cứu được vì các chi nhánh nằm chung một tenant —
+   * biết UUID đơn là đọc được đơn của chi nhánh khác.
+   *
+   * ⚠️ `TECHNICIAN` theo tài liệu là phạm vi SELF (chỉ đơn được giao). Bảng
+   * phân công thuộc Phase 2, nên tạm thời thợ dùng chung phạm vi BRANCH. Thu
+   * hẹp lại khi có `work_assignment`.
+   */
+  private branchScope(actor: ActorContext): { sql: string; params: string[] } {
+    if (actor.roles.includes('OWNER')) return { sql: '', params: [] };
+    return { sql: 'ro.branch_id = ANY($#)', params: [...actor.branchIds] };
+  }
+
   async getById(actor: ActorContext, id: string): Promise<RepairOrderDetail> {
     return this.db.withTenant(actor, async (tx) => {
+      const scope = this.branchScope(actor);
+      const scopeSql =
+        scope.sql === '' ? '' : ` AND ${scope.sql.replace('$#', '$2')}`;
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT ro.id, ro.code, ro.status, ro.customer_complaint, ro.odometer_in,
                 ro.odometer_unavailable, ro.odometer_override_reason, ro.energy_level_in,
@@ -249,11 +271,13 @@ export class RepairOrderService {
            FROM repair_order ro
            JOIN vehicle  v ON v.id = ro.vehicle_id
            JOIN customer c ON c.id = ro.customer_id
-          WHERE ro.id = $1`,
-        [id],
+          WHERE ro.id = $1${scopeSql}`,
+        scope.params.length === 0 ? [id] : [id, scope.params],
       );
       const r = rows[0];
       if (r === undefined) {
+        // 404 chứ không phải 403: nói "bạn không có quyền xem đơn này" chính là
+        // xác nhận đơn đó tồn tại — docs/02-actors-and-permissions.md mục 1.
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy đơn');
       }
 
@@ -322,6 +346,14 @@ export class RepairOrderService {
 
       if (filter.open === true) {
         where.push(`ro.status NOT IN ('DELIVERED','CANCELLED')`);
+      }
+
+      // 🔒 Phạm vi áp TRƯỚC, bộ lọc của client áp SAU. `branchId` trong query
+      //    chỉ THU HẸP được kết quả, không bao giờ mở rộng được phạm vi.
+      const scope = this.branchScope(actor);
+      if (scope.sql !== '') {
+        params.push(scope.params);
+        where.push(scope.sql.replace('$#', `$${params.length}`));
       }
       if (filter.branchId !== undefined) {
         params.push(filter.branchId);

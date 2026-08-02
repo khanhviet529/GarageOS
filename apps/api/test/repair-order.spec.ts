@@ -171,6 +171,18 @@ describe('🔒 INV-V-03 — một xe chỉ có một đơn đang mở', () => {
       [first.body.id],
     );
 
+    // 🔒 INV-A-02: đổi trạng thái PHẢI sinh nhật ký, và trigger ở DB phải làm
+    //    việc đó kể cả khi lệnh UPDATE đến từ ngoài ứng dụng như ở đây.
+    const { rows: audit } = await pool.query(
+      `SELECT action, before_json, after_json FROM audit_log
+        WHERE entity_type = 'repair_order' AND entity_id = $1
+          AND action = 'STATUS_CHANGED'`,
+      [first.body.id],
+    );
+    assert.equal(audit.length, 1, 'đổi trạng thái mà không có nhật ký');
+    assert.equal(audit[0].before_json.status, 'RECEIVED');
+    assert.equal(audit[0].after_json.status, 'DELIVERED');
+
     const second = await call('POST', '/api/v1/repair-orders', {
       vehicleId: v,
       branchId,
@@ -329,5 +341,56 @@ describe('🔒 INV-T-01 — đơn bị cô lập theo tenant', () => {
       !listOther.body.some((o: { id: string }) => o.id === anyOrder.id),
       'RÒ RỈ: đơn của tenant khác lọt vào danh sách',
     );
+  });
+});
+
+describe('🔒 Phạm vi chi nhánh — docs/02-actors-and-permissions.md', () => {
+  test('cố vấn chi nhánh A không đọc được đơn của chi nhánh B', async () => {
+    // OWNER có phạm vi TENANT nên được gán mọi chi nhánh; cố vấn chỉ chi nhánh 1.
+    const saved = token;
+    const owner = await call('POST', '/api/v1/auth/login', {
+      phone: '0901000001',
+      password: 'demo1234',
+    });
+    token = owner.body.accessToken;
+    const otherBranch = owner.body.user.branchIds.find((b: string) => b !== branchId);
+    assert.ok(otherBranch, 'seed phải có ít nhất hai chi nhánh');
+
+    const v = await newVehicle(0, 'K');
+    const created = await call('POST', '/api/v1/repair-orders', {
+      vehicleId: v,
+      branchId: otherBranch,
+      customerComplaint: 'Đơn của chi nhánh khác',
+      odometerIn: 1,
+    });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+
+    // Chủ chuỗi phạm vi TENANT thì vẫn phải đọc được
+    const asOwner = await call('GET', `/api/v1/repair-orders/${created.body.id}`);
+    assert.equal(asOwner.status, 200, 'chủ chuỗi phải xem được mọi chi nhánh');
+
+    token = saved;
+    const asAdvisor = await call('GET', `/api/v1/repair-orders/${created.body.id}`);
+    assert.equal(
+      asAdvisor.status,
+      404,
+      'RÒ RỈ: cố vấn đọc được đơn của chi nhánh không thuộc quyền',
+    );
+
+    const list = await call('GET', '/api/v1/repair-orders?open=true');
+    assert.ok(
+      !list.body.some((o: { id: string }) => o.id === created.body.id),
+      'RÒ RỈ: đơn chi nhánh khác lọt vào danh sách',
+    );
+  });
+
+  test('truyền branchId lạ trong query không mở rộng được phạm vi', async () => {
+    const list = await call(
+      'GET',
+      '/api/v1/repair-orders?open=true&branchId=00000000-0000-0000-0000-000000000009',
+    );
+    // Lọc thêm thì được, mở rộng thì không
+    assert.equal(list.status, 200);
+    assert.equal(list.body.length, 0);
   });
 });
