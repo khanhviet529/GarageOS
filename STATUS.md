@@ -1,97 +1,91 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-02 · Nhánh `main` · **Phase 0 hoàn thành**
+> Cập nhật: 2026-08-02 · Nhánh `main` · CI xanh · **Phase 1.1 → 1.5 hoàn thành**
 
 ## Đang ở đâu
 
-| Phase | Trạng thái |
-|---|---|
-| **0 — Walking skeleton** | ✅ **Xong, đã merge vào `main`** |
-| 1 — Tiếp nhận & báo giá | ⬜ Tiếp theo |
-| 2 → 8 | ⬜ Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) |
+**Bản demo tối thiểu của roadmap đã chạy được đầu-cuối trên trình duyệt thật:**
 
-## Chạy dự án
+> Tiếp nhận xe → lập báo giá 2 hạng mục → khách mở link trên điện thoại →
+> duyệt 1, từ chối 1 → trạng thái đổi ở cả hai phía.
+
+Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy tính ở quầy và
+điện thoại của khách): `e2e/tra-cuu-cong-khai.spec.ts`.
+
+| Lát cắt | Nội dung | Trạng thái |
+|---|---|---|
+| 0 | Walking skeleton, CI, RLS đa tenant | ✅ merged |
+| 1.1 | Khách hàng + xe, chuẩn hoá biển số, giao diện đầu tiên | ✅ merged |
+| 1.2 | Tiếp nhận xe đầy đủ (số km, tài sản, mã đơn, token) | ✅ merged |
+| 1.3 | Danh mục dịch vụ/phụ tùng lọc theo loại động cơ | ✅ merged |
+| 1.4 | Lập báo giá, snapshot giá, thuế theo dòng | ✅ merged |
+| 1.5 | Trang tra cứu công khai + OTP + duyệt từng phần | ✅ merged |
+| 1.6 | State machine `RepairOrder` / `Quotation` đầy đủ | ⬜ tiếp theo |
+| 2 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ |
+
+## Con số
+
+| | |
+|---|---|
+| Test tự động | 147 (domain 12, db 29, api 106) |
+| E2E Playwright | 15 kịch bản |
+| Migration | 13 |
+| Vòng codex-review đã chạy | 5, tổng 15 phát hiện, **15 CONFIRMED** |
+
+Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
+test nào đỏ trước khi sửa.
+
+## Chạy tại chỗ
 
 ```bash
 pnpm install
-pnpm db:up          # postgres:5433 + redis:6380
-pnpm db:migrate
-pnpm db:seed
-pnpm --filter @garageos/api dev     # http://localhost:3001
+pnpm db:up && pnpm db:migrate && pnpm db:seed
+pnpm dev            # API :3001, web :3000
 ```
 
-Tài khoản demo (mật khẩu `demo1234`): `0901000003` (cố vấn dịch vụ),
-`0901000001` (chủ), `0901000004` (thợ). Tenant đối chứng: `0902000001`.
+Đăng nhập `0901000003` / `demo1234` (cố vấn dịch vụ).
 
 ```bash
-# Test — cần API đang chạy cho bộ api
-pnpm --filter @garageos/domain test   # 9  — bất biến tiền
-pnpm --filter @garageos/db     test   # 11 — cô lập tenant (QUAN TRỌNG NHẤT)
-pnpm --filter @garageos/api    test   # 13 — xác thực
+pnpm test           # test tích hợp — cần API đang chạy
+pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 ```
 
-## Đã có gì
+## 🔒 Những cái bẫy hạ tầng đã gặp — đừng chẩn đoán lại
 
-| Thành phần | Trạng thái |
+| Triệu chứng | Nguyên nhân |
 |---|---|
-| Monorepo pnpm + Turborepo | ✅ |
-| PostgreSQL 16 + RLS **đã kiểm chứng** | ✅ 3 migration |
-| `packages/contracts` — Zod, vai trò, mã lỗi, `ActorContext` | ✅ |
-| `packages/domain` — tính tiền số nguyên | ✅ |
-| `packages/db` — `TenantAwareDb` | ✅ |
-| `apps/api` — NestJS, JWT, rate limit, error filter | ✅ |
-| `apps/web`, `apps/mobile` | ❌ **Chưa có gì** |
-| CI GitHub Actions | ✅ (chưa chạy thật lần nào) |
-| Deploy | ⚠️ Deploy-ready, chờ tài khoản — [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| RLS không chặn gì, đọc/ghi được dữ liệu tenant khác | Role kết nối là superuser hoặc `BYPASSRLS`. Superuser bỏ qua RLS **kể cả khi** bảng đã `FORCE ROW LEVEL SECURITY`. Dự án tách `garageos` (migration) / `garageos_app` (ứng dụng); API từ chối khởi động nếu role có đặc quyền |
+| `invalid input syntax for type uuid: ""` | `set_config(..., true)` là **transaction-scoped**; gọi ngoài `BEGIN` thì mất ngay |
+| `this.xxx is undefined` trong service NestJS | esbuild/tsx không sinh `design:paramtypes`. **Mọi** dependency phải có `@Inject()` tường minh — xem CLAUDE.md |
+| Lỗi 409 có ích biến thành 500 | Một câu lệnh lỗi làm **hỏng cả transaction**; mọi lệnh sau bị từ chối. Cần `SAVEPOINT` nếu còn phải truy vấn tiếp sau lỗi |
+| Bộ đếm số lần nhập sai OTP không tăng | Ném lỗi trong transaction làm rollback luôn lệnh tăng bộ đếm. Phải ghi bằng transaction **riêng** |
+| `FOR UPDATE is not allowed with aggregate functions` | Khoá dòng của bảng cha thay vì cố khoá kết quả `max()` |
+| Web sập khi import package dùng chung | Package viết theo chuẩn ESM của Node (`import './x.js'` cho file `.ts`). Next cần `resolve.extensionAlias` |
 
-## 🔒 Ba điều dễ vấp — đọc trước khi sửa code
+## Nợ kỹ thuật đã biết
 
-1. **Ứng dụng PHẢI kết nối DB bằng role không đặc quyền.** Superuser bỏ qua RLS
-   kể cả khi bảng đã bật `FORCE`, làm cô lập tenant vô hiệu **âm thầm**. Có hai
-   URL riêng: `DATABASE_URL` (app) và `DATABASE_ADMIN_URL` (migration). API tự
-   từ chối khởi động nếu sai.
-
-2. **`set_config(..., is_local=true)` chỉ có hiệu lực trong transaction.** Gọi
-   ngoài transaction thì reset về rỗng ở câu lệnh sau và lỗi
-   `invalid input syntax for type uuid: ""`.
-
-3. **Quyền mặc định chỉ có `SELECT` + `INSERT`.** Bảng nào cần `UPDATE`/`DELETE`
-   phải `GRANT` tường minh trong chính migration tạo nó. Bảng sổ và chứng từ
-   **không bao giờ** được cấp — đó là cách `INV-S-03` và `INV-A-01` được giữ.
-
-Thêm: `esbuild`/`tsx` không emit `design:paramtypes`, nên **mọi constructor
-injection trong NestJS phải dùng `@Inject()` tường minh**.
-
-## Việc tiếp theo — Phase 1.1
-
-Theo [`docs/15-roadmap.md`](docs/15-roadmap.md):
-
-```
-1.1  Khách hàng + xe: tra biển số, chuẩn hoá, powertrain bắt buộc   ← bắt đầu ở đây
-1.2  Tiếp nhận xe đầy đủ (ảnh, km, tài sản, token tra cứu)
-1.3  Danh mục dịch vụ lọc theo powertrain
-1.4  Lập báo giá
-1.5  Trang tra cứu khách + duyệt từng phần                          ← demo được
-```
-
-Migration tiếp theo là `0004_customer_vehicle.sql`. Schema đã đặc tả sẵn ở
-[`docs/10-data-model.md`](docs/10-data-model.md) mục 4.
-
-⚠️ **Nợ kỹ thuật cần trả sớm:**
-
-| Việc | Vì sao |
+| Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
-| Dựng `apps/web` | Hiện chưa có gì mở trình duyệt xem được |
-| Rate limit chuyển sang Redis | Bộ đếm đang trong bộ nhớ tiến trình, sai khi chạy nhiều instance |
-| `BaseCrudService` + test kiến trúc chặn CRUD generic trên bảng nghiệp vụ | Đã thống nhất, chưa làm |
-| Playwright cho E2E + chụp màn hình | Để tự kiểm tra giao diện |
+| Token đăng nhập để trong `localStorage` | Phase 1 là bản chạy được để review. Cookie HttpOnly + refresh token là việc của Phase 6 |
+| Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
+| Chưa có test kiến trúc chặn `withTenantId` / `queryWithoutTenant` dùng sai chỗ | Hai hàm này mở đường đi ngoài ngữ cảnh tenant. Hiện chỉ `PublicTrackingService` gọi, nhưng không có gì bắt buộc điều đó |
+| Chưa upload ảnh hiện trạng thật | Cần lưu trữ đối tượng (S3/MinIO). Bảng và quyền đã dựng đúng, giao diện đang hiện cảnh báo thay vì giả vờ có |
+| Chưa gửi SMS/Zalo thật | Dịch vụ ngoài. Dev/CI dùng `OTP_DEV_ECHO=true` — ⚠️ không bao giờ bật ở production |
+| `TECHNICIAN` đang dùng phạm vi `BRANCH` thay vì `SELF` | Bảng phân công thuộc Phase 2; thu hẹp khi có `work_assignment` |
+| Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
 
 ## Quy trình bắt buộc
 
-Xem [`CONTRIBUTING.md`](CONTRIBUTING.md). Tóm tắt:
+Mọi thay đổi chạm vào **kho, tiền, quyền, hoặc bất biến** phải qua
+`/codex-review` trước khi merge — xem `.claude/commands/codex-review.md`.
 
-```
-nhánh → test trước → code → lint/typecheck/test → /codex-review → sửa → commit → merge
-```
+Ba nguyên tắc rút ra sau 5 vòng:
 
-🔒 `/codex-review` **bắt buộc** với mọi thay đổi chạm kho, tiền, phân quyền, bất biến.
+1. **Sự đồng ý không phải bằng chứng.** Reviewer nói "bạn đúng" mà không nêu lý
+   do cụ thể thì ghi `UNRESOLVED`, không ghi `REFUTED`.
+2. **Trọng tài là code chạy được.** Tranh chấp nào test được thì viết test rồi
+   chạy, và giữ lại test dù kết quả nghiêng về bên nào.
+3. **Nghi ngờ mà không kiểm chứng thì không khác gì không nghi ngờ.** Mỗi mục
+   trong "rủi ro tôi tự thấy" phải kèm một test, hoặc một lý do vì sao nó không
+   thể xảy ra. Quy tắc này ra đời sau Phase 1.4, khi 3 trong 6 phát hiện nằm
+   đúng chỗ tôi đã tự ghi là nghi ngờ rồi vẫn đi tiếp.
