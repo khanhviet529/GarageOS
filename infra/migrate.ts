@@ -43,7 +43,13 @@ async function main(): Promise<void> {
   let ran = 0;
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-    const checksum = createHash('sha256').update(sql).digest('hex').slice(0, 16);
+    // 🔒 Chuẩn hoá xuống dòng TRƯỚC khi băm.
+    // Git trên Windows đổi LF <-> CRLF khi checkout, làm checksum lệch dù nội
+    // dung không đổi -> guard "migration chỉ tiến" báo động giả và chặn cả
+    // migration mới. Dùng fromCharCode để tránh mọi vấn đề escape của công cụ.
+    const CR = String.fromCharCode(13);
+    const normalized = sql.split(CR).join('');
+    const checksum = createHash('sha256').update(normalized).digest('hex').slice(0, 16);
     const previous = applied.get(file);
 
     if (previous !== undefined) {
