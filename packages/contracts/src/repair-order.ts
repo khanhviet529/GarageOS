@@ -92,6 +92,8 @@ export const RepairOrderDetail = z.object({
   id: z.string().uuid(),
   code: z.string(),
   status: RepairOrderStatus,
+  /** 🔒 Khoá lạc quan — client gửi lại giá trị này khi đổi trạng thái */
+  version: z.number().int(),
   customerComplaint: z.string(),
   odometerIn: z.number().nullable(),
   odometerUnavailable: z.boolean(),

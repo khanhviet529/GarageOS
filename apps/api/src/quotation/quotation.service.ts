@@ -71,6 +71,31 @@ export class QuotationService {
           actor.userId,
         ],
       );
+
+      /*
+       * Đưa đơn theo đúng máy trạng thái — docs/06-state-machines.md.
+       *
+       * Bảng chuyển đổi đi RECEIVED -> DIAGNOSING -> QUOTED. Bước giữa đúng ra
+       * do việc PHÂN CÔNG CHẨN ĐOÁN kích hoạt, mà bảng phân công thuộc Phase 2.
+       * Ở giai đoạn này, hành động "lập báo giá" hàm ý cố vấn đã kiểm tra xe
+       * xong, nên đi cả hai bước ở đây — mỗi bước vẫn là một chuyển hợp lệ và
+       * vẫn sinh một dòng nhật ký riêng.
+       */
+      if (order.status === 'RECEIVED') {
+        await tx.query(`UPDATE repair_order SET status = 'DIAGNOSING' WHERE id = $1`, [
+          repairOrderId,
+        ]);
+      }
+      const { rows: cur } = await tx.query<{ status: string }>(
+        `SELECT status FROM repair_order WHERE id = $1`,
+        [repairOrderId],
+      );
+      if (cur[0]!.status === 'DIAGNOSING') {
+        await tx.query(`UPDATE repair_order SET status = 'QUOTED' WHERE id = $1`, [
+          repairOrderId,
+        ]);
+      }
+
       return { id: rows[0]!.id, seq };
     });
   }
@@ -209,10 +234,13 @@ export class QuotationService {
           );
         }
 
-        // Đơn chuyển sang chờ khách duyệt — trigger nhật ký ghi lại cả hai lần đổi
+        // Đơn chuyển sang chờ khách duyệt. Điều kiện `status = 'QUOTED'` để câu
+        // này không đá vào máy trạng thái khi đơn đang ở nhánh khác (ví dụ báo
+        // giá bổ sung lập lúc đang sửa — lúc đó IN_PROGRESS -> AWAITING_APPROVAL
+        // mới là đường đúng).
         await tx.query(
           `UPDATE repair_order SET status = 'AWAITING_APPROVAL'
-            WHERE id = $1 AND status NOT IN ('DELIVERED','CANCELLED')`,
+            WHERE id = $1 AND status IN ('QUOTED','IN_PROGRESS')`,
           [quotation.repairOrderId],
         );
 

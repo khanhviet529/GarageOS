@@ -139,6 +139,40 @@ after(async () => {
   await pool.end();
 });
 
+/**
+ * Đưa một đơn đi hết vòng đời tới DELIVERED bằng các bước HỢP LỆ.
+ *
+ * Không đặt thẳng `status='DELIVERED'` được nữa: trigger máy trạng thái ở
+ * migration 0014 chặn mọi đường tắt. Đây chính là điều ta muốn — và hàm này
+ * cũng là bản mô tả sống của chuỗi trạng thái đầy đủ.
+ */
+const DELIVERY_PATH = [
+  'RECEIVED', 'DIAGNOSING', 'QUOTED', 'AWAITING_APPROVAL', 'IN_PROGRESS',
+  'QUALITY_CHECK', 'AWAITING_PAYMENT', 'AWAITING_DELIVERY', 'DELIVERED',
+] as const;
+
+async function deliverOrder(orderId: string, odometerOut: number): Promise<void> {
+  const { rows } = await pool.query<{ status: string }>(
+    'SELECT status FROM repair_order WHERE id = $1',
+    [orderId],
+  );
+  const from = DELIVERY_PATH.indexOf(rows[0]!.status as (typeof DELIVERY_PATH)[number]);
+  assert.ok(from >= 0, `đơn đang ở ${rows[0]!.status}, không nằm trên đường giao xe`);
+
+  for (const s of DELIVERY_PATH.slice(from + 1)) {
+    if (s === 'DELIVERED') {
+      await pool.query(
+        `UPDATE repair_order SET status = 'DELIVERED', odometer_out = $2, delivered_at = now()
+          WHERE id = $1`,
+        [orderId, odometerOut],
+      );
+    } else {
+      await pool.query('UPDATE repair_order SET status = $2 WHERE id = $1', [orderId, s]);
+    }
+  }
+}
+
+
 describe('Trang tra cứu công khai — xem', () => {
   test('mở link không cần đăng nhập, thấy đúng đơn và báo giá', async () => {
     const s = await newSentQuotation('A');
@@ -467,12 +501,10 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
       `SELECT repair_order_id AS id FROM quotation WHERE id = $1`,
       [s.quotationId],
     );
-    // Giao xe 31 ngày trước
+    // Giao xe 31 ngày trước — đi đúng chuỗi trạng thái rồi mới lùi mốc thời gian
+    await deliverOrder(ro[0]!.id, 46_000);
     await pool.query(
-      `UPDATE repair_order
-          SET status = 'DELIVERED', odometer_out = 46000,
-              delivered_at = now() - interval '31 days'
-        WHERE id = $1`,
+      `UPDATE repair_order SET delivered_at = now() - interval '31 days' WHERE id = $1`,
       [ro[0]!.id],
     );
 

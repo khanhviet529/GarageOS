@@ -70,6 +70,7 @@ export interface RepairOrderListItem {
 export interface RepairOrderDetail {
   id: string; code: string; status: string;
   customerComplaint: string;
+  version: number;
   odometerIn: number | null;
   odometerUnavailable: boolean;
   odometerOverrideReason: string | null;
@@ -161,6 +162,10 @@ export const api = {
     call<void>('DELETE', `/api/v1/quotations/${quotationId}/lines/${lineId}`),
   sendQuotation: (quotationId: string) =>
     call<{ validUntil: string }>('POST', `/api/v1/quotations/${quotationId}/send`),
+  changeOrderStatus: (orderId: string, input: unknown) =>
+    call<{ status: string; version: number }>(
+      'POST', `/api/v1/repair-orders/${orderId}/status`, input,
+    ),
 };
 
 export interface VehicleLookup {
@@ -214,6 +219,48 @@ export const ORDER_STATUS_LABEL: Record<string, string> = {
   AWAITING_DELIVERY: 'Chờ giao xe',
   DELIVERED: 'Đã giao xe',
   CANCELLED: 'Đã huỷ',
+};
+
+/**
+ * 🔒 Bảng chuyển trạng thái — phải khớp `packages/contracts/src/state-machine.ts`
+ * và bảng `repair_order_transition` trong database.
+ *
+ * ⚠️ Chép lại ở đây thay vì import trực tiếp là nợ kỹ thuật đã biết: apps/web
+ * đang giữ một bản sao của các hằng số hiển thị để giảm phụ thuộc lúc dựng.
+ * Có test đối chiếu TypeScript ↔ database; bản sao này thì chưa.
+ */
+export const REPAIR_ORDER_TRANSITIONS: Record<string, string[]> = {
+  RECEIVED: ['DIAGNOSING', 'CANCELLED'],
+  DIAGNOSING: ['QUOTED', 'CANCELLED'],
+  QUOTED: ['AWAITING_APPROVAL', 'CANCELLED'],
+  AWAITING_APPROVAL: ['AWAITING_PARTS', 'IN_PROGRESS', 'AWAITING_DELIVERY', 'QUOTED', 'CANCELLED'],
+  AWAITING_PARTS: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['AWAITING_APPROVAL', 'AWAITING_PARTS', 'QUALITY_CHECK', 'CANCELLED'],
+  QUALITY_CHECK: ['IN_PROGRESS', 'AWAITING_PAYMENT'],
+  AWAITING_PAYMENT: ['AWAITING_DELIVERY'],
+  AWAITING_DELIVERY: ['DELIVERED'],
+  DELIVERED: [],
+  CANCELLED: [],
+};
+
+/** Nhãn cho NÚT BẤM — là hành động, không phải tình trạng */
+export const ORDER_ACTION_LABEL: Record<string, string> = {
+  DIAGNOSING: 'Bắt đầu kiểm tra',
+  QUOTED: 'Chuyển về lập báo giá',
+  AWAITING_APPROVAL: 'Gửi khách duyệt',
+  AWAITING_PARTS: 'Chờ phụ tùng',
+  IN_PROGRESS: 'Bắt đầu sửa',
+  QUALITY_CHECK: 'Chuyển kiểm tra chất lượng',
+  AWAITING_PAYMENT: 'Đạt — chuyển thanh toán',
+  AWAITING_DELIVERY: 'Đã thu tiền — chờ giao xe',
+  DELIVERED: 'Giao xe cho khách',
+  CANCELLED: 'Huỷ đơn',
+};
+
+export const CANCEL_CATEGORY_LABEL: Record<string, string> = {
+  CUSTOMER_REQUEST: 'Khách yêu cầu huỷ',
+  GARAGE_UNABLE: 'Xưởng không thực hiện được',
+  VEHICLE_ISSUE: 'Vấn đề của xe ngoài phạm vi',
 };
 
 export const ODOMETER_REASON_LABEL: Record<string, string> = {

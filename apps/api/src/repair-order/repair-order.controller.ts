@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from '@nestjs/common';
 import {
+  ChangeOrderStatusInput,
   CreateRepairOrderInput,
   type ActorContext,
   type RepairOrderDetail,
@@ -39,5 +40,15 @@ export class RepairOrderController {
   @Get(':id')
   getById(@Actor() actor: ActorContext, @Param('id') id: string): Promise<RepairOrderDetail> {
     return this.svc.getById(actor, id);
+  }
+
+  /** Chuyển trạng thái — bảng chuyển đổi ở packages/contracts/src/state-machine.ts */
+  @Post(':id/status')
+  changeStatus(
+    @Actor() actor: ActorContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(ChangeOrderStatusInput)) input: ChangeOrderStatusInput,
+  ): Promise<{ status: string; version: number }> {
+    return this.svc.changeStatus(actor, id, input);
   }
 }

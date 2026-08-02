@@ -17,6 +17,7 @@ import {
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
 import { CatalogSection } from '@/components/CatalogSection';
+import { StatusActions } from '@/components/StatusActions';
 import { formatPlate } from '@garageos/domain';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -58,6 +59,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <span className="tag status">{ORDER_STATUS_LABEL[order.status] ?? order.status}</span>
               </div>
             </div>
+
+            <StatusActions
+              orderId={order.id}
+              status={order.status}
+              version={order.version}
+              odometerIn={order.odometerIn}
+              onDone={() => {
+                void api.getRepairOrder(id).then(setOrder);
+              }}
+            />
 
             <div className="card">
               <h2>Xe và khách hàng</h2>

@@ -79,6 +79,40 @@ after(async () => {
   await pool.end();
 });
 
+/**
+ * Đưa một đơn đi hết vòng đời tới DELIVERED bằng các bước HỢP LỆ.
+ *
+ * Không đặt thẳng `status='DELIVERED'` được nữa: trigger máy trạng thái ở
+ * migration 0014 chặn mọi đường tắt. Đây chính là điều ta muốn — và hàm này
+ * cũng là bản mô tả sống của chuỗi trạng thái đầy đủ.
+ */
+const DELIVERY_PATH = [
+  'RECEIVED', 'DIAGNOSING', 'QUOTED', 'AWAITING_APPROVAL', 'IN_PROGRESS',
+  'QUALITY_CHECK', 'AWAITING_PAYMENT', 'AWAITING_DELIVERY', 'DELIVERED',
+] as const;
+
+async function deliverOrder(orderId: string, odometerOut: number): Promise<void> {
+  const { rows } = await pool.query<{ status: string }>(
+    'SELECT status FROM repair_order WHERE id = $1',
+    [orderId],
+  );
+  const from = DELIVERY_PATH.indexOf(rows[0]!.status as (typeof DELIVERY_PATH)[number]);
+  assert.ok(from >= 0, `đơn đang ở ${rows[0]!.status}, không nằm trên đường giao xe`);
+
+  for (const s of DELIVERY_PATH.slice(from + 1)) {
+    if (s === 'DELIVERED') {
+      await pool.query(
+        `UPDATE repair_order SET status = 'DELIVERED', odometer_out = $2, delivered_at = now()
+          WHERE id = $1`,
+        [orderId, odometerOut],
+      );
+    } else {
+      await pool.query('UPDATE repair_order SET status = $2 WHERE id = $1', [orderId, s]);
+    }
+  }
+}
+
+
 describe('Tiếp nhận xe — luồng chính', () => {
   let orderId = '';
   let orderCode = '';
@@ -165,23 +199,21 @@ describe('🔒 INV-V-03 — một xe chỉ có một đơn đang mở', () => {
     });
     assert.equal(first.status, 201, JSON.stringify(first.body));
 
-    await pool.query(
-      `UPDATE repair_order SET status = 'DELIVERED', odometer_out = 5000, delivered_at = now()
-        WHERE id = $1`,
-      [first.body.id],
-    );
+    await deliverOrder(first.body.id, 5000);
 
     // 🔒 INV-A-02: đổi trạng thái PHẢI sinh nhật ký, và trigger ở DB phải làm
     //    việc đó kể cả khi lệnh UPDATE đến từ ngoài ứng dụng như ở đây.
     const { rows: audit } = await pool.query(
       `SELECT action, before_json, after_json FROM audit_log
         WHERE entity_type = 'repair_order' AND entity_id = $1
-          AND action = 'STATUS_CHANGED'`,
+          AND action = 'STATUS_CHANGED'
+        ORDER BY id`,
       [first.body.id],
     );
-    assert.equal(audit.length, 1, 'đổi trạng thái mà không có nhật ký');
+    // Mỗi bước trong chuỗi trạng thái sinh một dòng nhật ký riêng
+    assert.equal(audit.length, 8, 'thiếu nhật ký cho một bước chuyển trạng thái');
     assert.equal(audit[0].before_json.status, 'RECEIVED');
-    assert.equal(audit[0].after_json.status, 'DELIVERED');
+    assert.equal(audit[audit.length - 1]!.after_json.status, 'DELIVERED');
 
     const second = await call('POST', '/api/v1/repair-orders', {
       vehicleId: v,
