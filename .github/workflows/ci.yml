@@ -71,3 +71,35 @@ jobs:
       #    Tự động áp dụng cho bảng thêm mới sau này.
       - name: Kiểm tra bất biến kiến trúc
         run: pnpm test:invariants
+
+      # Build production KHÁC dev server: dev bỏ qua nhiều lỗi mà build thì không.
+      # Ví dụ thật: thiếu `resolve.extensionAlias` làm web sập, dev vẫn chạy được
+      # vì trang đó chưa được truy cập.
+      - name: Build production
+        run: pnpm build
+
+      # E2E là nơi DUY NHẤT kiểm chứng được các lỗi chỉ xuất hiện trong trình
+      # duyệt — ví dụ WEB-001 (đọc state cũ của React). Không chạy ở CI thì test
+      # đó chỉ là bằng chứng một lần, không phải hàng rào.
+      - name: Cài trình duyệt cho Playwright
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Khởi động web nền
+        run: |
+          pnpm --filter @garageos/web start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/dang-nhap >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3000/dang-nhap >/dev/null || { echo "Web không khởi động được"; exit 1; }
+
+      - name: E2E
+        run: pnpm e2e
+
+      - name: Lưu ảnh chụp khi E2E hỏng
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-that-bai
+          path: test-results/
+          retention-days: 7
