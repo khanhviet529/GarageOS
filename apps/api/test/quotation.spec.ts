@@ -567,14 +567,20 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
     try {
       const { quotationId } = await newQuotation('ICE', 'U');
       const oilPart = await partId('PT-OIL-5W30');
+      // Dòng phụ tùng BẮT BUỘC có cha kể từ migration 0019 — xem INV-Q-02.
+      const oil = await serviceItemId('ICE', 'SV-OIL-ENGINE');
+      const labor = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+        lineType: 'LABOR', serviceItemId: oil, quantity: 1,
+      });
       const r = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
-        lineType: 'PART', partId: oilPart, quantity: 1,
+        lineType: 'PART', partId: oilPart, parentLineId: labor.body.id, quantity: 1,
       });
       assert.equal(r.status, 201, JSON.stringify(r.body));
 
       const q = await call('GET', `/api/v1/quotations/${quotationId}`);
+      const partLine = q.body.lines.find((l: any) => l.lineType === 'PART');
       assert.equal(
-        q.body.lines[0].unitPrice,
+        partLine.unitPrice,
         185_000,
         'lấy giá từ bảng giá đã hết hiệu lực -> báo giá gửi khách sai giá',
       );

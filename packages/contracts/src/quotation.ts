@@ -52,6 +52,21 @@ export const AddQuotationLineInput = z
   .refine((d) => d.lineType === 'PART' || d.parentLineId === undefined, {
     message: 'Chỉ dòng phụ tùng mới có dòng công cha',
     path: ['parentLineId'],
+  })
+  /*
+   * 🔒 INV-Q-02 — dòng phụ tùng BẮT BUỘC có cha.
+   *
+   * Comment ở đầu schema này đã hứa điều đó từ đầu, nhưng ràng buộc thì để tuỳ
+   * chọn. Hậu quả đo được: một dòng phụ tùng mồ côi khiến khách KHÔNG BAO GIỜ
+   * duyệt được báo giá (trang tra cứu vẽ nó thành một nhóm, API duyệt không
+   * nhận id của nó), và nếu client chỉ gửi id dòng công thì tiền của nó vẫn nằm
+   * trong tổng — khách bị tính tiền cho thứ chưa đồng ý.
+   *
+   * BC-02 mục 5.3: bán phụ tùng rời cho khách mang về không hỗ trợ ở giai đoạn 1.
+   */
+  .refine((d) => d.lineType !== 'PART' || d.parentLineId !== undefined, {
+    message: 'Phụ tùng phải gắn vào một hạng mục công — khách duyệt theo hạng mục',
+    path: ['parentLineId'],
   });
 export type AddQuotationLineInput = z.infer<typeof AddQuotationLineInput>;
 
