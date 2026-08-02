@@ -247,3 +247,123 @@ describe('🔒 Bảng giá không chồng thời gian', () => {
     );
   });
 });
+
+/**
+ * 🔒 Test QUÉT TOÀN BỘ, không liệt kê tay.
+ *
+ * Ba vòng review trước đã sửa `GRANT UPDATE` toàn cột cho ba bảng khác nhau, và
+ * lần thứ tư vẫn còn bốn bảng sót — vì test cũ chỉ kiểm những bảng được viết
+ * tên vào danh sách. Danh sách viết tay bảo vệ được đúng những gì người viết đã
+ * nghĩ ra; quét toàn bộ bảo vệ được cả những gì người viết chưa nghĩ tới.
+ */
+describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn cột', () => {
+  test('mọi quyền UPDATE phải khai báo theo CỘT', async () => {
+    // `role_table_grants` có dòng UPDATE cấp ở mức BẢNG;
+    // `column_privileges` có dòng cho từng cột. Cấp theo cột thì bảng KHÔNG
+    // xuất hiện ở bảng thứ nhất — đó là cách phân biệt.
+    const { rows } = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.role_table_grants
+        WHERE grantee = $1 AND privilege_type = 'UPDATE'
+          AND table_schema = 'public'
+        ORDER BY table_name`,
+      [APP_ROLE],
+    );
+
+    // Bảng được phép cấp UPDATE toàn cột: chỉ những bảng mà MỌI cột đều là dữ
+    // liệu sống, không có cột nào là định danh hay bản ghi nhận.
+    // `doc_counter`: chỉ có một cột dữ liệu (`next_value`), cấp theo cột thành
+    //   thừa. `quotation`: các cột TỔNG do trigger tính — đóng băng chúng là
+    //   việc của đợt 4, ghi ở đây để không quên.
+    const CHO_PHEP_TOAN_COT = new Set(['doc_counter', 'quotation']);
+
+    const viPham = rows.map((r) => r.table_name).filter((t) => !CHO_PHEP_TOAN_COT.has(t));
+    assert.deepEqual(
+      viPham,
+      [],
+      `Bảng được cấp UPDATE toàn cột: ${viPham.join(', ')}. ` +
+        'Cấp theo cột, hoặc thêm vào danh sách cho phép kèm lý do.',
+    );
+  });
+
+  test('app_user: KHÔNG sửa được vai trò và mật khẩu', async () => {
+    const { rows } = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.column_privileges
+        WHERE grantee = $1 AND table_name = 'app_user' AND privilege_type = 'UPDATE'`,
+      [APP_ROLE],
+    );
+    const cols = new Set(rows.map((r) => r.column_name));
+    for (const [col, why] of [
+      ['roles', 'một cố vấn tự nâng mình lên OWNER — RLS không chặn vì cùng tenant'],
+      ['password_hash', 'đổi được mật khẩu người khác'],
+      ['tenant_id', 'chuyển người dùng sang tenant khác'],
+    ] as const) {
+      assert.ok(!cols.has(col), `Sửa được app_user.${col}: ${why}`);
+    }
+    assert.ok(cols.has('full_name'), 'phải sửa được hồ sơ cơ bản');
+  });
+
+  test('vehicle: KHÔNG sửa được biển số, loại động cơ, hay xoá mềm', async () => {
+    const { rows } = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.column_privileges
+        WHERE grantee = $1 AND table_name = 'vehicle' AND privilege_type = 'UPDATE'`,
+      [APP_ROLE],
+    );
+    const cols = new Set(rows.map((r) => r.column_name));
+    for (const [col, why] of [
+      ['plate_number', 'INV-V-02: biển số là khoá của toàn bộ lịch sử xe'],
+      ['powertrain', 'INV-V-01: đổi sau khi báo giá để lại dòng vi phạm mà không ai kiểm lại'],
+      ['deleted_at', 'uq_vehicle_plate là partial index — xoá mềm là GIẢI PHÓNG biển số để tạo hồ sơ trùng'],
+    ] as const) {
+      assert.ok(!cols.has(col), `Sửa được vehicle.${col}: ${why}`);
+    }
+    assert.ok(cols.has('last_odometer'), 'tiếp nhận và giao xe phải ghi được số km');
+  });
+
+  test('KHÔNG bảng nào được cấp DELETE ngoài dòng báo giá', async () => {
+    const { rows } = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.role_table_grants
+        WHERE grantee = $1 AND privilege_type = 'DELETE' AND table_schema = 'public'
+        ORDER BY table_name`,
+      [APP_ROLE],
+    );
+    // quotation_line: xoá dòng khỏi BẢN NHÁP là thao tác nghiệp vụ thật, và
+    // trigger chặn xoá sau khi đã gửi khách.
+    // `quotation_line`: xoá dòng khỏi BẢN NHÁP là thao tác nghiệp vụ thật.
+    // `user_branch`: gỡ quyền truy cập một chi nhánh — không phải dữ liệu nghiệp vụ.
+    assert.deepEqual(
+      rows.map((r) => r.table_name),
+      ['quotation_line', 'user_branch'],
+      'Có bảng được cấp DELETE ngoài dự kiến — dữ liệu nghiệp vụ chỉ xoá mềm',
+    );
+  });
+});
+
+describe('🔒 Mọi hàm SECURITY DEFINER phải cố định search_path', () => {
+  test('không hàm nào thiếu, và phải có cả pg_temp', async () => {
+    // Hàm SECURITY DEFINER chạy bằng quyền chủ sở hữu (role migration, có
+    // BYPASSRLS). search_path không cố định nghĩa là một object cùng tên đứng
+    // trước `public` sẽ được dùng thay — và chạy bằng quyền đó.
+    //
+    // `pg_temp` bắt buộc phải có tên: PostgreSQL tìm schema tạm TRƯỚC mọi
+    // schema khác khi nó không được liệt kê tường minh.
+    const { rows } = await pool.query<{ proname: string; proconfig: string[] | null }>(
+      `SELECT p.proname, p.proconfig
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.prosecdef`,
+    );
+    assert.ok(rows.length > 0, 'không tìm thấy hàm SECURITY DEFINER nào — truy vấn sai?');
+
+    const thieu = rows
+      .filter((r) => {
+        const sp = (r.proconfig ?? []).find((c) => c.startsWith('search_path='));
+        return sp === undefined || !sp.includes('pg_temp');
+      })
+      .map((r) => r.proname);
+
+    assert.deepEqual(
+      thieu,
+      [],
+      `Hàm SECURITY DEFINER thiếu \`SET search_path = public, pg_temp\`: ${thieu.join(', ')}`,
+    );
+  });
+});
