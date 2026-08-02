@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { boundedInt, moneyAmount } from './money.js';
+import { moneyAmount } from './money.js';
 
 export const QuotationStatus = z.enum([
   'DRAFT',
@@ -35,8 +35,20 @@ export const AddQuotationLineInput = z
     parentLineId: z.string().uuid().optional(),
     /** Số lượng — giờ công có thể lẻ (1,5h), phụ tùng có thể lẻ (4,8 lít) */
     quantity: z.number().positive().max(100_000),
+    /**
+     * Chiết khấu bằng TIỀN cho dòng này.
+     *
+     * Đây là con số duy nhất ảnh hưởng tới tiền mà client được gửi lên, và có
+     * lý do: nó là một QUYẾT ĐỊNH của cố vấn, không phải một dữ kiện tra được
+     * từ danh mục. Không có bảng nào trả lời được "giảm bao nhiêu cho khách
+     * này".
+     *
+     * Vì là quyết định nên nó bị chặn ở hai tầng:
+     *  - INV-M-07 (CHECK ở DB): không vượt quá giá trị dòng
+     *  - 🔒 PR-03 (service): vượt `tenant.discount_threshold_percent` thì cần
+     *    vai BRANCH_MANAGER trở lên
+     */
     discountAmount: moneyAmount.default(0),
-    taxRatePercent: boundedInt(100, 'Thuế suất không hợp lệ').default(10),
     /** Hạng mục bảo hành: khách không trả tiền, dòng tính 0đ */
     isWarranty: z.boolean().default(false),
     /** Ghi đè mô tả — mặc định lấy tên trong danh mục */

@@ -1,0 +1,49 @@
+-- =============================================================================
+-- 0023 — `touch_row()` gán NEW.version, hai bảng không có cột đó
+--
+-- Trigger dùng chung `touch_row()` làm hai việc: chạm `updated_at` và tăng
+-- `version`. Nó được gắn cho 10 bảng. HAI trong số đó không có cột `version`:
+--
+--     tenant, vehicle_ownership
+--
+-- Hậu quả không phải "version không tăng" — mà là câu UPDATE HỎNG HOÀN TOÀN:
+--
+--     ERROR:  record "new" has no field "version"   (SQLSTATE 42703)
+--
+-- Nghĩa là từ migration 0001 tới giờ, `UPDATE tenant` chưa bao giờ chạy được.
+-- Không ai biết vì chưa có màn hình nào sửa cấu hình tenant, và không test nào
+-- thử. Nó lộ ra khi một test của 0022 cần đổi `default_tax_rate_percent`.
+--
+-- `vehicle_ownership` nguy hơn: BC-01 có nghiệp vụ SANG TÊN XE, và bước "đóng
+-- quyền sở hữu cũ" chính là một `UPDATE vehicle_ownership SET valid_to = ...`.
+-- Cả tính năng đó sẽ chết ngay lần bấm đầu tiên ở Phase sau — và người viết sẽ
+-- đi tìm lỗi trong code sang tên, không phải trong một trigger của 0001.
+--
+-- -----------------------------------------------------------------------------
+-- Vì sao thêm cột chứ không nới lỏng trigger
+--
+-- Cách kia là cho `touch_row()` bỏ qua khi bảng không có `version` (kiểm bằng
+-- `to_jsonb(NEW) ? 'version'`). Cách đó biến một lỗi ồn ào thành im lặng: bảng
+-- thứ mười một quên cột sẽ không báo gì cả, và ta mất luôn khoá lạc quan ở
+-- đúng những bảng cần nó.
+--
+-- Tám bảng còn lại đều có `version`. Hai bảng này là ngoại lệ không có lý do —
+-- sửa ngoại lệ, đừng sửa quy tắc.
+--
+-- Bắt được bằng cách QUÉT pg_trigger chứ không đọc từng file migration. Đây là
+-- lần thứ ba trong dự án mà quét toàn bộ tìm ra thứ mà đọc tay bỏ sót
+-- (docs/reviews/2026-08-02, mục "Danh sách chỉ bảo vệ được những gì người viết
+-- đã nghĩ ra"). Test ở `packages/db/test/schema-invariants.spec.ts` giữ cho
+-- bảng thứ mười một không lặp lại.
+-- =============================================================================
+
+ALTER TABLE tenant            ADD COLUMN version bigint NOT NULL DEFAULT 0;
+ALTER TABLE vehicle_ownership ADD COLUMN version bigint NOT NULL DEFAULT 0;
+
+-- KHÔNG cấp `GRANT UPDATE (version)` cho `garageos_app`.
+--
+-- Quyền cột được kiểm theo các cột mà câu UPDATE NHẮC TÊN, còn `version` do
+-- trigger BEFORE tự gán — nên không cần quyền để nó tăng. Cấp thêm chỉ mở cho
+-- ứng dụng tự đặt số phiên bản, tức là tự vô hiệu hoá khoá lạc quan của chính
+-- mình. Khi nào có màn hình cần gửi `version` lên để so sánh thì cấp lúc đó,
+-- đi kèm chỗ dùng.

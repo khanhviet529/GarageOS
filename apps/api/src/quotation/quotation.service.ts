@@ -13,6 +13,18 @@ import { BusinessError } from '../common/errors';
 import { resolveActivePriceList } from '../common/price-list';
 import { appendBranchScope, assertCan } from '../common/permissions';
 
+/**
+ * Kết quả định giá MỘT dòng — tất cả đều tra từ danh mục, không có gì đến từ
+ * client. Gom thành một kiểu để hai nhánh LABOR/PART không lệch nhau khi thêm
+ * trường: quên trả `taxRatePercent` ở một nhánh là lỗi biên dịch, không phải
+ * một dòng thuế bằng 0 lặng lẽ.
+ */
+interface LinePricing {
+  unitPrice: number;
+  description: string;
+  taxRatePercent: number;
+}
+
 @Injectable()
 export class QuotationService {
   constructor(@Inject(TenantAwareDb) private readonly db: TenantAwareDb) {}
@@ -69,14 +81,18 @@ export class QuotationService {
       const seq = Number(seqRows[0]!.next);
 
       const { rows } = await tx.query<{ id: string }>(
+        // 🔒 Snapshot CẢ BẢNG GIÁ, không chỉ đơn giá giờ (migration 0022).
+        //    Mọi dòng thêm sau này tra giá từ đúng bảng giá này, kể cả khi
+        //    quản lý đã mở kỳ giá mới ở giữa chừng.
         `INSERT INTO quotation (tenant_id, repair_order_id, seq, labor_rate_per_hour,
-                                created_by_user_id)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+                                price_list_id, created_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
         [
           actor.tenantId,
           repairOrderId,
           seq,
           priceList.laborRatePerHour,
+          priceList.id,
           actor.userId,
         ],
       );
@@ -127,8 +143,21 @@ export class QuotationService {
 
       const priced =
         input.lineType === 'LABOR'
-          ? await this.priceLabor(tx, input, quotation.laborRatePerHour)
+          ? await this.priceLabor(tx, input, quotation.laborRatePerHour, actor.tenantId)
           : await this.pricePart(tx, input, quotation.priceListId);
+
+      // 🔒 PR-03 — kiểm SAU khi có đơn giá, vì ngưỡng là phần trăm của giá trị
+      //    dòng chứ không phải một số tiền tuyệt đối.
+      const { rows: thRows } = await tx.query<{ discount_threshold_percent: number }>(
+        `SELECT discount_threshold_percent FROM tenant WHERE id = $1`,
+        [actor.tenantId],
+      );
+      this.assertDiscountWithinAuthority(
+        actor,
+        input,
+        priced.unitPrice,
+        Number(thRows[0]!.discount_threshold_percent),
+      );
 
       if (input.parentLineId !== undefined) {
         const { rows } = await tx.query(
@@ -169,7 +198,8 @@ export class QuotationService {
             input.quantity,
             priced.unitPrice,
             input.discountAmount,
-            input.taxRatePercent,
+            // 🔒 Thuế suất tra từ danh mục, KHÔNG nhận từ client (0022 mục B).
+            priced.taxRatePercent,
             input.isWarranty,
           ],
         );
@@ -344,10 +374,12 @@ export class QuotationService {
       branch_id: string;
       status: string;
       labor_rate_per_hour: string;
+      price_list_id: string;
     }>(
       // FOR UPDATE: mọi thao tác sửa báo giá đều đi qua đây, nên khoá ở một chỗ
       // là đủ để hai người sửa cùng lúc phải xếp hàng.
-      `SELECT q.id, q.repair_order_id, q.status, q.labor_rate_per_hour, ro.branch_id
+      `SELECT q.id, q.repair_order_id, q.status, q.labor_rate_per_hour,
+              q.price_list_id, ro.branch_id
          FROM quotation q
          JOIN repair_order ro ON ro.id = q.repair_order_id
         WHERE q.id = $1${draftScope} FOR UPDATE OF q`,
@@ -363,14 +395,22 @@ export class QuotationService {
         `Báo giá đã gửi khách (${q.status}). Muốn đổi thì lập bản mới.`,
       );
     }
-    const priceList = await resolveActivePriceList(tx, q.branch_id);
     return {
       id: q.id,
       repairOrderId: q.repair_order_id,
       branchId: q.branch_id,
-      // Đơn giá giờ lấy từ SNAPSHOT trên báo giá, không lấy từ bảng giá hiện tại
+      /*
+       * 🔒 CẢ HAI con số dưới đây đều lấy từ SNAPSHOT trên báo giá.
+       *
+       * Bản trước lấy đơn giá giờ từ snapshot nhưng lại gọi
+       * `resolveActivePriceList(branch)` để lấy bảng giá phụ tùng — tức là hỏi
+       * "bảng giá nào đang hiệu lực BÂY GIỜ". Mở lại một báo giá nháp sau khi
+       * quản lý đổi kỳ giá thì dòng công và dòng phụ tùng của cùng một tờ báo
+       * giá thuộc hai bảng giá khác nhau, và không có dữ liệu nào ghi lại.
+       * Xem migration 0022 để có kịch bản đầy đủ theo mốc giờ.
+       */
       laborRatePerHour: parseAmountFromDb(q.labor_rate_per_hour, 'laborRatePerHour'),
-      priceListId: priceList.id,
+      priceListId: q.price_list_id,
     };
   }
 
@@ -378,7 +418,8 @@ export class QuotationService {
     tx: PoolClient,
     input: AddQuotationLineInput,
     ratePerHour: number,
-  ): Promise<{ unitPrice: number; description: string }> {
+    tenantId: string,
+  ): Promise<LinePricing> {
     const { rows } = await tx.query<{ name: string; standard_hours: string }>(
       `SELECT name, standard_hours FROM service_item WHERE id = $1 AND is_active`,
       [input.serviceItemId],
@@ -387,11 +428,23 @@ export class QuotationService {
     if (item === undefined) {
       throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy hạng mục dịch vụ');
     }
+
+    /*
+     * Thuế suất dòng công lấy ở cấp TENANT (migration 0022 mục B), không ở cấp
+     * hạng mục dịch vụ: VAT là chính sách áp cho cả doanh nghiệp và có đổi theo
+     * nghị quyết. Khi nó đổi, xưởng sửa một chỗ chứ không sửa từng hạng mục.
+     */
+    const { rows: tRows } = await tx.query<{ default_tax_rate_percent: number }>(
+      `SELECT default_tax_rate_percent FROM tenant WHERE id = $1`,
+      [tenantId],
+    );
+
     // Đơn giá của dòng công là tiền cho MỘT đơn vị số lượng, mà số lượng ở đây
     // là "số lần làm hạng mục". Giờ định mức đã gộp vào đơn giá.
     return {
       unitPrice: Math.round(Number(item.standard_hours) * ratePerHour),
       description: item.name,
+      taxRatePercent: Number(tRows[0]!.default_tax_rate_percent),
     };
   }
 
@@ -399,18 +452,27 @@ export class QuotationService {
     tx: PoolClient,
     input: AddQuotationLineInput,
     priceListId: string,
-  ): Promise<{ unitPrice: number; description: string }> {
+  ): Promise<LinePricing> {
     /*
      * 🔒 Q-001: bản đầu dùng LEFT JOIN price_list với điều kiện hiệu lực đặt
      * trong mệnh đề ON. Dòng của bảng giá ĐÃ HẾT HẠN vẫn còn `pli.sell_price`
      * (chỉ có cột của `pl` là NULL), nên `ORDER BY pli.sell_price` chọn ngay
      * mức giá cũ nếu nó rẻ hơn — và snapshot vào báo giá gửi khách.
      *
-     * Bản này bám thẳng vào ĐÚNG bảng giá đã snapshot trên báo giá, nên không
-     * còn chỗ để chọn nhầm.
+     * Bản này bám thẳng vào ĐÚNG bảng giá đã snapshot trên báo giá
+     * (`quotation.price_list_id`, migration 0022), nên không còn chỗ để chọn
+     * nhầm — và cũng không còn phụ thuộc vào "bây giờ là mấy giờ".
+     *
+     * Thuế suất lấy luôn ở đây: `price_list_item.tax_rate_percent` có từ 0008
+     * và chưa từng có ai đọc. Con số đúng vẫn nằm sẵn trong danh mục trong khi
+     * ứng dụng đi nhận nó từ trình duyệt.
      */
-    const { rows } = await tx.query<{ name: string; sell_price: string | null }>(
-      `SELECT p.name, pli.sell_price
+    const { rows } = await tx.query<{
+      name: string;
+      sell_price: string | null;
+      tax_rate_percent: number | null;
+    }>(
+      `SELECT p.name, pli.sell_price, pli.tax_rate_percent
          FROM part p
          LEFT JOIN price_list_item pli
            ON pli.part_id = p.id AND pli.price_list_id = $2
@@ -421,16 +483,55 @@ export class QuotationService {
     if (part === undefined) {
       throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy phụ tùng');
     }
-    if (part.sell_price === null) {
+    if (part.sell_price === null || part.tax_rate_percent === null) {
       throw new BusinessError(
         ErrorCode.VALIDATION_FAILED,
-        `Phụ tùng "${part.name}" chưa có giá trong bảng giá đang hiệu lực`,
+        `Phụ tùng "${part.name}" chưa có giá trong bảng giá của báo giá này`,
       );
     }
     return {
       unitPrice: parseAmountFromDb(part.sell_price, 'sellPrice'),
       description: part.name,
+      taxRatePercent: Number(part.tax_rate_percent),
     };
+  }
+
+  /**
+   * 🔒 PR-03 — chiết khấu vượt ngưỡng của tenant cần quản lý chi nhánh.
+   *
+   * `tenant.discount_threshold_percent` tồn tại từ migration 0001 và cho tới
+   * giờ CHƯA CÓ MỘT DÒNG CODE NÀO ĐỌC NÓ. `docs/02` mục 4 liệt kê nó là một
+   * kiểm soát nội bộ chống thất thoát; suốt Phase 1 nó chỉ là một cột trong
+   * bảng. Cố vấn giảm 100% giá trị dòng vẫn qua được — INV-M-07 chỉ chặn chiết
+   * khấu VƯỢT giá trị dòng, đúng bằng thì hợp lệ.
+   *
+   * Kiểm theo TỪNG DÒNG chứ không theo tổng báo giá, và đó là lựa chọn có chủ
+   * ý. Chiết khấu % của cả tờ báo giá là trung bình có trọng số của các dòng,
+   * nên "mọi dòng đều trong ngưỡng" kéo theo "tổng trong ngưỡng". Kiểm từng
+   * dòng vừa CHẶT HƠN vừa không chia nhỏ để lách được: tách một dòng giảm 50%
+   * thành năm dòng thì mỗi dòng vẫn giảm 50%.
+   *
+   * Dòng bảo hành bỏ qua: trigger `tinh_tien_dong()` đưa mọi thành phần về 0,
+   * nên chiết khấu trên đó không có ý nghĩa gì để mà kiểm soát.
+   */
+  private assertDiscountWithinAuthority(
+    actor: ActorContext,
+    input: AddQuotationLineInput,
+    unitPrice: number,
+    thresholdPercent: number,
+  ): void {
+    if (input.discountAmount === 0 || input.isWarranty) return;
+
+    // Cùng công thức với trigger `tinh_tien_dong()`: round(quantity * unit_price).
+    const gross = Math.round(input.quantity * unitPrice);
+    if (gross === 0) {
+      // Dòng 0đ mà vẫn có chiết khấu: INV-M-07 sẽ chặn ở DB. Không tự chia 0.
+      return;
+    }
+    const percent = (input.discountAmount * 100) / gross;
+    if (percent <= thresholdPercent) return;
+
+    assertCan(actor, 'quotation:discountOverThreshold');
   }
 
   private async readQuotation(
