@@ -23,6 +23,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.11
         version: 8.20.3
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
       eslint:
         specifier: ^9.39.5
         version: 9.39.5

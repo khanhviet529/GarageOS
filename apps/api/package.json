@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/main.js",
+    "build": "node build.mjs",
+    "start": "node dist/main.cjs",
     "lint": "eslint src test --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "node ../../infra/run-tests.mjs test"
