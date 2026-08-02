@@ -38,6 +38,9 @@ jobs:
       # Nới rate limit CHỈ trong CI để test tích hợp chạy được.
       # ⚠️ Không bao giờ đặt biến này ở production.
       LOGIN_RATE_LIMIT_MAX: '1000'
+      # Trả mã OTP trong response để test luồng duyệt báo giá chạy được.
+      # ⚠️ Chỉ ở CI. Không bao giờ đặt ở production.
+      OTP_DEV_ECHO: 'true'
 
     steps:
       - uses: actions/checkout@v4

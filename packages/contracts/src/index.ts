@@ -7,3 +7,4 @@ export * from './vehicle.js';
 export * from './repair-order.js';
 export * from './catalog.js';
 export * from './quotation.js';
+export * from './public-tracking.js';
