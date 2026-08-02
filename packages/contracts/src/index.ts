@@ -4,3 +4,4 @@ export * from './auth.js';
 export * from './errors.js';
 export * from './money.js';
 export * from './vehicle.js';
+export * from './repair-order.js';

@@ -1,8 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 const SHOTS = 'e2e/screenshots';
 mkdirSync(SHOTS, { recursive: true });
+
+/**
+ * Chụp màn hình với `caret: 'initial'`.
+ *
+ * Mặc định Playwright chèn `style="caret-color: transparent"` vào các ô nhập để
+ * ảnh chụp ổn định. Nếu ảnh được chụp TRƯỚC khi React hydrate, thuộc tính chèn
+ * thêm đó làm React báo hydration mismatch — và bộ chặn lỗi console của ta bắt
+ * đúng cái nhiễu do chính công cụ test tạo ra.
+ */
+function shot(page: Page, name: string) {
+  return page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true, caret: 'initial' });
+}
+
 
 /**
  * Lỗi console của trình duyệt là thứ dễ tích tụ nhất mà không ai nhận ra: mỗi
@@ -24,7 +37,7 @@ test('luồng tiếp nhận: đăng nhập → tra biển → tạo xe mới →
   // --- Đăng nhập ---
   await page.goto('/dang-nhap');
   await expect(page.getByRole('heading', { name: 'GarageOS' })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/1-dang-nhap.png`, fullPage: true });
+  await shot(page, '1-dang-nhap');
 
   await page.getByLabel('Số điện thoại').fill('0901000003');
   await page.getByLabel('Mật khẩu').fill('demo1234');
@@ -33,13 +46,13 @@ test('luồng tiếp nhận: đăng nhập → tra biển → tạo xe mới →
   await expect(page.getByRole('heading', { name: 'Tra cứu biển số' })).toBeVisible();
   // Vai trò hiện bằng tiếng Việt, không phải hằng số trong mã nguồn
   await expect(page.getByText('Lê Văn Cố Vấn · Cố vấn dịch vụ')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/2-tiep-nhan-rong.png`, fullPage: true });
+  await shot(page, '2-tiep-nhan-rong');
 
   // --- Tra biển chưa có ---
   await page.getByLabel('Biển số xe').fill(PLATE);
   await page.getByRole('button', { name: 'Tra cứu' }).click();
   await expect(page.getByRole('heading', { name: /Chưa có hồ sơ/ })).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/3-khong-tim-thay.png`, fullPage: true });
+  await shot(page, '3-khong-tim-thay');
 
   // --- Tạo khách + xe điện ---
   await page.getByRole('button', { name: 'Tạo khách hàng và xe mới' }).click();
@@ -52,7 +65,7 @@ test('luồng tiếp nhận: đăng nhập → tra biển → tạo xe mới →
   await page.getByLabel('Hãng').fill('VinFast');
   await page.getByLabel('Dòng xe').fill('VF8');
   await page.getByLabel('Dung lượng pin (kWh)').fill('42');
-  await page.screenshot({ path: `${SHOTS}/4-form-tao-moi.png`, fullPage: true });
+  await shot(page, '4-form-tao-moi');
 
   await page.getByRole('button', { name: /Lưu khách hàng và xe/ }).click();
 
@@ -60,7 +73,7 @@ test('luồng tiếp nhận: đăng nhập → tra biển → tạo xe mới →
   await expect(page.getByRole('heading', { name: 'Đã có hồ sơ xe' })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Điện', { exact: true })).toBeVisible();
   await expect(page.getByText('VinFast VF8')).toBeVisible();
-  await page.screenshot({ path: `${SHOTS}/5-tim-thay-xe.png`, fullPage: true });
+  await shot(page, '5-tim-thay-xe');
 
   expect(consoleErrors, 'giao diện phát sinh lỗi console').toEqual([]);
 });
@@ -99,7 +112,7 @@ test('sai mật khẩu hiện thông báo, không lộ chi tiết nội bộ', a
   for (const leak of ['SELECT', 'app_user', 'node_modules', 'at Object']) {
     await expect(alert).not.toContainText(leak);
   }
-  await page.screenshot({ path: `${SHOTS}/6-sai-mat-khau.png`, fullPage: true });
+  await shot(page, '6-sai-mat-khau');
 });
 
 /**

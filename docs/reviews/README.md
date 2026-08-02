@@ -16,3 +16,4 @@ Vì sao giữ lại:
 |---|---|---|---|
 | 2026-08-01 | Phase 1.1a — tầng dữ liệu khách hàng/xe | 3 | 3 CONFIRMED, đã sửa ở `0005_review_fixes.sql` |
 | 2026-08-02 | [Phase 1.1 — API và giao diện](2026-08-02-phase-1.1-api-va-web.md) | 2 | 2 CONFIRMED, mỗi cái có một test đỏ làm bằng chứng |
+| 2026-08-02 | [Phase 1.2 — tiếp nhận xe](2026-08-02-phase-1.2-tiep-nhan-xe.md) | 2 | 2 CONFIRMED — thiếu phạm vi chi nhánh lúc đọc, và `GRANT UPDATE` toàn bảng lặp lại lỗi cũ |

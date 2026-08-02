@@ -90,7 +90,8 @@ body {
 /* --- Form --- */
 .field { display: flex; flex-direction: column; gap: var(--sp-1); }
 .field label { font-size: var(--fs-sm); font-weight: 600; color: var(--c-text-muted); }
-.field .hint { font-size: var(--fs-xs); color: var(--c-text-muted); }
+/* Dòng gợi ý — dùng được cả trong form lẫn trong bảng, nên không khoá vào .field */
+.hint { font-size: var(--fs-xs); color: var(--c-text-muted); line-height: 1.5; }
 .field .req { color: var(--c-danger); }
 
 input, select, textarea {
@@ -162,3 +163,49 @@ td.mono { font-family: var(--font-mono); }
   border: 1px solid var(--c-border-strong); border-bottom-width: 2px;
   border-radius: 3px; padding: 1px 5px; background: #fff;
 }
+
+/* --- Điều hướng --- */
+.app-header .nav { display: flex; gap: var(--sp-1); margin-left: var(--sp-3); }
+.app-header .nav a {
+  color: #fff; text-decoration: none; opacity: .8;
+  padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm);
+  font-size: var(--fs-sm); font-weight: 600;
+}
+.app-header .nav a:hover  { opacity: 1; background: rgba(255,255,255,.12); }
+.app-header .nav a.active { opacity: 1; background: rgba(255,255,255,.2); }
+
+textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+
+/* Ô chọn: nhãn phải bấm được, không chỉ mỗi ô vuông bé xíu */
+.check {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--c-text-muted);
+  cursor: pointer; min-height: 36px; user-select: none;
+}
+.check input { min-height: 0; width: 16px; height: 16px; cursor: pointer; }
+
+/* Danh sách ngắn dạng thẻ — tài sản trên xe */
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.chips li {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  background: var(--c-bg); border: 1px solid var(--c-border);
+  border-radius: 12px; padding: 3px 4px 3px 10px;
+  font-size: var(--fs-sm);
+}
+.chips li button {
+  background: none; color: var(--c-text-muted);
+  border: none; padding: 0 6px; min-height: 0;
+  font-size: var(--fs-lg); line-height: 1;
+}
+.chips li button:hover { background: none; color: var(--c-danger); }
+
+/* Bảng rộng phải cuộn RIÊNG, không được đẩy cả trang trượt ngang */
+.table-scroll { overflow-x: auto; }
+.truncate { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tag.status { background: var(--c-primary-soft); color: var(--c-primary); }
+
+a { color: var(--c-primary); }
+
+/* Tên người và mã đơn không được xuống dòng giữa chừng — mắt quét bảng sẽ vấp */
+td.nowrap, th.nowrap { white-space: nowrap; }
