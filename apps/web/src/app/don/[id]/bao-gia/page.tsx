@@ -20,6 +20,7 @@ import {
   type CatalogForVehicle, type Quotation, type RepairOrderDetail,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorState, Loading } from '@/components/ErrorState';
 import { formatPlate } from '@garageos/domain';
 
 export default function QuotationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -35,18 +36,21 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
     setQuotations(await api.listQuotations(orderId));
   }, [orderId]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const o = await api.getRepairOrder(orderId);
-        setOrder(o);
-        const [cat] = await Promise.all([api.getCatalog(o.vehicle.id), reloadQuotations()]);
-        setCatalog(cat);
-      } catch (err) {
-        setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
-      }
-    })();
+  const taiLai = useCallback(async () => {
+    setError(null);
+    try {
+      const o = await api.getRepairOrder(orderId);
+      setOrder(o);
+      const [cat] = await Promise.all([api.getCatalog(o.vehicle.id), reloadQuotations()]);
+      setCatalog(cat);
+    } catch (err) {
+      setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
+    }
   }, [orderId, reloadQuotations]);
+
+  useEffect(() => {
+    void taiLai();
+  }, [taiLai]);
 
   // Bản nháp là bản duy nhất sửa được — các bản đã gửi chỉ để xem lại
   const draft = quotations?.find((q) => q.status === 'DRAFT') ?? null;
@@ -68,8 +72,13 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
     <>
       <AppHeader current="don" />
 
-      <div className="container stack">
-        {error !== null && <div className="alert error" role="alert">{error}</div>}
+      <main id="noi-dung" className="container stack">
+        {error !== null && <ErrorState message={error} onRetry={() => void taiLai()} />}
+
+        {/* Bản trước render một trang TRẮNG trong lúc tải: cố vấn bấm 'Lập báo
+            giá' khi đang ngồi cạnh khách, thấy trắng 2-3 giây trên wifi xưởng,
+            tưởng hỏng và bấm back. */}
+        {order === null && error === null && <Loading what="báo giá" />}
 
         {order !== null && (
           <div className="card">
@@ -134,7 +143,7 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
             Đơn này chưa có báo giá nào. Bấm <strong>Tạo báo giá mới</strong> để bắt đầu.
           </div>
         )}
-      </div>
+      </main>
     </>
   );
 }

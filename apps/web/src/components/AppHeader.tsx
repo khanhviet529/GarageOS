@@ -24,6 +24,8 @@ export function AppHeader({ current }: { current: 'tiep-nhan' | 'xe-trong-xuong'
 
   return (
     <header className="app-header">
+      {/* Hiện ra khi Tab lần đầu — bỏ qua thanh điều hướng để tới nội dung */}
+      <a href="#noi-dung" className="skip-link">Bỏ qua thanh điều hướng</a>
       <h1>GarageOS</h1>
       <nav className="nav">
         <Link href="/tiep-nhan" className={current === 'tiep-nhan' ? 'active' : ''}>

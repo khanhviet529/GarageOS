@@ -42,7 +42,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     <>
       <AppHeader current="don" />
 
-      <div className="container stack">
+      <main id="noi-dung" className="container stack">
         {error !== null && <div className="alert error" role="alert">{error}</div>}
         {order === null && error === null && <p className="muted">Đang tải…</p>}
 
@@ -66,7 +66,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               version={order.version}
               odometerIn={order.odometerIn}
               onDone={() => {
-                void api.getRepairOrder(id).then(setOrder);
+                // Không nuốt lỗi: đổi trạng thái đã THÀNH CÔNG ở server, nhưng
+                // nếu lần đọc lại này lỗi thì màn hình giữ trạng thái CŨ. Cố vấn
+                // nhìn thấy trạng thái cũ, bấm lại, và lần này `version` đã lệch
+                // nên nhận lỗi khoá lạc quan khó hiểu.
+                api
+                  .getRepairOrder(id)
+                  .then(setOrder)
+                  .catch(() =>
+                    setError('Đã cập nhật, nhưng chưa tải lại được. Hãy làm mới trang.'),
+                  );
               }}
             />
 
@@ -193,8 +202,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 <button
                   type="button" className="secondary"
                   onClick={() => {
-                    void navigator.clipboard.writeText(trackingUrl);
-                    setCopied(true);
+                    // Hai đường hỏng thật: (a) xưởng chạy trên LAN qua http://
+                    // thì `navigator.clipboard` KHÔNG tồn tại ngoài secure
+                    // context — biểu thức ném ngay, nút đứng im, người dùng bấm
+                    // lại ba lần; (b) writeText reject thì nút vẫn đổi thành
+                    // "Đã chép" và cố vấn dán cho khách nội dung clipboard CŨ.
+                    const clipboard = navigator.clipboard as Clipboard | undefined;
+                    if (clipboard === undefined) {
+                      setError('Trình duyệt không cho chép tự động. Hãy bấm vào ô link rồi Ctrl+C.');
+                      return;
+                    }
+                    void clipboard
+                      .writeText(trackingUrl)
+                      .then(() => {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 3000);
+                      })
+                      .catch(() =>
+                        setError('Không chép được. Hãy bấm vào ô link rồi Ctrl+C.'),
+                      );
                   }}
                 >
                   {copied ? 'Đã chép' : 'Chép link'}
@@ -211,7 +237,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </>
         )}
-      </div>
+      </main>
     </>
   );
 }
