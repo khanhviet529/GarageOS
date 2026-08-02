@@ -324,11 +324,26 @@ describe('🔒 BC-02 — duyệt từng phần', () => {
     const s = await newSentQuotation('I');
     const otp = await getOtp(s.trackingToken, s.quotationId);
 
-    // Lùi hạn hiệu lực về quá khứ
-    await pool.query(
-      `UPDATE quotation SET valid_until = now() - interval '1 day' WHERE id = $1`,
-      [s.quotationId],
-    );
+    /*
+     * Lùi hạn hiệu lực về quá khứ để mô phỏng báo giá hết hạn.
+     *
+     * Từ migration 0019, trigger `trg_quotation_frozen` chặn đúng thao tác này —
+     * và nó chặn ĐÚNG: sửa `valid_until` sau khi gửi cho phép khách duyệt lại
+     * mức giá cũ sau khi bảng giá đã tăng. Ta phải tắt trigger tạm thời vì đang
+     * cố ý dựng một trạng thái mà ứng dụng KHÔNG còn tạo ra được nữa.
+     *
+     * Tắt trigger ở đây không làm test yếu đi: nó vẫn kiểm đúng thứ cần kiểm là
+     * INV-Q-07 (hết hạn thì không duyệt được), còn INV-Q-05 có test riêng.
+     */
+    await pool.query('ALTER TABLE quotation DISABLE TRIGGER trg_quotation_frozen');
+    try {
+      await pool.query(
+        `UPDATE quotation SET valid_until = now() - interval '1 day' WHERE id = $1`,
+        [s.quotationId],
+      );
+    } finally {
+      await pool.query('ALTER TABLE quotation ENABLE TRIGGER trg_quotation_frozen');
+    }
 
     const r = await call(
       'POST', `/api/v1/public/tracking/${s.trackingToken}/respond`,
@@ -557,5 +572,104 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
     assert.equal(internal.body.status, 'PARTIALLY_APPROVED');
     const pending = internal.body.lines.filter((l: any) => l.status === 'PENDING');
     assert.equal(pending.length, 0, 'còn dòng chưa quyết mà báo giá đã chốt');
+  });
+});
+
+describe('🔒 Đợt 4 — lỗ hổng logic từ vòng rà soát nhiều reviewer', () => {
+  test('OTP: bắn 20 request song song không vượt được giới hạn 5 lần đoán', async () => {
+    /*
+     * Đây là khác biệt giữa "không thể dò" và "dò được trong vài giờ".
+     *
+     * Bản trước đọc bộ đếm trong transaction chính rồi tăng nó bằng transaction
+     * khác SAU khi rollback — khoá đã nhả trước lúc tăng. Bắn N request song
+     * song với N mã đoán khác nhau thì cả N đều đọc thấy bộ đếm cũ và cả N đều
+     * được đoán. Giới hạn 5 lần trở thành "5 lần mỗi đợt bắn".
+     */
+    const s = await newSentQuotation('T');
+    await getOtp(s.trackingToken, s.quotationId);
+    const decisions = s.laborLineIds.map((id) => ({ lineId: id, approved: true }));
+
+    // 20 mã đoán khác nhau, bắn cùng lúc
+    const results = await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        call('POST', `/api/v1/public/tracking/${s.trackingToken}/respond`, {
+          quotationId: s.quotationId,
+          otp: String(i).padStart(6, '0'),
+          decisions,
+        }, false),
+      ),
+    );
+
+    // Không cái nào được chấp nhận (mã đúng là ngẫu nhiên 6 chữ số)
+    assert.equal(results.filter((r) => r.status === 201).length, 0);
+
+    const { rows } = await pool.query<{ attempts: number }>(
+      `SELECT attempts FROM otp_challenge WHERE quotation_id = $1
+        ORDER BY created_at DESC LIMIT 1`,
+      [s.quotationId],
+    );
+    assert.equal(
+      rows[0]!.attempts,
+      5,
+      `Bộ đếm dừng ở ${rows[0]!.attempts} thay vì đúng 5 — số lần đoán thật sự ` +
+        'bị chặn bởi thông lượng chứ không bởi quy tắc',
+    );
+  });
+
+  test('🔒 INV-Q-02: không thêm được dòng phụ tùng không gắn hạng mục công', async () => {
+    // Dòng mồ côi khiến khách KHÔNG BAO GIỜ duyệt được báo giá, và nếu client
+    // chỉ gửi id dòng công thì tiền của nó vẫn nằm trong tổng.
+    const v = await call('POST', '/api/v1/vehicles', {
+      customerId, plateNumber: `92M-${uniq}`, powertrain: 'ICE',
+    });
+    const o = await call('POST', '/api/v1/repair-orders', {
+      vehicleId: v.body.id, branchId, customerComplaint: 'Thử dòng mồ côi', odometerIn: 1,
+    });
+    const q = await call('POST', `/api/v1/repair-orders/${o.body.id}/quotations`);
+
+    const r = await call('POST', `/api/v1/quotations/${q.body.id}/lines`, {
+      lineType: 'PART', partId: partIds['PT-OIL-5W30'], quantity: 1,
+    });
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+    assert.equal(r.body.error.code, 'VALIDATION_FAILED');
+    // Thông báo chi tiết nằm trong `details` — ZodPipe trả message chung ở ngoài
+    assert.match(JSON.stringify(r.body.error.details), /gắn vào một hạng mục công/);
+  });
+
+  test('🔒 INV-Q-05: không sửa được tổng tiền của báo giá đã gửi', async () => {
+    // Trước đợt 4, một câu UPDATE vào cột tổng đi qua mọi ràng buộc: trang tra
+    // cứu của khách và báo cáo doanh thu đọc header -> thấy 0đ trong khi tổng
+    // các dòng vẫn nguyên.
+    const s = await newSentQuotation('U');
+    const truoc = await call('GET', `/api/v1/quotations/${s.quotationId}`);
+    assert.ok(truoc.body.totalAmount > 0);
+
+    await assert.rejects(
+      () =>
+        pool.query(
+          `UPDATE quotation SET subtotal_amount = 0, tax_amount = 0, total_amount = 0
+            WHERE id = $1`,
+          [s.quotationId],
+        ),
+      /INV-Q-06|quotation_totals_match_lines/,
+      'sửa được tổng tiền của báo giá đã gửi khách',
+    );
+
+    const sau = await call('GET', `/api/v1/quotations/${s.quotationId}`);
+    assert.equal(sau.body.totalAmount, truoc.body.totalAmount);
+  });
+
+  test('🔒 INV-Q-05: không lùi được hạn hiệu lực sau khi gửi', async () => {
+    // Lùi hạn cho phép khách duyệt lại mức giá cũ sau khi bảng giá đã tăng.
+    const s = await newSentQuotation('V');
+    await assert.rejects(
+      () =>
+        pool.query(
+          `UPDATE quotation SET valid_until = now() + interval '30 days' WHERE id = $1`,
+          [s.quotationId],
+        ),
+      /INV-Q-05/,
+      'gia hạn được báo giá đã gửi',
+    );
   });
 });

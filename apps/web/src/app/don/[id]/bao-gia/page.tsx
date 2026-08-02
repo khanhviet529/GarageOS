@@ -153,6 +153,16 @@ function CatalogPicker({
 
   const laborLines = lines.filter((l) => l.lineType === 'LABOR');
 
+  // Dòng công cha có thể bị xoá khỏi báo giá trong lúc dropdown đang chọn nó.
+  // Khi đó trình duyệt hiện ô trống nhưng state vẫn giữ id cũ, và bấm "Thêm"
+  // gửi lên một id không còn tồn tại — người dùng nhận lỗi khó hiểu vì ô nhìn
+  // như đang để trống.
+  useEffect(() => {
+    if (parentLineId !== '' && !laborLines.some((l) => l.id === parentLineId)) {
+      setParentLineId('');
+    }
+  }, [laborLines, parentLineId]);
+
   return (
     <div className="card">
       <div className="tabs">
@@ -214,14 +224,16 @@ function CatalogPicker({
               id="parent" value={parentLineId}
               onChange={(e) => setParentLineId(e.target.value)}
             >
-              <option value="">— Không gắn —</option>
+              <option value="" disabled>— Chọn hạng mục công —</option>
               {laborLines.map((l) => (
                 <option key={l.id} value={l.id}>{l.description}</option>
               ))}
             </select>
             <span className="hint">
-              🔒 Gắn vào hạng mục công thì khi khách từ chối công, phụ tùng tự từ chối
-              theo — kho sẽ không xuất hàng cho việc không ai làm.
+              🔒 BẮT BUỘC. Khách duyệt theo hạng mục công, nên phụ tùng không gắn vào
+              hạng mục nào là phụ tùng khách không có cách nào duyệt. Gắn rồi thì khi
+              khách từ chối công, phụ tùng tự từ chối theo — kho không xuất hàng cho
+              việc không ai làm.
             </span>
           </div>
 
@@ -249,7 +261,8 @@ function CatalogPicker({
                     </td>
                     <td>
                       <button
-                        className="secondary" disabled={disabled || p.sellPrice === null}
+                        className="secondary"
+                        disabled={disabled || p.sellPrice === null || parentLineId === ''}
                         onClick={() => onAddPart(p.id, 1, parentLineId)}
                         aria-label={`Thêm ${p.name}`}
                       >

@@ -291,32 +291,7 @@ export class PublicTrackingService {
   ): Promise<RespondQuotationResult> {
     const scope = await this.resolveToken(token);
 
-    try {
-      return await this.respondInTransaction(scope, input, meta);
-    } catch (err) {
-      /*
-       * 🔒 Bộ đếm số lần nhập sai phải SỐNG SÓT qua rollback.
-       *
-       * Ném lỗi bên trong transaction làm PostgreSQL huỷ luôn lệnh
-       * `attempts = attempts + 1` — nghĩa là giới hạn 5 lần trở thành vô hạn,
-       * và mã 6 chữ số bị dò ra trong vài phút. Vì vậy phải ghi lại bằng một
-       * transaction RIÊNG sau khi transaction chính đã rollback.
-       */
-      if (err instanceof OtpMismatchError) {
-        await this.db.withTenantId(scope.tenantId, null, (tx) =>
-          tx.query('UPDATE otp_challenge SET attempts = attempts + 1 WHERE id = $1', [
-            err.challengeId,
-          ]),
-        );
-        throw new BusinessError(
-          ErrorCode.VALIDATION_FAILED,
-          err.remaining > 0
-            ? `Mã xác thực không đúng. Còn ${err.remaining} lần thử.`
-            : 'Mã xác thực không đúng. Vui lòng xin mã mới.',
-        );
-      }
-      throw err;
-    }
+    return this.respondInTransaction(scope, input, meta);
   }
 
   private async respondInTransaction(
@@ -324,6 +299,33 @@ export class PublicTrackingService {
     input: RespondQuotationInput,
     meta: { ip: string | null; userAgent: string | null },
   ): Promise<RespondQuotationResult> {
+    /*
+     * Thứ tự ở đây quan trọng và đã sai một lần:
+     *
+     *  1. Kiểm báo giá còn trả lời được không — INV-Q-07. Phải TRƯỚC, nếu không
+     *     một báo giá đã hết hạn vẫn ngốn mất lượt thử của khách và trả về
+     *     thông báo sai lý do.
+     *  2. Tiêu mã trong giao dịch RIÊNG — lượt thử phải sống sót qua rollback.
+     *  3. Ghi quyết định trong giao dịch chính.
+     */
+    await this.db.withTenantId(scope.tenantId, null, async (tx) => {
+      const { rows } = await tx.query<{ status: string; valid_until: Date | null }>(
+        `SELECT status, valid_until FROM quotation
+          WHERE id = $1 AND repair_order_id = $2`,
+        [input.quotationId, scope.repairOrderId],
+      );
+      if (rows[0] === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy báo giá');
+      }
+      assertRespondable(rows[0].status, rows[0].valid_until);
+    });
+
+    const consumedChallengeId = await this.consumeOtp(
+      input.quotationId,
+      input.otp,
+      scope.tenantId,
+    );
+
     return this.db.withTenantId(scope.tenantId, null, async (tx) => {
       const { rows: qRows } = await tx.query<{ status: string; valid_until: Date | null }>(
         `SELECT status, valid_until FROM quotation
@@ -336,7 +338,7 @@ export class PublicTrackingService {
       }
       assertRespondable(quotation.status, quotation.valid_until);
 
-      const challengeId = await this.consumeOtp(tx, input.quotationId, input.otp);
+      const challengeId = await consumedChallengeId;
 
       // Chỉ nhận quyết định cho dòng CÔNG của đúng báo giá này
       const { rows: laborLines } = await tx.query<{ id: string; is_warranty: boolean }>(
@@ -480,51 +482,65 @@ export class PublicTrackingService {
    * 🔒 So sánh bằng `timingSafeEqual`: so sánh chuỗi thông thường thoát sớm ở
    * ký tự khác đầu tiên, và thời gian đó đủ để dò từng chữ số một.
    */
-  private async consumeOtp(tx: PoolClient, quotationId: string, code: string): Promise<string> {
-    const { rows } = await tx.query<{ id: string; code_hash: string; attempts: number }>(
-      `SELECT id, code_hash, attempts FROM otp_challenge
-        WHERE quotation_id = $1 AND consumed_at IS NULL AND expires_at > now()
-        ORDER BY created_at DESC LIMIT 1
-        FOR UPDATE`,
-      [quotationId],
-    );
-    const challenge = rows[0];
-    if (challenge === undefined) {
+  /**
+   * Kiểm tra và tiêu mã xác thực.
+   *
+   * 🔒 GIỮ CHỖ LƯỢT THỬ TRƯỚC KHI SO MÃ, trong một giao dịch RIÊNG.
+   *
+   * Bản trước đọc `attempts` trong transaction chính rồi tăng nó bằng một
+   * transaction khác SAU khi rollback. Giữa hai việc đó, khoá dòng đã được nhả.
+   * Bắn N request song song với N mã đoán khác nhau thì cả N đều đọc thấy bộ
+   * đếm cũ, cả N đều được đoán — giới hạn 5 lần trở thành "5 lần mỗi đợt bắn",
+   * và số lần đoán thật sự bị chặn bởi thông lượng chứ không bởi quy tắc.
+   *
+   * Với mã 6 chữ số, chênh lệch đó là chênh lệch giữa "không thể" và "vài giờ".
+   *
+   * Câu UPDATE ... WHERE attempts < N ... RETURNING là MỘT lệnh nguyên tử:
+   * PostgreSQL khoá dòng trong lúc cập nhật, nên hai request song song nhận hai
+   * giá trị `attempts` khác nhau, và request thứ sáu không match dòng nào.
+   */
+  private async consumeOtp(quotationId: string, code: string, tenantId: string): Promise<string> {
+    const giuCho = await this.db.withTenantId(tenantId, null, async (tx) => {
+      const { rows } = await tx.query<{ id: string; code_hash: string; attempts: number }>(
+        `UPDATE otp_challenge SET attempts = attempts + 1
+          WHERE id = (
+            SELECT id FROM otp_challenge
+             WHERE quotation_id = $1 AND consumed_at IS NULL AND expires_at > now()
+             ORDER BY created_at DESC LIMIT 1
+          )
+            AND attempts < $2
+          RETURNING id, code_hash, attempts`,
+        [quotationId, OTP_MAX_ATTEMPTS],
+      );
+      return rows[0];
+    });
+
+    if (giuCho === undefined) {
+      // Không có mã sống, hoặc đã hết lượt. Không phân biệt hai trường hợp:
+      // phân biệt được là nói cho người dò biết họ đã dùng hết lượt hay chưa.
       throw new BusinessError(
         ErrorCode.VALIDATION_FAILED,
-        'Mã xác thực đã hết hạn. Vui lòng xin mã mới.',
+        'Mã xác thực không dùng được nữa. Vui lòng xin mã mới.',
       );
     }
-    if (challenge.attempts >= OTP_MAX_ATTEMPTS) {
+
+    if (!verifyCode(code, giuCho.code_hash)) {
+      // Lượt đã bị trừ ở trên và đã COMMIT — rollback của transaction chính
+      // không xoá được nó.
       throw new BusinessError(
-        ErrorCode.RATE_LIMITED,
-        'Nhập sai quá nhiều lần. Vui lòng xin mã mới.',
+        ErrorCode.VALIDATION_FAILED,
+        giuCho.attempts < OTP_MAX_ATTEMPTS
+          ? `Mã xác thực không đúng. Còn ${OTP_MAX_ATTEMPTS - giuCho.attempts} lần thử.`
+          : 'Mã xác thực không đúng. Vui lòng xin mã mới.',
       );
     }
 
-    if (!verifyCode(code, challenge.code_hash)) {
-      // Không tăng bộ đếm ở đây: transaction sắp rollback nên lệnh UPDATE cũng
-      // biến mất. `respond()` bắt lỗi này và ghi lại bằng transaction riêng.
-      throw new OtpMismatchError(challenge.id, OTP_MAX_ATTEMPTS - challenge.attempts - 1);
-    }
+    // Khớp rồi mới đánh dấu đã dùng — trước đó nó chỉ mới bị trừ một lượt.
+    await this.db.withTenantId(tenantId, null, (tx) =>
+      tx.query('UPDATE otp_challenge SET consumed_at = now() WHERE id = $1', [giuCho.id]),
+    );
 
-    await tx.query('UPDATE otp_challenge SET consumed_at = now() WHERE id = $1', [challenge.id]);
-    return challenge.id;
-  }
-}
-
-/**
- * Lỗi nhập sai mã — mang theo id thử thách và số lần còn lại.
- *
- * Tách thành lớp riêng vì bộ đếm phải được ghi lại kể cả khi transaction chính
- * đã rollback; xem `respond()`.
- */
-export class OtpMismatchError extends Error {
-  constructor(
-    readonly challengeId: string,
-    readonly remaining: number,
-  ) {
-    super('Mã xác thực không đúng');
+    return giuCho.id;
   }
 }
 
