@@ -209,3 +209,12 @@ a { color: var(--c-primary); }
 
 /* Tên người và mã đơn không được xuống dòng giữa chừng — mắt quét bảng sẽ vấp */
 td.nowrap, th.nowrap { white-space: nowrap; }
+
+/* Dòng tiêu đề nhóm trong bảng — gom hạng mục theo nhóm để quét mắt nhanh */
+.group-row td {
+  background: var(--c-bg);
+  font-weight: 700; font-size: var(--fs-xs);
+  text-transform: uppercase; letter-spacing: .5px;
+  color: var(--c-text-muted);
+}
+tbody tr.group-row:hover td { background: var(--c-bg); }

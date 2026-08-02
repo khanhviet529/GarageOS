@@ -16,6 +16,7 @@ import {
   type RepairOrderDetail,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { CatalogSection } from '@/components/CatalogSection';
 import { formatPlate } from '@garageos/domain';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -154,6 +155,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
               )}
             </div>
+
+            <CatalogSection vehicleId={order.vehicle.id} />
 
             <div className="card">
               <h2>Link tra cứu gửi khách</h2>
