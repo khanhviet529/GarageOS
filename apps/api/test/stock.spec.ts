@@ -495,3 +495,92 @@ describe('Đồng thời — 🔒 INV-S-01 dưới tranh chấp thật', () => {
     }
   });
 });
+
+describe('🔒 Giá vốn dưới tranh chấp — phát hiện của codex-review trên 0025', () => {
+  test('phiếu nhập chen vào giữa không làm phiếu điều chỉnh kéo lệch bình quân', async () => {
+    /*
+     * Kịch bản mà review mô tả, diễn lại đúng theo mốc:
+     *
+     *   T2  mở giao dịch, ĐỌC bình quân = 100.000
+     *   T1  nhập 10 @ 200.000 và commit -> bình quân thật thành 150.000
+     *   T2  ghi phiếu điều chỉnh +5 với con số đã đọc (cũ)
+     *
+     * Đúng: bình quân cuối vẫn 150.000. Chính sách của hệ thống là điều chỉnh
+     * được định giá theo bình quân hiện tại, mà thêm n đơn vị ĐÚNG BẰNG bình
+     * quân thì bình quân không đổi. Nói ngược lại: một phiếu điều chỉnh làm đổi
+     * giá vốn chính là bằng chứng nó đã đọc số cũ.
+     */
+    const kho = await khoMacDinh();
+    const { rows: p } = await pool.query<{ id: string }>(
+      `INSERT INTO part (tenant_id, sku, name, unit, category)
+       VALUES ($1, $2, 'Phụ tùng thử giá vốn', 'cái', 'Thử') RETURNING id`,
+      [TENANT_A, `PT-COST-${Date.now().toString().slice(-8)}`],
+    );
+    const part = p[0]!.id;
+    const { rows: u } = await pool.query<{ id: string }>(
+      'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+      [TENANT_A],
+    );
+    const nguoi = u[0]!.id;
+
+    const ghi = async (
+      client: { query: (s: string, v?: unknown[]) => Promise<unknown> },
+      type: string,
+      qty: number,
+      cost: number,
+      reason: string | null = null,
+    ): Promise<void> => {
+      await client.query(
+        `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                     unit_cost, reason, created_by_user_id)
+         VALUES ($1,$2,$3,$4::movement_type,$5,$6,$7,$8)`,
+        [TENANT_A, kho, part, type, qty, cost, reason, nguoi],
+      );
+    };
+
+    const t2 = new Pool({ connectionString: ADMIN_URL, max: 1 });
+    try {
+      await ghi(pool, 'RECEIPT', 10, 100_000);
+
+      const c2 = await t2.connect();
+      await c2.query('BEGIN');
+      const { rows: doc } = await c2.query<{ avg_cost: string }>(
+        'SELECT avg_cost FROM stock_balance WHERE warehouse_id = $1 AND part_id = $2',
+        [kho, part],
+      );
+      const daDoc = Number(doc[0]!.avg_cost);
+      assert.equal(daDoc, 100_000);
+
+      // Phiếu nhập khác commit TRƯỚC khi T2 ghi
+      await ghi(pool, 'RECEIPT', 10, 200_000);
+
+      await ghi(c2, 'ADJUSTMENT', 5, daDoc, 'Kiểm kê thừa 5 cái');
+      await c2.query('COMMIT');
+      c2.release();
+
+      const { rows: cuoi } = await pool.query<{ on_hand: string; avg_cost: string }>(
+        'SELECT on_hand, avg_cost FROM stock_balance WHERE warehouse_id = $1 AND part_id = $2',
+        [kho, part],
+      );
+      assert.equal(Number(cuoi[0]!.on_hand), 25);
+      assert.equal(
+        Number(cuoi[0]!.avg_cost),
+        150_000,
+        'phiếu điều chỉnh ghi bằng giá đã cũ -> bình quân bị kéo lệch',
+      );
+
+      // Và con số THỰC SỰ lưu trên phiếu phải là giá tại thời điểm áp dụng,
+      // không phải giá ứng dụng gửi lên.
+      const { rows: dc } = await pool.query<{ unit_cost: string }>(
+        `SELECT unit_cost FROM stock_movement WHERE part_id = $1 AND type = 'ADJUSTMENT'`,
+        [part],
+      );
+      assert.equal(Number(dc[0]!.unit_cost), 150_000, 'giá trên phiếu điều chỉnh là số cũ');
+    } finally {
+      await t2.end();
+      await pool.query('DELETE FROM stock_movement WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM stock_balance WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM part WHERE id = $1', [part]);
+    }
+  });
+});

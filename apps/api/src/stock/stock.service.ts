@@ -249,22 +249,24 @@ export class StockService {
       await this.assertWarehouseInScope(tx, actor, input.warehouseId);
 
       /*
-       * Giá vốn của dòng điều chỉnh lấy theo BÌNH QUÂN HIỆN TẠI, không nhận từ
-       * client và không để 0.
+       * 🔒 Giá vốn của phiếu điều chỉnh do DATABASE đặt, không phải service.
        *
-       * Điều chỉnh dương với giá vốn 0 sẽ kéo bình quân của cả mã hàng xuống —
-       * một lần đếm thừa 2 cái biến thành một khoản "lãi" giả ở báo cáo lãi/lỗ
-       * Phase 6. Còn với điều chỉnh âm thì `unit_cost` chỉ để ghi nhận giá trị
-       * hàng mất, không tham gia công thức bình quân.
+       * Bản đầu đọc bình quân hiện tại ở đây rồi ghi con số đó vào phiếu.
+       * `/codex-review` chỉ ra đúng: đó là `SELECT` không khoá, nên một phiếu
+       * nhập commit xen vào giữa lúc đọc và lúc ghi sẽ làm con số thành cũ, và
+       * phiếu điều chỉnh kéo lệch bình quân của cả mã hàng.
+       *
+       * Từ 0026, trigger `dinh_gia_dieu_chinh()` đặt `unit_cost` dưới ĐÚNG cái
+       * khoá đã tuần tự hoá sổ kho. Số gửi lên đây bị ghi đè — để 0 cho rõ ràng
+       * là service không có ý kiến, thay vì đọc một con số rồi vờ như nó có
+       * hiệu lực.
        */
-      const hienTai = await this.docTon(tx, input.warehouseId, input.partId);
-
       const id = await this.ghiSo(tx, actor, {
         warehouseId: input.warehouseId,
         partId: input.partId,
         type: 'ADJUSTMENT',
         quantity: input.delta,
-        unitCost: hienTai.avgCost,
+        unitCost: 0,
         refType: 'ADJUSTMENT',
         reason: input.reason,
         reference: null,
