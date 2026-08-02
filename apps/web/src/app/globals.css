@@ -1,0 +1,164 @@
+/*
+ * Design token — GarageOS
+ *
+ * Nguyên tắc: đây là công cụ nghiệp vụ dùng 8 tiếng/ngày, không phải trang
+ * tiếp thị. Ưu tiên MẬT ĐỘ THÔNG TIN và TƯƠNG PHẢN, không ưu tiên thẩm mỹ
+ * thời thượng. Không gradient, không glassmorphism, không animation trang trí.
+ *
+ * ⚠️ Các token này sẽ tách sang packages/tokens khi dựng app mobile, để web
+ * và mobile dùng chung một bảng màu.
+ */
+
+:root {
+  /* Trung tính — nền và chữ */
+  --c-bg:            #f6f7f9;
+  --c-surface:       #ffffff;
+  --c-border:        #d5dae1;
+  --c-border-strong: #b3bcc7;
+  --c-text:          #14181d;
+  --c-text-muted:    #5b6673;
+
+  /* Thương hiệu — xanh dương đậm, dễ đọc, không chói khi nhìn lâu */
+  --c-primary:       #14508c;
+  --c-primary-hover: #0f3f70;
+  --c-primary-soft:  #e6eef7;
+
+  /* Trạng thái */
+  --c-success:       #17683b;
+  --c-success-soft:  #e4f2ea;
+  --c-warning:       #8a5a00;
+  --c-warning-soft:  #fdf1dc;
+  --c-danger:        #a41c1c;
+  --c-danger-soft:   #fbe9e9;
+
+  /* Loại động cơ — mã màu riêng vì đây là thuộc tính then chốt của xe */
+  --c-ice:  #5b6673;
+  --c-hyb:  #8a5a00;
+  --c-bev:  #17683b;
+
+  --r-sm: 3px;
+  --r-md: 5px;
+
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
+  --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 14px;
+  --fs-lg: 16px; --fs-xl: 20px; --fs-2xl: 26px;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  color: var(--c-text);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Bố cục --- */
+.app-header {
+  background: var(--c-primary);
+  color: #fff;
+  padding: var(--sp-3) var(--sp-5);
+  display: flex; align-items: center; gap: var(--sp-4);
+}
+.app-header h1 { font-size: var(--fs-lg); font-weight: 600; letter-spacing: .2px; }
+.app-header .spacer { flex: 1; }
+.app-header .who { font-size: var(--fs-sm); opacity: .9; }
+
+.container { max-width: 1100px; margin: 0 auto; padding: var(--sp-5); }
+.stack { display: flex; flex-direction: column; gap: var(--sp-4); }
+.row   { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
+/* Hàng form nhiều trường: căn theo MÉP TRÊN. Căn mép dưới sẽ làm các ô lệch
+   nhau khi có trường kèm dòng gợi ý bên dưới. */
+.row.top { align-items: flex-start; }
+
+.card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+}
+.card h2 { font-size: var(--fs-lg); margin-bottom: var(--sp-3); font-weight: 600; }
+.card h3 { font-size: var(--fs-md); margin-bottom: var(--sp-2); font-weight: 600; }
+
+/* --- Form --- */
+.field { display: flex; flex-direction: column; gap: var(--sp-1); }
+.field label { font-size: var(--fs-sm); font-weight: 600; color: var(--c-text-muted); }
+.field .hint { font-size: var(--fs-xs); color: var(--c-text-muted); }
+.field .req { color: var(--c-danger); }
+
+input, select, textarea {
+  font: inherit;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-sm);
+  background: #fff;
+  color: var(--c-text);
+  min-height: 36px;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 1px;
+}
+input.plate {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  min-width: 220px;
+}
+
+button {
+  font: inherit; font-weight: 600;
+  padding: var(--sp-2) var(--sp-4);
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: var(--c-primary); color: #fff;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--c-primary-hover); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.secondary { background: #fff; color: var(--c-text); border-color: var(--c-border-strong); }
+button.secondary:hover:not(:disabled) { background: var(--c-bg); }
+button.lg { min-height: 44px; font-size: var(--fs-lg); padding: 0 var(--sp-5); }
+
+/* --- Nhãn trạng thái --- */
+.tag {
+  display: inline-block;
+  font-size: var(--fs-xs); font-weight: 700;
+  padding: 2px 8px; border-radius: 10px;
+  letter-spacing: .3px;
+}
+.tag.ice { background: #eceef1; color: var(--c-ice); }
+.tag.hyb { background: var(--c-warning-soft); color: var(--c-hyb); }
+.tag.bev { background: var(--c-success-soft); color: var(--c-bev); }
+
+/* --- Thông báo --- */
+.alert { padding: var(--sp-3); border-radius: var(--r-sm); font-size: var(--fs-sm); border: 1px solid; }
+.alert.error   { background: var(--c-danger-soft);  border-color: #eab6b6; color: var(--c-danger); }
+.alert.warn    { background: var(--c-warning-soft); border-color: #e6cd9a; color: var(--c-warning); }
+.alert.success { background: var(--c-success-soft); border-color: #a8d3ba; color: var(--c-success); }
+.alert.info    { background: var(--c-primary-soft); border-color: #b9cee5; color: var(--c-primary); }
+
+/* --- Bảng dữ liệu: dày, dễ quét mắt --- */
+table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+th, td { text-align: left; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--c-border); }
+th { font-weight: 600; color: var(--c-text-muted); background: var(--c-bg); font-size: var(--fs-xs);
+     text-transform: uppercase; letter-spacing: .4px; }
+tbody tr:hover { background: var(--c-primary-soft); }
+td.mono { font-family: var(--font-mono); }
+
+.muted { color: var(--c-text-muted); }
+.small { font-size: var(--fs-sm); }
+.kbd {
+  font-family: var(--font-mono); font-size: var(--fs-xs);
+  border: 1px solid var(--c-border-strong); border-bottom-width: 2px;
+  border-radius: 3px; padding: 1px 5px; background: #fff;
+}

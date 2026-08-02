@@ -14,3 +14,8 @@ coverage/
 .claude/codex-review/scope-brief.md
 .claude/codex-review/self-notes.md
 .claude/codex-review/verdict.md
+
+# Playwright
+test-results/
+playwright-report/
+e2e/screenshots/
