@@ -21,6 +21,12 @@ if (dirs.length === 0) {
 const files = [];
 for (const dir of dirs) {
   if (!existsSync(dir)) continue;
+  // Nhận cả FILE cụ thể, không chỉ thư mục — `test:invariants` cần trỏ đúng một
+  // file, nếu không nó lại chạy trùng với `test` như bản trước.
+  if (dir.endsWith('.ts')) {
+    files.push(dir);
+    continue;
+  }
   for (const f of readdirSync(dir, { recursive: true })) {
     const name = String(f);
     if (name.endsWith('.test.ts') || name.endsWith('.spec.ts')) files.push(join(dir, name));

@@ -7,7 +7,7 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint: domain ok'",
+    "lint": "eslint src --max-warnings 0",
     "test": "node ../../infra/run-tests.mjs src"
   },
   "dependencies": {
