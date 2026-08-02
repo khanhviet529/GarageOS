@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-02 · Nhánh `main` · CI xanh · **Phase 1.1 → 1.5 hoàn thành**
+> Cập nhật: 2026-08-02 · Nhánh `main` · CI xanh · **Phase 1 hoàn thành (1.1 → 1.6)**
 
 ## Đang ở đâu
 
@@ -20,17 +20,17 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 1.3 | Danh mục dịch vụ/phụ tùng lọc theo loại động cơ | ✅ merged |
 | 1.4 | Lập báo giá, snapshot giá, thuế theo dòng | ✅ merged |
 | 1.5 | Trang tra cứu công khai + OTP + duyệt từng phần | ✅ merged |
-| 1.6 | State machine `RepairOrder` / `Quotation` đầy đủ | ⬜ tiếp theo |
-| 2 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ |
+| 1.6 | Máy trạng thái `RepairOrder` (3 lớp: contracts → service → trigger) | ✅ merged |
+| 2 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 147 (domain 12, db 29, api 106) |
-| E2E Playwright | 15 kịch bản |
-| Migration | 13 |
-| Vòng codex-review đã chạy | 5, tổng 15 phát hiện, **15 CONFIRMED** |
+| Test tự động | 162 (domain 12, db 29, api 121) |
+| E2E Playwright | 17 kịch bản |
+| Migration | 15 |
+| Vòng codex-review đã chạy | 6, tổng 17 phát hiện, **17 CONFIRMED** |
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -72,6 +72,8 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | Chưa upload ảnh hiện trạng thật | Cần lưu trữ đối tượng (S3/MinIO). Bảng và quyền đã dựng đúng, giao diện đang hiện cảnh báo thay vì giả vờ có |
 | Chưa gửi SMS/Zalo thật | Dịch vụ ngoài. Dev/CI dùng `OTP_DEV_ECHO=true` — ⚠️ không bao giờ bật ở production |
 | `TECHNICIAN` đang dùng phạm vi `BRANCH` thay vì `SELF` | Bảng phân công thuộc Phase 2; thu hẹp khi có `work_assignment` |
+| `apps/web/src/lib/api.ts` chép lại bảng chuyển trạng thái thay vì import từ `packages/contracts` | Có test đối chiếu TypeScript ↔ database, nhưng **chưa** đối chiếu bản sao của web. Đúng loại lỗi "hai bản cài đặt" mà chính lát cắt 1.6 sinh ra để chống |
+| Máy trạng thái `Quotation` chưa có trigger riêng | Các đường của báo giá đang được chặn gián tiếp bằng `one_pending_quotation`, trigger đóng băng sau khi gửi, và điều kiện `status='SENT'` trong câu UPDATE |
 | Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
 
 ## Quy trình bắt buộc
@@ -89,3 +91,7 @@ Ba nguyên tắc rút ra sau 5 vòng:
    trong "rủi ro tôi tự thấy" phải kèm một test, hoặc một lý do vì sao nó không
    thể xảy ra. Quy tắc này ra đời sau Phase 1.4, khi 3 trong 6 phát hiện nằm
    đúng chỗ tôi đã tự ghi là nghi ngờ rồi vẫn đi tiếp.
+4. **Đọc lại tài liệu của chính mình TRƯỚC khi viết service, không phải sau.**
+   Ba phát hiện nặng nhất của Phase 1.2, 1.5 và 1.6 đều là quy tắc **đã nằm
+   trong docs** mà không được cài: phạm vi chi nhánh lúc đọc, hạn 30 ngày của
+   link tra cứu, và ma trận quyền theo vai.
