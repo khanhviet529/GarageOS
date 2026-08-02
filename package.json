@@ -2,7 +2,9 @@
   "name": "garage-os",
   "private": true,
   "packageManager": "pnpm@10.34.4",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
@@ -14,14 +16,16 @@
     "db:down": "docker compose down",
     "db:migrate": "tsx infra/migrate.ts",
     "db:seed": "tsx infra/seed.ts",
-    "db:reset": "docker compose down -v && pnpm db:up && sleep 5 && pnpm db:migrate && pnpm db:seed"
+    "db:reset": "docker compose down -v && pnpm db:up && sleep 5 && pnpm db:migrate && pnpm db:seed",
+    "e2e": "playwright test"
   },
   "devDependencies": {
-    "turbo": "^2.5.5",
-    "typescript": "^5.7.3",
-    "tsx": "^4.20.3",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^22.13.1",
+    "@types/pg": "^8.11.11",
     "pg": "^8.13.1",
-    "@types/pg": "^8.11.11"
+    "tsx": "^4.20.3",
+    "turbo": "^2.5.5",
+    "typescript": "^5.7.3"
   }
 }
