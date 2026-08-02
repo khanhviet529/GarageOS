@@ -156,6 +156,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
 
+            <div className="card">
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ margin: 0 }}>Báo giá</h2>
+                  <span className="hint">
+                    Chọn hạng mục từ danh mục đã lọc theo loại động cơ của xe này.
+                  </span>
+                </div>
+                <Link href={`/don/${order.id}/bao-gia`}><button>Lập báo giá</button></Link>
+              </div>
+            </div>
+
             <CatalogSection vehicleId={order.vehicle.id} />
 
             <div className="card">

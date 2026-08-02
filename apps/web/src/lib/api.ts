@@ -108,6 +108,31 @@ export interface CatalogForVehicle {
   }[];
 }
 
+export interface QuotationLine {
+  id: string; seq: number;
+  lineType: 'LABOR' | 'PART';
+  parentLineId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  taxRatePercent: number;
+  lineTotal: number;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectReason: string | null;
+  isWarranty: boolean;
+}
+
+export interface Quotation {
+  id: string; repairOrderId: string; seq: number;
+  status: string;
+  laborRatePerHour: number;
+  subtotalAmount: number; discountAmount: number;
+  taxAmount: number; totalAmount: number;
+  validUntil: string | null; sentAt: string | null; createdAt: string;
+  lines: QuotationLine[];
+}
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -125,6 +150,17 @@ export const api = {
   getRepairOrder: (id: string) => call<RepairOrderDetail>('GET', `/api/v1/repair-orders/${id}`),
   getCatalog: (vehicleId: string) =>
     call<CatalogForVehicle>('GET', `/api/v1/catalog/vehicle/${vehicleId}`),
+
+  listQuotations: (orderId: string) =>
+    call<Quotation[]>('GET', `/api/v1/repair-orders/${orderId}/quotations`),
+  createQuotation: (orderId: string) =>
+    call<{ id: string; seq: number }>('POST', `/api/v1/repair-orders/${orderId}/quotations`),
+  addQuotationLine: (quotationId: string, input: unknown) =>
+    call<{ id: string; seq: number }>('POST', `/api/v1/quotations/${quotationId}/lines`, input),
+  removeQuotationLine: (quotationId: string, lineId: string) =>
+    call<void>('DELETE', `/api/v1/quotations/${quotationId}/lines/${lineId}`),
+  sendQuotation: (quotationId: string) =>
+    call<{ validUntil: string }>('POST', `/api/v1/quotations/${quotationId}/send`),
 };
 
 export interface VehicleLookup {
@@ -199,6 +235,22 @@ export const CERTIFICATION_LABEL: Record<string, string> = {
 };
 
 /** Tiền — 🔒 luôn là số nguyên đồng (ADR-0003), không có phần thập phân */
+export const QUOTATION_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Nháp',
+  SENT: 'Đã gửi khách',
+  APPROVED: 'Khách duyệt toàn bộ',
+  PARTIALLY_APPROVED: 'Khách duyệt một phần',
+  REJECTED: 'Khách từ chối',
+  EXPIRED: 'Hết hạn',
+  SUPERSEDED: 'Đã bị thay thế',
+};
+
+export const LINE_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Từ chối',
+};
+
 export function formatMoney(amount: number): string {
   return amount.toLocaleString('vi-VN') + 'đ';
 }

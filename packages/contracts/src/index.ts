@@ -6,3 +6,4 @@ export * from './money.js';
 export * from './vehicle.js';
 export * from './repair-order.js';
 export * from './catalog.js';
+export * from './quotation.js';
