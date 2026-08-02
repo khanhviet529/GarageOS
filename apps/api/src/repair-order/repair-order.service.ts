@@ -4,6 +4,7 @@ import { TenantAwareDb } from '@garageos/db';
 import {
   ErrorCode,
   canTransitionRepairOrder,
+  canRoleTransition,
   type ChangeOrderStatusInput,
   type RepairOrderStatus,
   type ActorContext,
@@ -11,7 +12,7 @@ import {
   type RepairOrderDetail,
   type RepairOrderListItem,
 } from '@garageos/contracts';
-import { REPAIR_ORDER_STATUS_LABEL } from '@garageos/contracts';
+import { REPAIR_ORDER_STATUS_LABEL, ORDER_ACTION_LABEL } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 
 /**
@@ -442,6 +443,19 @@ export class RepairOrderService {
         );
       }
 
+      /*
+       * 🔒 GARAGEOS-REV-002 — kiểm VAI, không chỉ kiểm phạm vi.
+       *
+       * Hỏi trước cả câu hỏi về đường chuyển: thợ không được huỷ đơn, và câu
+       * trả lời đó không phụ thuộc đơn đang ở trạng thái nào.
+       */
+      if (!canRoleTransition(actor.roles, input.to)) {
+        throw new BusinessError(
+          ErrorCode.FORBIDDEN,
+          `Vai trò của bạn không được thực hiện thao tác "${ORDER_ACTION_LABEL[input.to]}".`,
+        );
+      }
+
       if (!canTransitionRepairOrder(order.status, input.to)) {
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
@@ -474,6 +488,7 @@ export class RepairOrderService {
             SET status = $2,
                 version = version + 1,
                 odometer_out = COALESCE($3, odometer_out),
+                odometer_out_unavailable = COALESCE($9, odometer_out_unavailable),
                 cancel_reason = COALESCE($4, cancel_reason),
                 cancel_category = COALESCE($5, cancel_category),
                 cancelled_at = COALESCE($6, cancelled_at),
@@ -489,6 +504,15 @@ export class RepairOrderService {
           input.to === 'CANCELLED' ? now : null,
           input.to === 'AWAITING_DELIVERY' ? now : null,
           input.to === 'DELIVERED' ? now : null,
+          /*
+           * 🔒 GARAGEOS-REV-001: hợp đồng API cho phép giao xe khi đồng hồ hỏng,
+           * nhưng bản đầu không ghi cột nào cả -> ràng buộc từ chối và người
+           * dùng nhận lỗi 500 cho một việc hoàn toàn hợp lệ.
+           *
+           * Cột này là `odometer_out_unavailable`, KHÁC với
+           * `odometer_unavailable` của lúc tiếp nhận — xem migration 0015.
+           */
+          input.to === 'DELIVERED' && input.odometerUnavailable === true ? true : null,
         ],
       );
 

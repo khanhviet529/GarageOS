@@ -255,3 +255,98 @@ describe('Luồng báo giá đi đúng máy trạng thái', () => {
     assert.deepEqual(rows.map((r) => r.after_json.status), ['DIAGNOSING', 'QUOTED']);
   });
 });
+
+describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => {
+  test('🔒 REV-001: giao xe khi đồng hồ hỏng vẫn làm được', async () => {
+    // Hợp đồng API cho phép đánh dấu không đọc được số km thay cho số km ra.
+    // Bản đầu không ghi cột đó, nên ràng buộc `ro_delivered_needs_odometer` từ
+    // chối và người dùng nhận lỗi 500 cho một việc hoàn toàn hợp lệ.
+    const o = await newOrder('K');
+    for (const s of ['DIAGNOSING', 'QUOTED', 'AWAITING_APPROVAL', 'IN_PROGRESS',
+                     'QUALITY_CHECK', 'AWAITING_PAYMENT', 'AWAITING_DELIVERY']) {
+      await move(o.id, s);
+    }
+    const r = await move(o.id, 'DELIVERED', { odometerUnavailable: true });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+
+    const { rows } = await pool.query<{
+      odometer_unavailable: boolean;
+      odometer_out_unavailable: boolean;
+    }>(
+      'SELECT odometer_unavailable, odometer_out_unavailable FROM repair_order WHERE id = $1',
+      [o.id],
+    );
+    assert.equal(rows[0]!.odometer_out_unavailable, true, 'không ghi cờ của lúc giao xe');
+    assert.equal(
+      rows[0]!.odometer_unavailable,
+      false,
+      'ghi nhầm sang cờ của lúc TIẾP NHẬN — hai thời điểm là hai sự thật khác nhau',
+    );
+  });
+
+  test('🔒 REV-002: thợ không huỷ được đơn, không giao được xe', async () => {
+    // Thợ thuộc đúng chi nhánh, đúng tenant, đơn có thật, version đúng — mọi
+    // lớp kiểm tra khác đều cho qua. Chỉ còn VAI là thứ chặn được.
+    const o = await newOrder('L');
+    const saved = token;
+
+    const tech = await call('POST', '/api/v1/auth/login', {
+      phone: '0901000004', password: 'demo1234',
+    });
+    assert.equal(tech.status, 201, JSON.stringify(tech.body));
+    token = tech.body.accessToken;
+
+    const d = await call('GET', `/api/v1/repair-orders/${o.id}`);
+    assert.equal(d.status, 200, 'thợ vẫn XEM được đơn, chỉ không sửa được');
+
+    const huy = await call('POST', `/api/v1/repair-orders/${o.id}/status`, {
+      to: 'CANCELLED',
+      version: d.body.version,
+      cancelReason: 'Thợ tự huỷ đơn',
+      cancelCategory: 'CUSTOMER_REQUEST',
+    });
+    assert.equal(huy.status, 403, JSON.stringify(huy.body));
+    assert.equal(huy.body.error.code, 'FORBIDDEN');
+
+    const batDau = await call('POST', `/api/v1/repair-orders/${o.id}/status`, {
+      to: 'DIAGNOSING',
+      version: d.body.version,
+    });
+    assert.equal(batDau.status, 403, 'thợ mở được việc chẩn đoán');
+
+    token = saved;
+
+    // Và đơn phải còn nguyên trạng thái
+    const sau = await call('GET', `/api/v1/repair-orders/${o.id}`);
+    assert.equal(sau.body.status, 'RECEIVED');
+  });
+
+  test('🔒 REV-002: thu ngân chuyển được sang chờ giao xe nhưng không huỷ đơn', async () => {
+    // Danh sách là DANH SÁCH CHO PHÉP theo từng thao tác, không phải một mức
+    // quyền chung cho cả endpoint.
+    const o = await newOrder('M');
+    for (const s of ['DIAGNOSING', 'QUOTED', 'AWAITING_APPROVAL', 'IN_PROGRESS',
+                     'QUALITY_CHECK', 'AWAITING_PAYMENT']) {
+      await move(o.id, s);
+    }
+
+    const saved = token;
+    const cashier = await call('POST', '/api/v1/auth/login', {
+      phone: '0901000006', password: 'demo1234',
+    });
+    token = cashier.body.accessToken;
+
+    const d = await call('GET', `/api/v1/repair-orders/${o.id}`);
+    const ok = await call('POST', `/api/v1/repair-orders/${o.id}/status`, {
+      to: 'AWAITING_DELIVERY', version: d.body.version,
+    });
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+
+    const giao = await call('POST', `/api/v1/repair-orders/${o.id}/status`, {
+      to: 'DELIVERED', version: d.body.version + 1, odometerOut: 60_500,
+    });
+    assert.equal(giao.status, 403, 'thu ngân giao được xe');
+
+    token = saved;
+  });
+});
