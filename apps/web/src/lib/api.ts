@@ -162,6 +162,14 @@ export interface StockBalance {
   belowMinimum: boolean;
 }
 
+export interface PendingIssue {
+  reservationId: string; repairOrderId: string; repairOrderCode: string;
+  plateNumber: string; partId: string; sku: string; partName: string; unit: string;
+  quantity: number; expiresAt: string;
+  /** Đã quá hạn giữ chỗ — job nhả chạy theo chu kỳ nên vẫn còn thấy ở đây */
+  quaHan: boolean;
+}
+
 export interface StockMovementItem {
   id: string; warehouseId: string; partId: string;
   sku: string; partName: string;
@@ -265,6 +273,11 @@ export const api = {
     const qs = p.toString();
     return call<StockMovementItem[]>('GET', `/api/v1/stock/movements${qs === '' ? '' : `?${qs}`}`);
   },
+  listPendingIssues: () => call<PendingIssue[]>('GET', '/api/v1/stock/pending-issues'),
+  issueStock: (input: unknown) =>
+    call<{ movementId: string; quantity: number; vuotDinhMuc: boolean }>(
+      'POST', '/api/v1/stock/issues', input,
+    ),
   receiveStock: (input: unknown) =>
     call<{ id: string; onHand: number; avgCost: number }>('POST', '/api/v1/stock/receipts', input),
 

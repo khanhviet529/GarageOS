@@ -479,6 +479,39 @@ async function main(): Promise<void> {
         [TENANT_A, bg[0]!.id, ma],
       );
     }
+    /*
+     * Một dòng phụ tùng KÈM phiếu giữ chỗ đang chờ xuất.
+     *
+     * Không có nó thì màn "Chờ xuất kho" luôn rỗng trên dữ liệu seed, và test
+     * E2E của luồng xuất phải tự bỏ qua — mà test bị bỏ qua thì không chứng
+     * minh được gì. Cùng lý do với đơn demo ở trên.
+     */
+    const { rows: dongCong } = await db.query<{ id: string }>(
+      `SELECT id FROM quotation_line
+        WHERE quotation_id = $1 AND line_type = 'LABOR' ORDER BY seq LIMIT 1`,
+      [bg[0]!.id],
+    );
+    const { rows: dongPt } = await db.query<{ id: string; part_id: string }>(
+      `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, part_id,
+                                   parent_line_id, description, quantity, unit_price,
+                                   status, approval_source)
+       SELECT $1, $2, (SELECT COALESCE(max(seq),0)+1 FROM quotation_line WHERE quotation_id = $2),
+              'PART', p.id, $3, p.name, 1, pli.sell_price, 'APPROVED', 'CUSTOMER'
+         FROM part p
+         JOIN price_list_item pli ON pli.part_id = p.id
+         JOIN price_list pl ON pl.id = pli.price_list_id AND pl.branch_id IS NULL
+        WHERE p.tenant_id = $1 AND p.sku = 'PT-BRAKE-PAD-F'
+       RETURNING id, part_id`,
+      [TENANT_A, bg[0]!.id, dongCong[0]!.id],
+    );
+    await db.query(
+      `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
+                                      quotation_line_id, quantity, expires_at)
+       SELECT $1, w.id, $2, $3, $4, 1, now() + interval '7 days'
+         FROM warehouse w WHERE w.tenant_id = $1 AND w.branch_id = $5 AND w.is_default`,
+      [TENANT_A, dongPt[0]!.part_id, don[0]!.id, dongPt[0]!.id, chiNhanh],
+    );
+
     await db.query(
       `UPDATE quotation SET status = 'APPROVED', sent_at = now(),
                             valid_until = now() + interval '7 days', responded_at = now(),

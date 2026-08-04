@@ -118,3 +118,45 @@ test('🔒 giá vốn không rò ra ngoài vai được xem — kiểm cả JSON
   );
   expect(coGia.length, 'thủ kho phải nhận được giá vốn').toBeGreaterThan(0);
 });
+
+test('🔒 xuất kho: hàng rời khỏi kệ, khả dụng KHÔNG đổi', async ({ page }) => {
+  /*
+   * Đây là điểm dễ hiểu sai nhất của cả lát cắt kho, nên phải nhìn thấy được
+   * trên màn hình: giữ chỗ đã trừ `khả dụng` từ lúc khách duyệt. Xuất kho trừ
+   * `tồn thực tế` và trả lại đúng phần đang giữ, nên khả dụng GIỮ NGUYÊN.
+   *
+   * Thủ kho nhìn con số này để trả lời "còn nhận thêm đơn được không". Nếu nó
+   * nhảy lúc xuất hàng thì câu trả lời sai theo cả hai chiều.
+   */
+  await dangNhap(page, '0901000005');
+  await page.goto('/kho');
+  await expect(page.getByRole('heading', { name: 'Kho phụ tùng' })).toBeVisible();
+
+  // Chờ panel "Chờ xuất kho" nạp xong. Đếm ngay rồi `test.skip` sẽ khiến test
+  // tự bỏ qua chính thứ nó sinh ra để kiểm — lỗi đã mắc hai lần ở dự án này.
+  const nut = page.getByRole('button', { name: /^Xuất cho RO-/ }).first();
+  await expect(nut).toBeVisible({ timeout: 10_000 });
+
+  // Đọc tên phụ tùng của phiếu sắp xuất để tìm đúng dòng trong bảng tồn
+  const dongCho = page.locator('tr', { has: nut });
+  const sku = (await dongCho.locator('td').nth(2).innerText()).trim().split(/\s+/)[0] ?? '';
+
+  const dongTon = page.locator('table').first().locator('tr', {
+    has: page.getByRole('cell', { name: sku, exact: true }),
+  });
+  const doc = async (cot: number): Promise<number> =>
+    Number(((await dongTon.locator('td').nth(cot).innerText()).match(/[\d.]+/) ?? ['0'])[0]);
+
+  const tonTruoc = await doc(2);
+  const khaDungTruoc = await doc(4);
+
+  await nut.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Đã xuất' })).toBeVisible();
+
+  await expect
+    .poll(() => doc(2), { timeout: 10_000 })
+    .toBeLessThan(tonTruoc);
+  expect(await doc(4), 'khả dụng đổi khi xuất kho — con số điều phối dựa vào đã sai').toBe(
+    khaDungTruoc,
+  );
+});

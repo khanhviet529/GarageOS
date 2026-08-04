@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1–2.3 (kho, giữ chỗ, phân công) xong**
+> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1–2.4 (kho, giữ chỗ, phân công, xuất kho) xong**
 
 ## Đang ở đâu
 
@@ -24,15 +24,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 2.1 | Kho: sổ kho chỉ-thêm, tồn được ràng buộc, giá vốn bình quân | ✅ merged |
 | 2.2 | Giữ chỗ khi khách duyệt, khoá theo thứ tự part_id, giữ chỗ một phần | ✅ merged |
 | 2.3 | Phân công khoang/thợ: exclusion constraint, chứng chỉ, năng lực khoang | ✅ merged |
-| 2.4 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.4 | Xuất kho, trả hàng về kho, nhả giữ chỗ quá hạn | ✅ merged |
+| 2.5 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 261 (domain 12, db 42, api 207) |
-| E2E Playwright | 51 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 28 |
+| Test tự động | 269 (domain 12, db 42, api 215) |
+| E2E Playwright | 52 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 29 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -113,9 +114,17 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | `scrollable-region-focusable` nằm sẵn ở 5 tệp từ Phase 1 mà axe không báo | axe chỉ bắt khi vùng THẬT SỰ đang cuộn được ở kích thước cửa sổ lúc test. Bảng nào chưa đủ rộng thì lọt. Lộ ra ở 2.3 chỉ vì lịch xưởng có 12 cột. Đã gom thành `BangCuon.tsx` để khung thứ mười không phải nhớ lại |
 | `aria-label` trên vùng cuộn làm `getByLabel` trong test khớp hai phần tử | `getByLabel` khớp cả `aria-label`, và "Tồn kho theo mã **phụ tùng**" trùng chuỗi với nhãn form "Phụ tùng". Dùng `{ exact: true }` |
 
+## Bẫy đã gặp ở Phase 2.4 — xuất kho
+
+| Bẫy | Vì sao |
+|---|---|
+| Ghi dòng sổ ISSUE trước rồi mới đổi giữ chỗ sang CONSUMED thì **vi phạm ràng buộc** | Tồn 3, giữ 3, khả dụng 0. Ghi ISSUE −3 hạ `on_hand` mà `reserved` vẫn 3 → khả dụng −3 → `available_non_negative` bắn. Đảo thứ tự cũng không xong: `consumed_iff_movement` đòi một id chưa tồn tại. Hoãn ràng buộc cũng không: PostgreSQL chỉ hoãn được UNIQUE/PK/FK/EXCLUDE, **không hoãn được CHECK**. Lối ra là nối dòng sổ với phiếu giữ chỗ để MỘT câu UPDATE hạ cả hai cột |
+| `stock_movement` ↔ `stock_reservation` tham chiếu **vòng** | `reservation_id` và `consumed_by_movement_id` trỏ vào nhau. Dọn dữ liệu test phải cắt vòng trước (`SET reservation_id = NULL`), và một phiếu CONSUMED thì không đổi trạng thái được nữa nên chỉ xoá được |
+| `test.skip()` dựa trên `count()` đọc trang chưa nạp xong | Mắc **hai lần** ở dự án này. Test tự bỏ qua đúng thứ nó sinh ra để kiểm, và báo cáo "passed" — nguy hiểm hơn đỏ. Phải `expect.poll` hoặc `waitForResponse` |
+
 ## ⚠️ Lát cắt CHƯA có review độc lập
 
-**Phase 2.2 (giữ chỗ) và 2.3 (phân công)** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
+**Phase 2.2 (giữ chỗ), 2.3 (phân công) và 2.4 (xuất kho)** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
 2026-08-08. Thay vào đó tôi tự rà soát đối kháng và tìm ra ba lỗi, cả ba đều đã
 sửa và có test hồi quy:
 

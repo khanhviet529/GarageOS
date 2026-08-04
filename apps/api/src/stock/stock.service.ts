@@ -7,13 +7,17 @@ import {
   canDo,
   type ActorContext,
   type AdjustStockInput,
+  type IssueStockInput,
+  type PendingIssue,
   type ReceiveStockInput,
+  type ReturnStockInput,
   type StockBalance,
   type StockMovement,
   type Warehouse,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { appendBranchScope, assertCan } from '../common/permissions';
+import { issueReservedPart, returnIssuedPart } from './issue-parts';
 
 /**
  * Kho — Phase 2.1 (BC-04).
@@ -277,7 +281,130 @@ export class StockService {
     });
   }
 
+  /**
+   * Những phiếu giữ chỗ đang chờ xuất — màn làm việc chính của thủ kho.
+   *
+   * Hiện cả phiếu ĐÃ QUÁ HẠN thay vì lọc bỏ: job nhả chạy theo chu kỳ, nên
+   * giữa hai lần chạy vẫn có phiếu quá hạn còn ACTIVE. Ẩn đi thì thủ kho cầm
+   * phụ tùng trên tay mà không thấy phiếu đâu.
+   */
+  async listPendingIssues(actor: ActorContext): Promise<PendingIssue[]> {
+    assertCan(actor, 'stock:read');
+    return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [];
+      const scope = appendBranchScope(actor, params, 'w');
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT sr.id, sr.repair_order_id, ro.code, v.plate_number,
+                sr.part_id, p.sku, p.name AS part_name, p.unit,
+                sr.quantity, sr.expires_at
+           FROM stock_reservation sr
+           JOIN warehouse w     ON w.id = sr.warehouse_id
+           JOIN repair_order ro ON ro.id = sr.repair_order_id
+           JOIN vehicle v       ON v.id = ro.vehicle_id
+           JOIN part p          ON p.id = sr.part_id
+          WHERE sr.status = 'ACTIVE'${scope}
+          ORDER BY sr.expires_at, ro.code`,
+        params,
+      );
+      const bayGio = Date.now();
+      return rows.map((r) => ({
+        reservationId: r.id as string,
+        repairOrderId: r.repair_order_id as string,
+        repairOrderCode: r.code as string,
+        plateNumber: r.plate_number as string,
+        partId: r.part_id as string,
+        sku: r.sku as string,
+        partName: r.part_name as string,
+        unit: r.unit as string,
+        quantity: Number(r.quantity),
+        expiresAt: (r.expires_at as Date).toISOString(),
+        quaHan: (r.expires_at as Date).getTime() < bayGio,
+      }));
+    });
+  }
+
+  /** Xuất kho theo phiếu giữ chỗ — BC-04 mục 5.2 */
+  async issue(
+    actor: ActorContext,
+    input: IssueStockInput,
+  ): Promise<{ movementId: string; quantity: number; vuotDinhMuc: boolean }> {
+    assertCan(actor, 'stock:issue');
+    return this.db.withTenant(actor, async (tx) => {
+      await this.assertReservationInScope(tx, actor, input.reservationId);
+      try {
+        return await issueReservedPart(tx, actor, input.reservationId, input.quantity);
+      } catch (err) {
+        throw dichLoiKho(err);
+      }
+    });
+  }
+
+  /** Trả hàng về kho — BC-04 mục 5.4 */
+  async returnPart(
+    actor: ActorContext,
+    input: ReturnStockInput,
+  ): Promise<{ movementId: string }> {
+    assertCan(actor, 'stock:issue');
+    return this.db.withTenant(actor, async (tx) => {
+      try {
+        return await returnIssuedPart(
+          tx,
+          actor,
+          input.issueMovementId,
+          input.quantity,
+          input.reason,
+        );
+      } catch (err) {
+        throw dichLoiKho(err);
+      }
+    });
+  }
+
+  /**
+   * 🔒 INV-S-06 — nhả những phiếu giữ chỗ đã quá hạn.
+   *
+   * Để ở endpoint chứ không ở scheduler trong tiến trình API: chạy nhiều
+   * instance thì mỗi instance một scheduler, và cùng một lúc có N lần chạy —
+   * cùng lỗi với rate limit lưu trong bộ nhớ đã ghi ở STATUS.md. Một lịch cron
+   * bên ngoài gọi endpoint này là đúng hình dạng cho bản triển khai thật.
+   *
+   * Hàm ở DB (`nha_giu_cho_het_han`) mới là nơi chứa logic, nên một lần chạy
+   * tay bằng psql cũng đi qua đúng đường đó.
+   */
+  async releaseExpiredReservations(actor: ActorContext): Promise<{ daNha: number }> {
+    assertCan(actor, 'stock:adjust');
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ n: number }>('SELECT nha_giu_cho_het_han() AS n');
+      return { daNha: Number(rows[0]!.n) };
+    });
+  }
+
   // ---------------------------------------------------------------------------
+
+  /**
+   * 🔒 Phiếu giữ chỗ phải thuộc kho của chi nhánh người dùng được gán.
+   *
+   * Cùng lỗ hổng với `assertWarehouseInScope`: các kho nằm chung một tenant nên
+   * RLS không chặn, và biết UUID phiếu là xuất được hàng khỏi kho chi nhánh
+   * khác.
+   */
+  private async assertReservationInScope(
+    tx: PoolClient,
+    actor: ActorContext,
+    reservationId: string,
+  ): Promise<void> {
+    const params: unknown[] = [reservationId];
+    const scope = appendBranchScope(actor, params, 'w');
+    const { rows } = await tx.query(
+      `SELECT 1 FROM stock_reservation sr
+         JOIN warehouse w ON w.id = sr.warehouse_id
+        WHERE sr.id = $1 AND w.is_active${scope}`,
+      params,
+    );
+    if (rows.length === 0) {
+      throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy phiếu giữ chỗ');
+    }
+  }
 
   /**
    * 🔒 Kho phải thuộc chi nhánh người dùng được gán.

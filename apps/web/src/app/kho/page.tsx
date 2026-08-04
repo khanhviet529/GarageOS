@@ -10,6 +10,7 @@ import {
   formatDateTime,
   formatMoney,
   MOVEMENT_TYPE_LABEL,
+  type PendingIssue,
   type StockBalance,
   type StockMovementItem,
   type Warehouse,
@@ -29,6 +30,7 @@ export default function TrangKho() {
 
   const [ton, setTon] = useState<StockBalance[] | null>(null);
   const [soKho, setSoKho] = useState<StockMovementItem[]>([]);
+  const [choXuat, setChoXuat] = useState<PendingIssue[]>([]);
   const [loi, setLoi] = useState<string | null>(null);
   const [capNhatLuc, setCapNhatLuc] = useState('');
 
@@ -70,9 +72,25 @@ export default function TrangKho() {
       .catch(() => {
         /* sổ kho là phần phụ — hỏng thì không chặn màn hình tồn */
       });
+    api
+      .listPendingIssues()
+      .then((ds) => setChoXuat(ds.filter((x) => x.reservationId !== '')))
+      .catch(() => setChoXuat([]));
   }, [khoId, tim, chiSapHet]);
 
   useEffect(taiTon, [taiTon]);
+
+  async function xuatKho(gc: PendingIssue): Promise<void> {
+    setKetQua(null);
+    setLoi(null);
+    try {
+      const r = await api.issueStock({ reservationId: gc.reservationId });
+      setKetQua(`Đã xuất ${r.quantity} ${gc.unit} ${gc.partName} cho đơn ${gc.repairOrderCode}.`);
+      taiTon();
+    } catch (err) {
+      setLoi(err instanceof ApiCallError ? err.api.message : 'Xuất kho thất bại');
+    }
+  }
 
   async function nhapKho(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -208,6 +226,61 @@ export default function TrangKho() {
                       {xemGiaVon && (
                         <td className="phai mono">{formatMoney(b.avgCost ?? 0)}</td>
                       )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </BangCuon>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Chờ xuất kho</h2>
+          <p className="muted">
+            Phụ tùng khách đã duyệt và kho đã giữ chỗ. Xuất kho là lúc hàng thật sự rời khỏi
+            kệ — trước đó hàng vẫn còn nguyên, chỉ là đã có chủ.
+          </p>
+          {choXuat.length === 0 ? (
+            <p className="alert info">Không có phiếu nào chờ xuất.</p>
+          ) : (
+            <BangCuon moTa="Các phiếu giữ chỗ đang chờ xuất kho" style={{ marginTop: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Đơn</th>
+                    <th scope="col">Xe</th>
+                    <th scope="col">Phụ tùng</th>
+                    <th scope="col" className="phai">Số lượng</th>
+                    <th scope="col">Hạn giữ</th>
+                    <th scope="col"><span className="sr-only">Thao tác</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {choXuat.map((gc) => (
+                    <tr key={gc.reservationId}>
+                      <td className="mono nowrap">{gc.repairOrderCode}</td>
+                      <td className="mono">{gc.plateNumber}</td>
+                      <td>
+                        <span className="mono">{gc.sku}</span> {gc.partName}
+                      </td>
+                      <td className="phai mono">
+                        {gc.quantity} {gc.unit}
+                      </td>
+                      <td>
+                        {formatDateTime(gc.expiresAt)}
+                        {/* Quá hạn vẫn hiện: job nhả chạy theo chu kỳ, và thủ kho
+                            cầm phụ tùng trên tay cần biết vì sao sắp không xuất được */}
+                        {gc.quaHan && <span className="tag canh-bao">quá hạn</span>}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void xuatKho(gc)}
+                        >
+                          Xuất cho {gc.repairOrderCode}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

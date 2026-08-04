@@ -1,8 +1,11 @@
 import { Body, Controller, Get, Inject, Post, Query, UseGuards } from '@nestjs/common';
 import {
   AdjustStockInput,
+  IssueStockInput,
   ReceiveStockInput,
+  ReturnStockInput,
   type ActorContext,
+  type PendingIssue,
   type StockBalance,
   type StockMovement,
   type Warehouse,
@@ -64,6 +67,32 @@ export class StockController {
     @Body(new ZodPipe(ReceiveStockInput)) input: ReceiveStockInput,
   ): Promise<{ id: string; onHand: number; avgCost: number }> {
     return this.svc.receive(actor, input);
+  }
+
+  @Get('stock/pending-issues')
+  listPendingIssues(@Actor() actor: ActorContext): Promise<PendingIssue[]> {
+    return this.svc.listPendingIssues(actor);
+  }
+
+  @Post('stock/issues')
+  issue(
+    @Actor() actor: ActorContext,
+    @Body(new ZodPipe(IssueStockInput)) input: IssueStockInput,
+  ): Promise<{ movementId: string; quantity: number; vuotDinhMuc: boolean }> {
+    return this.svc.issue(actor, input);
+  }
+
+  @Post('stock/returns')
+  returnPart(
+    @Actor() actor: ActorContext,
+    @Body(new ZodPipe(ReturnStockInput)) input: ReturnStockInput,
+  ): Promise<{ movementId: string }> {
+    return this.svc.returnPart(actor, input);
+  }
+
+  @Post('stock/release-expired')
+  releaseExpired(@Actor() actor: ActorContext): Promise<{ daNha: number }> {
+    return this.svc.releaseExpiredReservations(actor);
   }
 
   @Post('stock/adjustments')

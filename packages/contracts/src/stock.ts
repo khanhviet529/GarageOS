@@ -135,3 +135,49 @@ export const StockMovement = z.object({
   createdAt: z.string(),
 });
 export type StockMovement = z.infer<typeof StockMovement>;
+
+/**
+ * Xuất kho theo phiếu giữ chỗ — BC-04 mục 5.2.
+ *
+ * `quantity` TUỲ CHỌN: bỏ trống nghĩa là xuất đúng phần đã giữ. Đó là trường
+ * hợp thường gặp, và bắt thủ kho gõ lại con số đã có sẵn chỉ tạo thêm cơ hội
+ * gõ sai.
+ *
+ * Gửi số khác là xuất vượt/thiếu định mức — 🔒 BC-04 mục 5.3 chặn ở service
+ * theo `tenant.overissue_tolerance_percent`.
+ */
+export const IssueStockInput = z.object({
+  reservationId: z.string().uuid(),
+  quantity: quantityAmount.optional(),
+});
+export type IssueStockInput = z.infer<typeof IssueStockInput>;
+
+/**
+ * Trả hàng về kho — BC-04 mục 5.4.
+ *
+ * Trỏ về ĐÚNG phiếu xuất gốc chứ không chỉ nêu mã hàng: giá vốn khi trả phải
+ * bằng giá vốn lúc xuất, và chỉ dòng sổ gốc mới biết con số đó.
+ */
+export const ReturnStockInput = z.object({
+  issueMovementId: z.string().uuid(),
+  quantity: quantityAmount,
+  reason: z.string().trim().min(5, 'Phải ghi lý do trả hàng').max(500),
+});
+export type ReturnStockInput = z.infer<typeof ReturnStockInput>;
+
+/** Một lần giữ chỗ đang chờ xuất, hiển thị cho thủ kho */
+export const PendingIssue = z.object({
+  reservationId: z.string().uuid(),
+  repairOrderId: z.string().uuid(),
+  repairOrderCode: z.string(),
+  plateNumber: z.string(),
+  partId: z.string().uuid(),
+  sku: z.string(),
+  partName: z.string(),
+  unit: z.string(),
+  quantity: z.number(),
+  expiresAt: z.string(),
+  /** Đã quá hạn giữ chỗ — job nhả sẽ dọn, nhưng thủ kho cần thấy trước */
+  quaHan: z.boolean(),
+});
+export type PendingIssue = z.infer<typeof PendingIssue>;

@@ -903,3 +903,363 @@ describe('🔒 Giữ chỗ — Phase 2.2 (BC-04)', () => {
     await don.donDep();
   });
 });
+
+describe('🔒 Xuất kho — Phase 2.4 (BC-04 mục 5.2–5.6)', () => {
+  let demXuat = 0;
+
+  /**
+   * Dựng một phiếu giữ chỗ ACTIVE với số lượng cho trước, trên một mã hàng
+   * RIÊNG để không đụng tồn của seed.
+   *
+   * Trả kèm `donDep` vì `stock_movement` và `stock_reservation` tham chiếu
+   * VÒNG cho nhau (`reservation_id` ↔ `consumed_by_movement_id`), nên xoá phải
+   * cắt vòng trước — và một phiếu CONSUMED thì không đổi trạng thái được nữa.
+   */
+  async function giuChoSanSang(
+    tonBanDau: number,
+    giuBaoNhieu: number,
+  ): Promise<{
+    reservationId: string;
+    partId: string;
+    khoId: string;
+    doc: () => Promise<{ onHand: number; reserved: number; avgCost: number }>;
+    donDep: () => Promise<void>;
+  }> {
+    demXuat += 1;
+    const kho = await khoMacDinh();
+    const { rows: u } = await pool.query<{ id: string }>(
+      'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+      [TENANT_A],
+    );
+    const { rows: p } = await pool.query<{ id: string }>(
+      `INSERT INTO part (tenant_id, sku, name, unit, category, min_stock_level)
+       VALUES ($1, $2, 'Phụ tùng thử xuất kho', 'cái', 'Thử', 0) RETURNING id`,
+      [TENANT_A, `PT-XK-${process.pid.toString().slice(-4)}${demXuat}`],
+    );
+    const part = p[0]!.id;
+
+    await pool.query(
+      `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                   unit_cost, created_by_user_id)
+       VALUES ($1,$2,$3,'RECEIPT',$4,100000,$5)`,
+      [TENANT_A, kho, part, tonBanDau, u[0]!.id],
+    );
+
+    const { rows: ql } = await pool.query<{ id: string; ro: string }>(
+      `SELECT ql.id, q.repair_order_id AS ro
+         FROM quotation_line ql JOIN quotation q ON q.id = ql.quotation_id
+        WHERE ql.line_type = 'PART' AND ql.status = 'APPROVED' LIMIT 1`,
+    );
+    const { rows: sr } = await pool.query<{ id: string }>(
+      `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
+                                      quotation_line_id, quantity, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6, now() + interval '7 days') RETURNING id`,
+      [TENANT_A, kho, part, ql[0]!.ro, ql[0]!.id, giuBaoNhieu],
+    );
+
+    const doc = async (): Promise<{ onHand: number; reserved: number; avgCost: number }> => {
+      const { rows } = await pool.query<{ on_hand: string; reserved: string; avg_cost: string }>(
+        `SELECT on_hand, reserved, avg_cost FROM stock_balance
+          WHERE warehouse_id = $1 AND part_id = $2`,
+        [kho, part],
+      );
+      return {
+        onHand: Number(rows[0]!.on_hand),
+        reserved: Number(rows[0]!.reserved),
+        avgCost: Number(rows[0]!.avg_cost),
+      };
+    };
+
+    const donDep = async (): Promise<void> => {
+      // Cắt vòng tham chiếu trước khi xoá — xem ghi chú ở đầu hàm
+      await pool.query('UPDATE stock_movement SET reservation_id = NULL WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM stock_reservation WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM stock_movement WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM stock_balance WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM part WHERE id = $1', [part]);
+    };
+
+    return { reservationId: sr[0]!.id, partId: part, khoId: kho, doc, donDep };
+  }
+
+  test('🔒 xuất kho khi available = 0 — trường hợp dễ hỏng nhất', async () => {
+    /*
+     * Tồn 3, giữ chỗ 3, khả dụng 0. Nếu dòng sổ ISSUE hạ `on_hand` mà chưa hạ
+     * `reserved` thì khả dụng tụt xuống −3 và `available_non_negative` bắn —
+     * cả giao dịch rollback, thủ kho không xuất được món đã có chủ.
+     *
+     * Đây chính là lý do 0029 phải thêm `stock_movement.reservation_id`: một
+     * câu UPDATE hạ cả hai cột, khả dụng không bao giờ đi qua trạng thái âm.
+     */
+    const c = await giuChoSanSang(3, 3);
+    try {
+      const truoc = await c.doc();
+      assert.equal(truoc.onHand - truoc.reserved, 0, 'chưa dựng đúng cảnh available = 0');
+
+      const r = await call('POST', '/api/v1/stock/issues', { reservationId: c.reservationId });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      assert.equal(r.body.quantity, 3);
+
+      const sau = await c.doc();
+      assert.equal(sau.onHand, 0, 'tồn thực tế không giảm sau khi xuất');
+      assert.equal(sau.reserved, 0, 'phần giữ chỗ không được nhả sau khi xuất');
+    } finally {
+      await c.donDep();
+    }
+  });
+
+  test('🔒 CONSUMED không trừ đúp phần đang giữ', async () => {
+    /*
+     * Dòng sổ ISSUE đã hạ `reserved`. Nếu trigger đổi trạng thái hạ thêm lần
+     * nữa thì `reserved` tụt xuống âm — hoặc tệ hơn, nếu còn giữ chỗ KHÁC cho
+     * cùng mã hàng thì nó không bắn ràng buộc nào, và phần giữ của đơn khác
+     * lặng lẽ biến mất.
+     *
+     * Dựng đúng cảnh nguy hiểm đó: hai phiếu giữ chỗ trên cùng một mã.
+     */
+    const c = await giuChoSanSang(10, 4);
+    const { rows: ql } = await pool.query<{ id: string; ro: string }>(
+      `SELECT ql.id, q.repair_order_id AS ro
+         FROM quotation_line ql JOIN quotation q ON q.id = ql.quotation_id
+        WHERE ql.line_type = 'PART' AND ql.status = 'APPROVED' LIMIT 1`,
+    );
+    await pool.query(
+      `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
+                                      quotation_line_id, quantity, expires_at)
+       VALUES ($1,$2,$3,$4,$5,3, now() + interval '7 days')`,
+      [TENANT_A, c.khoId, c.partId, ql[0]!.ro, ql[0]!.id],
+    );
+
+    try {
+      const truoc = await c.doc();
+      assert.equal(truoc.reserved, 7, 'chưa dựng đúng cảnh hai phiếu giữ chỗ');
+
+      const r = await call('POST', '/api/v1/stock/issues', { reservationId: c.reservationId });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+
+      const sau = await c.doc();
+      assert.equal(sau.onHand, 6, 'tồn thực tế sai');
+      assert.equal(
+        sau.reserved,
+        3,
+        'phần giữ chỗ của phiếu KHÁC bị ăn mất — trigger trừ đúp',
+      );
+    } finally {
+      await c.donDep();
+    }
+  });
+
+  test('xuất hai lần cùng một phiếu bị chặn', async () => {
+    const c = await giuChoSanSang(10, 2);
+    try {
+      const r1 = await call('POST', '/api/v1/stock/issues', { reservationId: c.reservationId });
+      assert.equal(r1.status, 201, JSON.stringify(r1.body));
+
+      const r2 = await call('POST', '/api/v1/stock/issues', { reservationId: c.reservationId });
+      assert.equal(r2.status, 409, 'xuất được hai lần -> hàng ra khỏi kệ gấp đôi');
+      assert.match(r2.body.error.message, /đã xuất kho rồi/i);
+    } finally {
+      await c.donDep();
+    }
+  });
+
+  test('🔒 BC-04 mục 5.3: xuất vượt trong ngưỡng thì cho, vượt nhiều thì cần quản lý', async () => {
+    /*
+     * Thực tế: báo giá 1 lít dầu, thợ dùng 1,2 lít. Chặn cứng thì đẩy thủ kho
+     * sang ghi sổ giấy — lúc đó hệ thống mất luôn cả phần đúng.
+     *
+     * Ngưỡng đọc từ `tenant.overissue_tolerance_percent`, cột có từ migration
+     * 0001 và tới trước lát cắt này chưa dòng code nào đọc.
+     */
+    const { rows: t } = await pool.query<{ overissue_tolerance_percent: number }>(
+      'SELECT overissue_tolerance_percent FROM tenant WHERE id = $1',
+      [TENANT_A],
+    );
+    const nguong = Number(t[0]!.overissue_tolerance_percent);
+
+    // Giữ 100 để "vượt ≤ 1 đơn vị" không che mất phép tính phần trăm
+    const trong = await giuChoSanSang(300, 100);
+    try {
+      const r = await call('POST', '/api/v1/stock/issues', {
+        reservationId: trong.reservationId,
+        quantity: 100 + Math.floor(nguong / 2),
+      });
+      assert.equal(r.status, 201, `vượt trong ngưỡng mà bị chặn: ${JSON.stringify(r.body)}`);
+      assert.equal(r.body.vuotDinhMuc, true);
+    } finally {
+      await trong.donDep();
+    }
+
+    const vuot = await giuChoSanSang(300, 100);
+    try {
+      const r = await call('POST', '/api/v1/stock/issues', {
+        reservationId: vuot.reservationId,
+        quantity: 100 + nguong + 20,
+      });
+      assert.equal(r.status, 403, `thủ kho xuất vượt xa ngưỡng mà không cần ai duyệt`);
+      assert.match(r.body.error.message, /quản lý duyệt|báo giá bổ sung/);
+
+      // ĐỐI CHỨNG: quản lý làm cùng thao tác thì qua
+      const luu = token;
+      token = await dangNhap('0901000002');
+      try {
+        const ql = await call('POST', '/api/v1/stock/issues', {
+          reservationId: vuot.reservationId,
+          quantity: 100 + nguong + 20,
+        });
+        assert.equal(ql.status, 201, `quản lý bị chặn oan: ${JSON.stringify(ql.body)}`);
+      } finally {
+        token = luu;
+      }
+    } finally {
+      await vuot.donDep();
+    }
+  });
+
+  test('🔒 BC-04 mục 5.4: trả hàng về kho theo GIÁ VỐN LÚC XUẤT', async () => {
+    /*
+     * Xuất 2 cái giá 100k, rồi kho nhập thêm hàng đắt làm bình quân tăng. Trả
+     * lại theo bình quân hiện tại thì đơn đó tự nhiên "lãi" từ không khí, và
+     * bảng lãi/lỗ theo đơn ở Phase 6 đọc ra một con số không có thật.
+     */
+    const c = await giuChoSanSang(10, 2);
+    try {
+      const xuat = await call('POST', '/api/v1/stock/issues', {
+        reservationId: c.reservationId,
+      });
+      assert.equal(xuat.status, 201, JSON.stringify(xuat.body));
+
+      // Kho nhập lô đắt -> bình quân tăng
+      const { rows: u } = await pool.query<{ id: string }>(
+        'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+        [TENANT_A],
+      );
+      await pool.query(
+        `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                     unit_cost, created_by_user_id)
+         VALUES ($1,$2,$3,'RECEIPT',8,300000,$4)`,
+        [TENANT_A, c.khoId, c.partId, u[0]!.id],
+      );
+      const giua = await c.doc();
+      assert.ok(giua.avgCost > 100_000, 'chưa dựng được cảnh bình quân tăng');
+
+      const tra = await call('POST', '/api/v1/stock/returns', {
+        issueMovementId: xuat.body.movementId,
+        quantity: 1,
+        reason: 'Lắp thử không vừa',
+      });
+      assert.equal(tra.status, 201, JSON.stringify(tra.body));
+
+      const { rows: mv } = await pool.query<{ unit_cost: string }>(
+        'SELECT unit_cost FROM stock_movement WHERE id = $1',
+        [tra.body.movementId],
+      );
+      assert.equal(
+        Number(mv[0]!.unit_cost),
+        100_000,
+        'trả hàng ghi theo bình quân hiện tại -> lãi/lỗ của đơn bị bóp méo',
+      );
+    } finally {
+      await c.donDep();
+    }
+  });
+
+  test('trả nhiều hơn đã xuất bị chặn', async () => {
+    const c = await giuChoSanSang(10, 2);
+    try {
+      const xuat = await call('POST', '/api/v1/stock/issues', { reservationId: c.reservationId });
+      const tra = await call('POST', '/api/v1/stock/returns', {
+        issueMovementId: xuat.body.movementId,
+        quantity: 5,
+        reason: 'Thử trả quá số đã xuất',
+      });
+      assert.equal(tra.status, 400, 'trả về nhiều hơn đã lấy ra -> tồn tự sinh ra từ không khí');
+    } finally {
+      await c.donDep();
+    }
+  });
+
+  test('🔒 INV-S-06: job nhả phiếu giữ chỗ quá hạn, tồn thực tế không đổi', async () => {
+    const c = await giuChoSanSang(10, 4);
+    try {
+      await pool.query(
+        `UPDATE stock_reservation SET expires_at = now() - interval '1 hour' WHERE id = $1`,
+        [c.reservationId],
+      );
+      const truoc = await c.doc();
+      assert.equal(truoc.reserved, 4);
+
+      const luu = token;
+      token = await dangNhap('0901000002'); // quản lý — vai chạy job
+      let daNha = 0;
+      try {
+        const r = await call('POST', '/api/v1/stock/release-expired');
+        assert.equal(r.status, 201, JSON.stringify(r.body));
+        daNha = r.body.daNha;
+      } finally {
+        token = luu;
+      }
+      assert.ok(daNha >= 1, 'job không nhả phiếu nào');
+
+      const sau = await c.doc();
+      assert.equal(sau.reserved, 0, 'quá hạn mà chỗ vẫn bị giữ -> hàng treo vĩnh viễn');
+      assert.equal(sau.onHand, truoc.onHand, 'nhả chỗ làm đổi tồn thực tế');
+
+      const { rows } = await pool.query<{ status: string }>(
+        'SELECT status FROM stock_reservation WHERE id = $1',
+        [c.reservationId],
+      );
+      assert.equal(rows[0]!.status, 'EXPIRED');
+    } finally {
+      await c.donDep();
+    }
+  });
+
+  test('🔒 thủ kho không xuất được phiếu của chi nhánh khác', async () => {
+    // RLS không chặn: các kho nằm chung một tenant, biết UUID là gọi được.
+    const { rows: w } = await pool.query<{ id: string }>(
+      `SELECT w.id FROM warehouse w JOIN branch b ON b.id = w.branch_id
+        WHERE w.tenant_id = $1 AND b.code <> 'HN01' LIMIT 1`,
+      [TENANT_A],
+    );
+    const { rows: u } = await pool.query<{ id: string }>(
+      'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+      [TENANT_A],
+    );
+    const { rows: p } = await pool.query<{ id: string }>(
+      `INSERT INTO part (tenant_id, sku, name, unit, category, min_stock_level)
+       VALUES ($1, $2, 'Phụ tùng chi nhánh khác', 'cái', 'Thử', 0) RETURNING id`,
+      [TENANT_A, `PT-CNK-${process.pid.toString().slice(-4)}${(demXuat += 1)}`],
+    );
+    await pool.query(
+      `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                   unit_cost, created_by_user_id)
+       VALUES ($1,$2,$3,'RECEIPT',10,100000,$4)`,
+      [TENANT_A, w[0]!.id, p[0]!.id, u[0]!.id],
+    );
+    const { rows: ql } = await pool.query<{ id: string; ro: string }>(
+      `SELECT ql.id, q.repair_order_id AS ro
+         FROM quotation_line ql JOIN quotation q ON q.id = ql.quotation_id
+        WHERE ql.line_type = 'PART' AND ql.status = 'APPROVED' LIMIT 1`,
+    );
+    const { rows: sr } = await pool.query<{ id: string }>(
+      `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
+                                      quotation_line_id, quantity, expires_at)
+       VALUES ($1,$2,$3,$4,$5,1, now() + interval '7 days') RETURNING id`,
+      [TENANT_A, w[0]!.id, p[0]!.id, ql[0]!.ro, ql[0]!.id],
+    );
+
+    try {
+      const r = await call('POST', '/api/v1/stock/issues', { reservationId: sr[0]!.id });
+      assert.equal(r.status, 404, 'xuất được hàng khỏi kho chi nhánh khác');
+    } finally {
+      await pool.query('UPDATE stock_movement SET reservation_id = NULL WHERE part_id = $1', [
+        p[0]!.id,
+      ]);
+      await pool.query('DELETE FROM stock_reservation WHERE part_id = $1', [p[0]!.id]);
+      await pool.query('DELETE FROM stock_movement WHERE part_id = $1', [p[0]!.id]);
+      await pool.query('DELETE FROM stock_balance WHERE part_id = $1', [p[0]!.id]);
+      await pool.query('DELETE FROM part WHERE id = $1', [p[0]!.id]);
+    }
+  });
+});

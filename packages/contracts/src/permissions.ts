@@ -68,6 +68,13 @@ export const ACTION_ROLES = {
    */
   'stock:adjust': ['BRANCH_MANAGER', 'OWNER'],
 
+  /**
+   * Xuất kho cho đơn và trả hàng về — docs/02 ma trận, hàng "Xuất kho" và
+   * "Trả hàng về kho": thủ kho ✅, kèm điều kiện "đơn phải có báo giá duyệt".
+   * Điều kiện đó enforce ở DB (INV-S-04, trigger ở 0029), không ở đây.
+   */
+  'stock:issue': ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'],
+
   /*
    * Phân công — docs/02 mục 3, nhóm "Phân công & thi công".
    *
@@ -108,6 +115,7 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'stock:readCost': 'xem giá vốn',
   'stock:receive': 'nhập kho',
   'stock:adjust': 'điều chỉnh tồn kho',
+  'stock:issue': 'xuất kho và trả hàng về kho',
   'assignment:read': 'xem lịch xưởng',
   'assignment:write': 'xếp khoang và thợ',
   'assignment:qc': 'kiểm tra chất lượng',
