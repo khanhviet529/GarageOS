@@ -7,6 +7,9 @@ import { auth, roleLabel } from '@/lib/api';
 /** Giữ khớp với `ACTION_ROLES['stock:read']` ở packages/contracts */
 const VAI_XEM_KHO = ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'];
 
+/** Giữ khớp với `ACTION_ROLES['assignment:read']` ở packages/contracts */
+const VAI_XEM_LICH = ['TECHNICIAN', 'SERVICE_ADVISOR', 'STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'];
+
 /**
  * Thanh trên cùng — dùng chung cho mọi màn hình nội bộ.
  *
@@ -17,7 +20,7 @@ const VAI_XEM_KHO = ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'];
 export function AppHeader({
   current,
 }: {
-  current: 'tiep-nhan' | 'xe-trong-xuong' | 'don' | 'kho';
+  current: 'tiep-nhan' | 'xe-trong-xuong' | 'don' | 'kho' | 'lich-xuong';
 }) {
   const [who, setWho] = useState<{ fullName: string; roles: string[] } | null>(null);
 
@@ -50,6 +53,11 @@ export function AppHeader({
           thật nằm ở `assertCan(actor, 'stock:read')` trong StockService.
           Người dùng gõ thẳng /kho vẫn chỉ nhận 403 từ API.
         */}
+        {who !== null && VAI_XEM_LICH.some((r) => who.roles.includes(r)) && (
+          <Link href="/lich-xuong" className={current === 'lich-xuong' ? 'active' : ''}>
+            Lịch xưởng
+          </Link>
+        )}
         {who !== null && VAI_XEM_KHO.some((r) => who.roles.includes(r)) && (
           <Link href="/kho" className={current === 'kho' ? 'active' : ''}>
             Kho

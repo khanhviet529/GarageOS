@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppHeader } from '@/components/AppHeader';
 import { IconLamMoi } from '@/components/Icon';
+import { BangCuon } from '@/components/BangCuon';
 import {
   api,
   ApiCallError,
@@ -174,7 +175,7 @@ export default function TrangKho() {
           ) : ton.length === 0 ? (
             <p className="alert info">Không có mã hàng nào khớp bộ lọc.</p>
           ) : (
-            <div className="table-scroll" style={{ marginTop: 12 }}>
+            <BangCuon moTa="Tồn kho theo mã phụ tùng" style={{ marginTop: 12 }}>
               <table>
                 <caption className="sr-only">Tồn kho theo mã phụ tùng</caption>
                 <thead>
@@ -211,7 +212,7 @@ export default function TrangKho() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </BangCuon>
           )}
         </div>
 
@@ -284,7 +285,7 @@ export default function TrangKho() {
           {soKho.length === 0 ? (
             <p className="alert info">Kho này chưa có chuyển động nào.</p>
           ) : (
-            <div className="table-scroll" style={{ marginTop: 12 }}>
+            <BangCuon moTa="Các chuyển động kho gần đây" style={{ marginTop: 12 }}>
               <table>
                 <caption className="sr-only">Các chuyển động kho gần đây</caption>
                 <thead>
@@ -315,7 +316,7 @@ export default function TrangKho() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </BangCuon>
           )}
         </div>
       </main>

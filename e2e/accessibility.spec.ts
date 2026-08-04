@@ -116,3 +116,17 @@ test('màn kho không có lỗi accessibility', async ({ page }) => {
   const kq = await soi(page).analyze();
   expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
 });
+
+test('màn lịch xưởng không có lỗi accessibility', async ({ page }) => {
+  await page.goto('/dang-nhap');
+  await page.getByLabel('Số điện thoại').fill('0901000002');
+  await page.getByLabel('Mật khẩu').fill('demo1234');
+  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.waitForURL((u) => !u.pathname.includes('dang-nhap'));
+
+  await page.goto('/lich-xuong');
+  await expect(page.getByRole('columnheader', { name: 'Khoang' })).toBeVisible();
+
+  const kq = await soi(page).analyze();
+  expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
+});

@@ -67,6 +67,27 @@ export const ACTION_ROLES = {
    * người; ngưỡng giá trị sẽ thêm ở 5.4 cùng luồng kiểm kê.
    */
   'stock:adjust': ['BRANCH_MANAGER', 'OWNER'],
+
+  /*
+   * Phân công — docs/02 mục 3, nhóm "Phân công & thi công".
+   *
+   * Ma trận để cố vấn dịch vụ 🔶 "đề xuất" chứ không ✅ "xếp": xếp khoang và
+   * thợ là quyết định điều phối, cần nhìn cả xưởng. Phase 2.3 chưa làm luồng
+   * ĐỀ XUẤT riêng nên cố vấn đứng ngoài — mở khi có luồng đó, kèm test, chứ
+   * không mở sẵn.
+   */
+  'assignment:read': ['TECHNICIAN', 'SERVICE_ADVISOR', 'STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'],
+  'assignment:write': ['BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Kiểm tra chất lượng — KHÔNG cho thợ ở đây.
+   *
+   * Ma trận để thợ 🔶 "không phải người đã làm", tức là thợ khác được QC. Ràng
+   * buộc "khác người" đã enforce ở DB (`qc_by_different_person`, 0028), nên
+   * chỗ này chỉ cần chặn vai không liên quan. Thợ vẫn QC được cho nhau, và
+   * database bảo đảm không ai tự QC việc của chính mình.
+   */
+  'assignment:qc': ['TECHNICIAN', 'SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -87,4 +108,7 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'stock:readCost': 'xem giá vốn',
   'stock:receive': 'nhập kho',
   'stock:adjust': 'điều chỉnh tồn kho',
+  'assignment:read': 'xem lịch xưởng',
+  'assignment:write': 'xếp khoang và thợ',
+  'assignment:qc': 'kiểm tra chất lượng',
 };

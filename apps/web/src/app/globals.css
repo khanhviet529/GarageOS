@@ -429,3 +429,40 @@ td.am { color: var(--c-danger); }
  */
 .row > .field { min-width: 0; }
 .field select, .field input { max-width: 100%; }
+
+/* --- Lịch xưởng (Phase 2.3) --- */
+
+.lich th[scope='row'] { text-align: left; background: var(--c-bg); font-weight: 600; }
+.lich td.o-lich { vertical-align: top; min-width: 120px; padding: var(--sp-1); }
+
+/*
+ * Một việc trên lịch. Viền trái mang màu trạng thái — KHÔNG dùng nền màu:
+ * chữ trên nền màu ở kích thước nhỏ này khó đạt 4.5:1, mà đây là màn hình điều
+ * phối nhìn cả ngày.
+ */
+.viec {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-2); border-radius: var(--r-sm);
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-text-muted);
+  font-size: var(--fs-xs);
+}
+.viec .small-btn { padding: 2px 8px; font-size: var(--fs-xs); min-height: 28px; align-self: flex-start; }
+
+/* Màu KHÔNG phải kênh thông tin duy nhất: nhãn trạng thái nằm ngay trong ô */
+.viec.tt-scheduled   { border-left-color: var(--c-primary); }
+.viec.tt-in_progress { border-left-color: var(--c-warning); }
+.viec.tt-done        { border-left-color: var(--c-success); }
+.viec.tt-qc_passed   { border-left-color: var(--c-success); }
+.viec.tt-qc_failed   { border-left-color: var(--c-danger); }
+.viec.tt-paused      { border-left-color: var(--c-text-muted); }
+.viec.tt-cancelled   { border-left-color: var(--c-border); opacity: .6; }
+
+/*
+ * Vùng cuộn nhận được focus bàn phím (xem `BangCuon.tsx`) nên PHẢI có viền
+ * focus thấy được — nếu không, người dùng bàn phím Tab vào một vùng vô hình.
+ */
+.table-scroll:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}

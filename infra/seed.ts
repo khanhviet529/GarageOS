@@ -187,6 +187,7 @@ async function main(): Promise<void> {
    *    im lặng xoá luôn — tức là quên một bảng sẽ không bao giờ bị phát hiện.
    */
   await db.query(`TRUNCATE
+    work_assignment, bay, user_certification, certification,
     stock_reservation, stock_movement, stock_balance, warehouse,
     otp_challenge, quotation_line, quotation,
     repair_order_asset, repair_order_photo, repair_order, doc_counter,
@@ -353,6 +354,138 @@ async function main(): Promise<void> {
         );
       }
     }
+  }
+
+  /*
+   * Khoang và chứng chỉ — Phase 2.3.
+   *
+   * 🔒 Chỉ MỘT khoang có `HV_SAFE_ZONE`, và chỉ MỘT thợ có chứng chỉ cao áp.
+   * Dựng dư ra thì mọi phân công đều hợp lệ và hai bất biến an toàn (INV-W-03,
+   * INV-W-07) không bao giờ được nhìn thấy trong bản demo — trong khi chúng
+   * chính là phần đáng xem nhất của lát cắt này.
+   */
+  console.log('Tạo khoang và chứng chỉ...');
+  const CHUNG_CHI = [
+    { code: 'HV_ELECTRICAL', name: 'An toàn điện cao áp' },
+    { code: 'EV_DIAGNOSTICS', name: 'Chẩn đoán xe điện' },
+  ];
+  const certIds = new Map<string, string>();
+  for (const c of CHUNG_CHI) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO certification (tenant_id, code, name) VALUES ($1,$2,$3) RETURNING id`,
+      [TENANT_A, c.code, c.name],
+    );
+    certIds.set(c.code, rows[0]!.id);
+  }
+
+  const { rows: thoList } = await db.query<{ id: string; phone: string }>(
+    `SELECT id, phone FROM app_user WHERE tenant_id = $1 AND 'TECHNICIAN' = ANY(roles)
+      ORDER BY phone`,
+    [TENANT_A],
+  );
+  // Thợ đầu tiên có đủ hai chứng chỉ; những người sau KHÔNG — để màn gợi ý thợ
+  // có cả trường hợp "không chọn được, và đây là lý do".
+  const thoCaoAp = thoList[0];
+  if (thoCaoAp !== undefined) {
+    for (const c of CHUNG_CHI) {
+      await db.query(
+        `INSERT INTO user_certification (tenant_id, user_id, certification_id, issued_at, expires_at)
+         VALUES ($1,$2,$3, now() - interval '1 year', now() + interval '2 years')`,
+        [TENANT_A, thoCaoAp.id, certIds.get(c.code)],
+      );
+    }
+  }
+
+  for (const [i, b] of branchesA.entries()) {
+    const khoangs =
+      i === 0
+        ? [
+            { code: `K${i + 1}-01`, name: 'Khoang 1 — cầu nâng', caps: ['LIFT'] },
+            { code: `K${i + 1}-02`, name: 'Khoang 2 — cầu nâng', caps: ['LIFT'] },
+            {
+              code: `K${i + 1}-03`,
+              name: 'Khoang 3 — vùng an toàn cao áp',
+              caps: ['LIFT', 'HV_SAFE_ZONE', 'EV_CHARGER'],
+            },
+          ]
+        : [{ code: `K${i + 1}-01`, name: 'Khoang 1 — cầu nâng', caps: ['LIFT'] }];
+    for (const k of khoangs) {
+      await db.query(
+        `INSERT INTO bay (tenant_id, branch_id, code, name, capabilities)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [TENANT_A, b.id, k.code, k.name, k.caps],
+      );
+    }
+  }
+
+  /*
+   * Một đơn demo đã được khách duyệt — Phase 2.3.
+   *
+   * Không có nó thì màn "Lịch xưởng" luôn rỗng trên dữ liệu seed: người xem
+   * demo mở ra thấy "không còn hạng mục nào chờ phân công" và không hiểu màn
+   * hình này để làm gì. Một test E2E cũng phải tự bỏ qua vì không có gì để
+   * kiểm — mà test bị bỏ qua thì không chứng minh được điều gì.
+   *
+   * Duyệt bằng SQL trực tiếp thay vì đi qua OTP: seed không phải chỗ diễn lại
+   * luồng nghiệp vụ, và luồng đó đã có test riêng.
+   */
+  console.log('Tạo đơn demo đã duyệt để lịch xưởng có việc...');
+  {
+    const chiNhanh = branchesA[0]!.id;
+    const { rows: kh } = await db.query<{ id: string }>(
+      `INSERT INTO customer (tenant_id, type, display_name, phone)
+       VALUES ($1,'INDIVIDUAL','Trần Minh Khoa','0912345678') RETURNING id`,
+      [TENANT_A],
+    );
+    const { rows: xe } = await db.query<{ id: string }>(
+      `INSERT INTO vehicle (tenant_id, customer_id, plate_number, powertrain, make_name, model_name)
+       VALUES ($1,$2,'30A12345','ICE','Toyota','Vios') RETURNING id`,
+      [TENANT_A, kh[0]!.id],
+    );
+    const { rows: nguoi } = await db.query<{ id: string }>(
+      `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000003'`,
+      [TENANT_A],
+    );
+    const { rows: don } = await db.query<{ id: string }>(
+      `INSERT INTO repair_order (tenant_id, branch_id, vehicle_id, customer_id, code,
+                                 customer_complaint, odometer_in, status,
+                                 customer_access_token, created_by_user_id)
+       VALUES ($1,$2,$3,$4,'RO-DEMO-0001',
+               'Xe kêu ở phanh trước, cần kiểm tra và thay dầu', 42000, 'IN_PROGRESS',
+               'demo-tra-cuu-0001-token-du-dai-de-qua-rang-buoc', $5)
+       RETURNING id`,
+      [TENANT_A, chiNhanh, xe[0]!.id, kh[0]!.id, nguoi[0]!.id],
+    );
+    const { rows: bg } = await db.query<{ id: string }>(
+      `INSERT INTO quotation (tenant_id, repair_order_id, seq, labor_rate_per_hour,
+                              price_list_id, created_by_user_id)
+       SELECT $1, $2, 1, pl.labor_rate_per_hour, pl.id, $3
+         FROM price_list pl
+        WHERE pl.tenant_id = $1 AND pl.branch_id IS NULL
+          AND pl.effective_from <= now() AND (pl.effective_to IS NULL OR pl.effective_to > now())
+        LIMIT 1
+       RETURNING id`,
+      [TENANT_A, don[0]!.id, nguoi[0]!.id],
+    );
+    for (const ma of ['SV-BRAKE-PAD', 'SV-OIL-ENGINE']) {
+      await db.query(
+        `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, service_item_id,
+                                     description, quantity, unit_price, status, approval_source)
+         SELECT $1, $2, (SELECT COALESCE(max(seq),0)+1 FROM quotation_line WHERE quotation_id = $2),
+                'LABOR', si.id, si.name, 1,
+                round(si.standard_hours * (SELECT labor_rate_per_hour FROM quotation WHERE id = $2)),
+                'APPROVED', 'CUSTOMER'
+           FROM service_item si WHERE si.tenant_id = $1 AND si.code = $3`,
+        [TENANT_A, bg[0]!.id, ma],
+      );
+    }
+    await db.query(
+      `UPDATE quotation SET status = 'APPROVED', sent_at = now(),
+                            valid_until = now() + interval '7 days', responded_at = now(),
+                            approval_channel = 'IN_PERSON'
+        WHERE id = $1`,
+      [bg[0]!.id],
+    );
   }
 
   await db.query('COMMIT');

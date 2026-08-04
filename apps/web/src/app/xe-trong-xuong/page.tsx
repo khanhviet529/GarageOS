@@ -18,6 +18,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { ErrorState, Loading } from '@/components/ErrorState';
 import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
+import { BangCuon } from '@/components/BangCuon';
 
 export default function WorkshopPage() {
   const [orders, setOrders] = useState<RepairOrderListItem[] | null>(null);
@@ -99,7 +100,7 @@ export default function WorkshopPage() {
           )}
 
           {orders !== null && orders.length > 0 && (
-            <div className="table-scroll" style={{ marginTop: 12 }}>
+            <BangCuon moTa="Danh sách xe đang trong xưởng" style={{ marginTop: 12 }}>
               <table>
                 <thead>
                   <tr>
@@ -130,7 +131,7 @@ export default function WorkshopPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </BangCuon>
           )}
         </div>
       </main>

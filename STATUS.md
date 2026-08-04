@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1 + 2.2 (kho, giữ chỗ) xong**
+> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1–2.3 (kho, giữ chỗ, phân công) xong**
 
 ## Đang ở đâu
 
@@ -23,15 +23,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 1.6 | Máy trạng thái `RepairOrder` (3 lớp: contracts → service → trigger) | ✅ merged |
 | 2.1 | Kho: sổ kho chỉ-thêm, tồn được ràng buộc, giá vốn bình quân | ✅ merged |
 | 2.2 | Giữ chỗ khi khách duyệt, khoá theo thứ tự part_id, giữ chỗ một phần | ✅ merged |
-| 2.3 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.3 | Phân công khoang/thợ: exclusion constraint, chứng chỉ, năng lực khoang | ✅ merged |
+| 2.4 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 245 (domain 12, db 42, api 191) |
-| E2E Playwright | 42 kịch bản (5 accessibility bằng axe-core, 16 điểm ngắt responsive) |
-| Migration | 27 |
+| Test tự động | 261 (domain 12, db 42, api 207) |
+| E2E Playwright | 51 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 28 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -104,9 +105,17 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | `min-width: auto` của flexbox | `<select>` danh mục phụ tùng tự giãn theo option dài nhất và đẩy cả trang trượt ngang ở 375px, dù `.row` có `flex-wrap` và `.field` không đặt chiều rộng. Chỉ test điểm ngắt bắt được |
 | `ROLE_LABEL` ở web sai 3/6 khoá từ Phase 1 | `MANAGER`/`WAREHOUSE_KEEPER`/`ACCOUNTANT` thay vì `BRANCH_MANAGER`/`STORE_KEEPER`/`CASHIER`. Sống sót vì mọi ảnh chụp và mọi E2E đều đăng nhập bằng cố vấn dịch vụ — vai duy nhất đúng nhãn. Đã chuyển về `contracts` với kiểu `Record<Role, string>` để trình biên dịch bắt |
 
+## Bẫy đã gặp ở Phase 2.3 — phân công
+
+| Bẫy | Vì sao |
+|---|---|
+| Khoá dòng KHÔNG dùng được cho bài toán đặt lịch | Ở kho luôn có sẵn một dòng `stock_balance` để `FOR UPDATE`. Ở đây lịch đang TRỐNG — không tồn tại dòng nào để khoá, nên hai request đều thấy trống và đều ghi. Chỉ `EXCLUDE USING gist` giải được |
+| `scrollable-region-focusable` nằm sẵn ở 5 tệp từ Phase 1 mà axe không báo | axe chỉ bắt khi vùng THẬT SỰ đang cuộn được ở kích thước cửa sổ lúc test. Bảng nào chưa đủ rộng thì lọt. Lộ ra ở 2.3 chỉ vì lịch xưởng có 12 cột. Đã gom thành `BangCuon.tsx` để khung thứ mười không phải nhớ lại |
+| `aria-label` trên vùng cuộn làm `getByLabel` trong test khớp hai phần tử | `getByLabel` khớp cả `aria-label`, và "Tồn kho theo mã **phụ tùng**" trùng chuỗi với nhãn form "Phụ tùng". Dùng `{ exact: true }` |
+
 ## ⚠️ Lát cắt CHƯA có review độc lập
 
-**Phase 2.2 (giữ chỗ)** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
+**Phase 2.2 (giữ chỗ) và 2.3 (phân công)** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
 2026-08-08. Thay vào đó tôi tự rà soát đối kháng và tìm ra ba lỗi, cả ba đều đã
 sửa và có test hồi quy:
 

@@ -63,6 +63,24 @@ for (const bp of DIEM_NGAT) {
     }
   });
 
+  test(`lịch xưởng không trượt ngang ở ${bp.ten}`, async ({ page }) => {
+    // Lịch có một cột cho mỗi giờ làm việc (11 cột) cộng cột khoang — đây là
+    // bảng rộng nhất của cả ứng dụng, và ở 375px nó PHẢI cuộn riêng.
+    await page.setViewportSize({ width: bp.width, height: bp.height });
+    await page.goto('/dang-nhap');
+    await page.getByLabel('Số điện thoại').fill('0901000002');
+    await page.getByLabel('Mật khẩu').fill('demo1234');
+    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.waitForURL((u) => !u.pathname.includes('dang-nhap'));
+
+    await page.goto('/lich-xuong');
+    await expect(page.getByRole('columnheader', { name: 'Khoang' })).toBeVisible();
+    await khongTruotNgang(page, `lịch xưởng @${bp.width}`);
+    if (bp.width === 375) {
+      await page.screenshot({ path: `${SHOTS}/50-lich-xuong-375.png`, fullPage: true, caret: 'initial' });
+    }
+  });
+
   test(`màn kho không trượt ngang ở ${bp.ten}`, async ({ page }) => {
     // Bảng tồn kho có 6 cột và là trang dễ trượt ngang nhất trong toàn ứng
     // dụng. `.table-scroll` phải cuộn RIÊNG chứ không đẩy cả trang.

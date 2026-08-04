@@ -180,6 +180,45 @@ export const MOVEMENT_TYPE_LABEL: Record<string, string> = {
   ADJUSTMENT: 'Điều chỉnh',
 };
 
+
+// --- Phân công (Phase 2.3) --------------------------------------------------
+
+export interface Bay {
+  id: string; branchId: string; code: string; name: string; capabilities: string[];
+}
+
+export interface PendingWorkItem {
+  quotationLineId: string; repairOrderId: string; repairOrderCode: string;
+  plateNumber: string; powertrain: string; description: string;
+  standardHours: number; requiredCertifications: string[]; serviceCategory: string;
+}
+
+export interface TechnicianOption {
+  id: string; fullName: string; loadHours: number;
+  eligible: boolean;
+  /** Vì sao không chọn được — hiện ra thay vì ẩn người đó đi */
+  reason: string | null;
+}
+
+export interface WorkAssignmentItem {
+  id: string; repairOrderId: string; repairOrderCode: string; plateNumber: string;
+  quotationLineId: string; description: string;
+  technicianId: string; technicianName: string;
+  bayId: string; bayName: string;
+  plannedStart: string; plannedEnd: string;
+  status: string; qcNote: string | null; completionPercent: number | null; version: number;
+}
+
+export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
+  SCHEDULED: 'Đã xếp lịch',
+  IN_PROGRESS: 'Đang làm',
+  PAUSED: 'Tạm dừng',
+  DONE: 'Đã xong',
+  QC_PASSED: 'Đạt kiểm tra',
+  QC_FAILED: 'Không đạt',
+  CANCELLED: 'Đã huỷ',
+};
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -228,6 +267,21 @@ export const api = {
   },
   receiveStock: (input: unknown) =>
     call<{ id: string; onHand: number; avgCost: number }>('POST', '/api/v1/stock/receipts', input),
+
+  listBays: () => call<Bay[]>('GET', '/api/v1/bays'),
+  listPendingWork: () => call<PendingWorkItem[]>('GET', '/api/v1/assignments/pending-work'),
+  suggestTechnicians: (quotationLineId: string, plannedStart: string) =>
+    call<TechnicianOption[]>(
+      'GET',
+      `/api/v1/assignments/technician-options?quotationLineId=${quotationLineId}` +
+        `&plannedStart=${encodeURIComponent(plannedStart)}`,
+    ),
+  listSchedule: (date: string) =>
+    call<WorkAssignmentItem[]>('GET', `/api/v1/assignments?date=${date}`),
+  createAssignment: (input: unknown) =>
+    call<{ id: string; plannedEnd: string }>('POST', '/api/v1/assignments', input),
+  changeAssignmentStatus: (id: string, input: unknown) =>
+    call<{ status: string }>('POST', `/api/v1/assignments/${id}/status`, input),
 
   changeOrderStatus: (orderId: string, input: unknown) =>
     call<{ status: string; version: number }>(

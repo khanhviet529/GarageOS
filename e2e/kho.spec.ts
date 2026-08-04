@@ -35,7 +35,7 @@ test('thủ kho xem tồn, nhập kho, con số trên màn hình khớp sau khi 
   const giaTriPart = await page
     .locator('#nk-part option', { hasText: 'PT-FILTER-OIL' })
     .getAttribute('value');
-  await page.getByLabel('Phụ tùng').selectOption(giaTriPart ?? '');
+  await page.getByLabel('Phụ tùng', { exact: true }).selectOption(giaTriPart ?? '');
   await page.getByLabel('Số lượng').fill('7');
   await page.getByLabel('Giá vốn một đơn vị (đồng)').fill('99000');
   await page.getByLabel('Số phiếu / hoá đơn nhà cung cấp').fill('HD-E2E-01');
