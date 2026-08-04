@@ -8,6 +8,10 @@ Hệ thống quản lý xưởng dịch vụ ô tô đa chi nhánh, hỗ trợ x
 
 ---
 
+> 👋 **Mới tham gia dự án?** Đọc [`ONBOARDING.md`](ONBOARDING.md) trước — nó
+> gom lại: dự án làm gì, chạy lên thế nào, quy tắc nào không được vi phạm, và
+> toàn bộ danh sách việc còn phải làm.
+
 ## Dự án này giải quyết gì
 
 Một garage ô tô nhận xe, chẩn đoán, báo giá, sửa, rồi giao xe. Nghe đơn giản,
