@@ -872,3 +872,252 @@ describe('🔒 BC-04 — giữ chỗ chạy ngay khi khách duyệt (Phase 2.2)'
     }
   });
 });
+
+describe('🔒 Ba lỗi tự rà soát tìm ra sau 2.2 — giữ lại làm hồi quy', () => {
+  /** Tồn khả dụng của một SKU ở kho mặc định của chi nhánh đang test */
+  async function khaDung2(sku: string): Promise<number> {
+    const { rows } = await pool.query<{ kd: string }>(
+      `SELECT b.on_hand - b.reserved AS kd
+         FROM stock_balance b
+         JOIN part p ON p.id = b.part_id
+         JOIN warehouse w ON w.id = b.warehouse_id
+        WHERE p.sku = $1 AND w.branch_id = $2`,
+      [sku, branchId],
+    );
+    return Number(rows[0]?.kd ?? 0);
+  }
+
+  test('🔒 phụ tùng BẢO HÀNH vẫn phải giữ chỗ — nó vẫn rời khỏi kệ', async () => {
+    /*
+     * `is_warranty` nghĩa là KHÁCH KHÔNG TRẢ TIỀN, không phải là phụ tùng
+     * không rời khỏi kho. Bản đầu lọc `is_warranty = false` khi tìm dòng cần
+     * giữ chỗ, nên một bộ má phanh bảo hành được lấy khỏi kệ mà hệ thống vẫn
+     * coi là còn — tức là hứa cùng một bộ cho hai đơn.
+     *
+     * Không test nào ở 2.2 bắt được, vì mọi kịch bản đều dùng dòng thường.
+     */
+    const v = await call('POST', '/api/v1/vehicles', {
+      customerId,
+      plateNumber: `92W-${uniq}${(demDon += 1)}`,
+      powertrain: 'ICE',
+    });
+    const o = await call('POST', '/api/v1/repair-orders', {
+      vehicleId: v.body.id,
+      branchId,
+      customerComplaint: 'Bảo hành má phanh',
+      odometerIn: 50_000,
+    });
+    donDaDung.push(o.body.id as string);
+    const q = await call('POST', `/api/v1/repair-orders/${o.body.id}/quotations`);
+
+    const labor = await call('POST', `/api/v1/quotations/${q.body.id}/lines`, {
+      lineType: 'LABOR',
+      serviceItemId: serviceIds['SV-BRAKE-PAD'],
+      quantity: 1,
+      isWarranty: true,
+    });
+    assert.equal(labor.status, 201, JSON.stringify(labor.body));
+    const part = await call('POST', `/api/v1/quotations/${q.body.id}/lines`, {
+      lineType: 'PART',
+      partId: partIds['PT-BRAKE-PAD-F'],
+      parentLineId: labor.body.id,
+      quantity: 1,
+      isWarranty: true,
+    });
+    assert.equal(part.status, 201, JSON.stringify(part.body));
+    await call('POST', `/api/v1/quotations/${q.body.id}/send`);
+
+    const detail = await call('GET', `/api/v1/repair-orders/${o.body.id}`);
+    const kdTruoc = await khaDung2('PT-BRAKE-PAD-F');
+
+    const otp = await getOtp(detail.body.customerAccessToken, q.body.id);
+    const r = await call(
+      'POST',
+      `/api/v1/public/tracking/${detail.body.customerAccessToken}/respond`,
+      { quotationId: q.body.id, otp, decisions: [{ lineId: labor.body.id, approved: true }] },
+      false,
+    );
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+
+    assert.equal(
+      await khaDung2('PT-BRAKE-PAD-F'),
+      kdTruoc - 1,
+      'phụ tùng bảo hành không được giữ chỗ — cùng một bộ sẽ hứa cho hai đơn',
+    );
+  });
+
+  test('🔒 huỷ đơn NHẢ chỗ đang giữ — không thì hàng treo vĩnh viễn', async () => {
+    /*
+     * `available` thấp hơn thực tế, xưởng từ chối đơn mới cho món vẫn nằm
+     * nguyên trên kệ, và KHÔNG có báo động nào: `on_hand` vẫn đúng, đối soát
+     * INV-S-02 vẫn xanh. Chỉ thủ kho nhận ra, sau vài tuần.
+     *
+     * Comment ở migration 0027 đã liệt kê huỷ đơn là một trong bốn đường làm
+     * nhả chỗ. Viết ra được mà vẫn quên nối — nên phải có test, không phải
+     * comment.
+     */
+    const s = await newSentQuotation('X');
+    const kdTruoc = await khaDung2('PT-BRAKE-PAD-F');
+
+    const otp = await getOtp(s.trackingToken, s.quotationId);
+    const r = await call(
+      'POST',
+      `/api/v1/public/tracking/${s.trackingToken}/respond`,
+      {
+        quotationId: s.quotationId,
+        otp,
+        decisions: s.laborLineIds.map((id) => ({ lineId: id, approved: true })),
+      },
+      false,
+    );
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.equal(await khaDung2('PT-BRAKE-PAD-F'), kdTruoc - 1, 'chưa giữ chỗ thì test vô nghĩa');
+
+    const { rows: ro } = await pool.query<{ id: string }>(
+      `SELECT ro.id FROM repair_order ro
+         JOIN quotation q ON q.repair_order_id = ro.id WHERE q.id = $1`,
+      [s.quotationId],
+    );
+
+    const truocHuy = await call('GET', `/api/v1/repair-orders/${ro[0]!.id}`);
+    const huy = await call('POST', `/api/v1/repair-orders/${ro[0]!.id}/status`, {
+      to: 'CANCELLED',
+      cancelCategory: 'CUSTOMER_REQUEST',
+      cancelReason: 'Khách đổi ý, thử nhả chỗ',
+      version: truocHuy.body.version,
+    });
+    assert.equal(huy.status, 201, JSON.stringify(huy.body));
+
+    assert.equal(
+      await khaDung2('PT-BRAKE-PAD-F'),
+      kdTruoc,
+      'huỷ đơn không nhả chỗ — hàng bị treo vĩnh viễn mà không có báo động nào',
+    );
+
+    // Bản ghi KHÔNG bị xoá: vẫn giải thích được vì sao hàng từng bị treo
+    const { rows: sr } = await pool.query<{ status: string; released_reason: string | null }>(
+      'SELECT status, released_reason FROM stock_reservation WHERE repair_order_id = $1',
+      [ro[0]!.id],
+    );
+    assert.ok(sr.length > 0, 'bản ghi giữ chỗ bị xoá thay vì đổi trạng thái');
+    assert.equal(sr[0]!.status, 'RELEASED');
+    assert.match(sr[0]!.released_reason ?? '', /Huỷ đơn/);
+  });
+
+  test('🔒 giữ chỗ MỘT PHẦN được bù nốt khi hàng về', async () => {
+    /*
+     * BC-04 mục 5.1 bước 5: hàng về thì giữ chỗ nốt phần thiếu.
+     *
+     * Bản đầu bỏ qua cả dòng nếu đã tồn tại một bản ghi giữ chỗ ACTIVE, nên
+     * một dòng mới giữ được MỘT PHẦN sẽ không bao giờ được bù — đơn kẹt ở
+     * AWAITING_PARTS ngay cả khi kho đã đầy hàng trở lại.
+     *
+     * Gọi thẳng `reserveApprovedParts` vì luồng bù nốt (job nền) thuộc lát cắt
+     * sau; điều cần khoá lại bây giờ là HÀM đã cư xử đúng.
+     */
+    const { rows: w } = await pool.query<{ id: string; tenant_id: string; part_id: string }>(
+      `SELECT w.id, w.tenant_id, p.id AS part_id
+         FROM warehouse w, part p
+        WHERE w.branch_id = $1 AND w.is_default AND p.sku = 'PT-SPARK-PLUG'
+          AND p.tenant_id = w.tenant_id`,
+      [branchId],
+    );
+    const { rows: u } = await pool.query<{ id: string }>(
+      'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+      [w[0]!.tenant_id],
+    );
+    const kd = await khaDung2('PT-SPARK-PLUG');
+
+    // Rút xuống còn ĐÚNG 1 để dòng 3 cái chỉ giữ được một phần
+    const rut = kd - 1;
+    await pool.query(
+      `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                   unit_cost, reason, created_by_user_id)
+       VALUES ($1,$2,$3,'ADJUSTMENT',$4,0,'Rút để test giữ chỗ một phần',$5)`,
+      [w[0]!.tenant_id, w[0]!.id, w[0]!.part_id, -rut, u[0]!.id],
+    );
+
+    const v = await call('POST', '/api/v1/vehicles', {
+      customerId,
+      plateNumber: `92Y-${uniq}${(demDon += 1)}`,
+      powertrain: 'ICE',
+    });
+    const o = await call('POST', '/api/v1/repair-orders', {
+      vehicleId: v.body.id,
+      branchId,
+      customerComplaint: 'Thay bugi',
+      odometerIn: 60_000,
+    });
+    donDaDung.push(o.body.id as string);
+    const q = await call('POST', `/api/v1/repair-orders/${o.body.id}/quotations`);
+    const labor = await call('POST', `/api/v1/quotations/${q.body.id}/lines`, {
+      lineType: 'LABOR', serviceItemId: serviceIds['SV-BRAKE-PAD'], quantity: 1,
+    });
+    await call('POST', `/api/v1/quotations/${q.body.id}/lines`, {
+      lineType: 'PART',
+      partId: partIds['PT-SPARK-PLUG'],
+      parentLineId: labor.body.id,
+      quantity: 3,
+    });
+    await call('POST', `/api/v1/quotations/${q.body.id}/send`);
+    const detail = await call('GET', `/api/v1/repair-orders/${o.body.id}`);
+
+    try {
+      const otp = await getOtp(detail.body.customerAccessToken, q.body.id);
+      const r = await call(
+        'POST',
+        `/api/v1/public/tracking/${detail.body.customerAccessToken}/respond`,
+        { quotationId: q.body.id, otp, decisions: [{ lineId: labor.body.id, approved: true }] },
+        false,
+      );
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+
+      // Giữ được 1/3
+      const thieu = r.body.thieuHang as { sku: string; canCo: number; giuDuoc: number }[];
+      assert.equal(thieu.length, 1, JSON.stringify(thieu));
+      assert.equal(thieu[0]!.giuDuoc, 1);
+      assert.equal(thieu[0]!.canCo, 3);
+
+      // Hàng về
+      await pool.query(
+        `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                     unit_cost, created_by_user_id)
+         VALUES ($1,$2,$3,'RECEIPT',10,200000,$4)`,
+        [w[0]!.tenant_id, w[0]!.id, w[0]!.part_id, u[0]!.id],
+      );
+
+      // Chạy lại đúng hàm giữ chỗ — phải bù nốt 2 cái còn thiếu
+      const { reserveApprovedParts } = await import('../src/stock/reserve-parts');
+      const c = await pool.connect();
+      try {
+        await c.query('BEGIN');
+        const kq = await reserveApprovedParts(c, w[0]!.tenant_id, o.body.id as string);
+        await c.query('COMMIT');
+        assert.deepEqual(kq.thieu, [], 'hàng đã về mà vẫn báo thiếu');
+        assert.equal(kq.soBanGhi, 1, 'không tạo bản ghi bù cho phần còn thiếu');
+      } finally {
+        c.release();
+      }
+
+      const { rows: tong } = await pool.query<{ tong: string }>(
+        `SELECT sum(quantity) AS tong FROM stock_reservation
+          WHERE repair_order_id = $1 AND status = 'ACTIVE'`,
+        [o.body.id],
+      );
+      assert.equal(Number(tong[0]!.tong), 3, 'tổng chỗ đã giữ không bằng số khách duyệt');
+    } finally {
+      await pool.query(
+        `UPDATE stock_reservation SET status = 'RELEASED', released_reason = 'Dọn sau test'
+          WHERE repair_order_id = $1 AND status = 'ACTIVE'`,
+        [o.body.id],
+      );
+      // Trả tồn về đúng mức trước test: đã rút `rut`, đã nhập thêm 10
+      await pool.query(
+        `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                     unit_cost, reason, created_by_user_id)
+         VALUES ($1,$2,$3,'ADJUSTMENT',$4,0,'Hoàn lại sau test giữ chỗ một phần',$5)`,
+        [w[0]!.tenant_id, w[0]!.id, w[0]!.part_id, rut - 10, u[0]!.id],
+      );
+    }
+  });
+});

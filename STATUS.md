@@ -29,7 +29,7 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 242 (domain 12, db 42, api 188) |
+| Test tự động | 245 (domain 12, db 42, api 191) |
 | E2E Playwright | 42 kịch bản (5 accessibility bằng axe-core, 16 điểm ngắt responsive) |
 | Migration | 27 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
@@ -103,6 +103,21 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | Trigger function THƯỜNG chạy bằng quyền người gọi | `cong_vao_ton_kho()` ghi `stock_balance` mà `garageos_app` không có quyền ghi. Phải `SECURITY DEFINER` + `SET search_path` — nếu không thì hỏng ngay lần nhập kho đầu tiên |
 | `min-width: auto` của flexbox | `<select>` danh mục phụ tùng tự giãn theo option dài nhất và đẩy cả trang trượt ngang ở 375px, dù `.row` có `flex-wrap` và `.field` không đặt chiều rộng. Chỉ test điểm ngắt bắt được |
 | `ROLE_LABEL` ở web sai 3/6 khoá từ Phase 1 | `MANAGER`/`WAREHOUSE_KEEPER`/`ACCOUNTANT` thay vì `BRANCH_MANAGER`/`STORE_KEEPER`/`CASHIER`. Sống sót vì mọi ảnh chụp và mọi E2E đều đăng nhập bằng cố vấn dịch vụ — vai duy nhất đúng nhãn. Đã chuyển về `contracts` với kiểu `Record<Role, string>` để trình biên dịch bắt |
+
+## ⚠️ Lát cắt CHƯA có review độc lập
+
+**Phase 2.2 (giữ chỗ)** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
+2026-08-08. Thay vào đó tôi tự rà soát đối kháng và tìm ra ba lỗi, cả ba đều đã
+sửa và có test hồi quy:
+
+| Lỗi | Vì sao không test nào bắt được |
+|---|---|
+| Phụ tùng **bảo hành** không được giữ chỗ | `is_warranty` nghĩa là khách không trả tiền, KHÔNG phải là phụ tùng không rời khỏi kệ. Mọi kịch bản 2.2 đều dùng dòng thường |
+| **Huỷ đơn** không nhả chỗ → hàng treo vĩnh viễn | `on_hand` vẫn đúng nên đối soát INV-S-02 vẫn xanh. Chỉ thủ kho nhận ra, sau vài tuần. Comment ở 0027 đã liệt kê huỷ đơn là một đường nhả chỗ — viết ra được mà vẫn quên nối |
+| Giữ chỗ **một phần** không bao giờ được bù nốt | `NOT EXISTS` bỏ qua cả dòng nếu đã có bản ghi nào. Đơn kẹt ở `AWAITING_PARTS` kể cả khi kho đã đầy hàng trở lại (BC-04 mục 5.1 bước 5) |
+
+🔒 Khi Codex dùng lại được, **chạy review cho lát cắt này trước** — tự rà soát
+không thay được một con mắt không có sẵn kết luận trong đầu.
 
 ## Quy trình bắt buộc
 

@@ -33,6 +33,7 @@ interface DongCanGiu {
   sku: string;
   part_name: string;
   quantity: string;
+  da_giu: string;
 }
 
 /**
@@ -61,20 +62,31 @@ export async function reserveApprovedParts(
    * này và bằng test đồng thời trong `stock.spec.ts`.
    */
   const { rows: canGiu } = await tx.query<DongCanGiu>(
+    /*
+     * KHÔNG lọc `is_warranty = false`.
+     *
+     * Bản đầu có lọc, và đó là lỗi: `is_warranty` nghĩa là KHÁCH KHÔNG TRẢ
+     * TIỀN, không phải là phụ tùng không rời khỏi kho. Một bộ má phanh bảo
+     * hành vẫn được lấy khỏi kệ và lắp lên xe. Loại nó khỏi luồng giữ chỗ
+     * nghĩa là xưởng hứa cùng một bộ má phanh cho hai đơn — đúng cái mà cả lát
+     * cắt này sinh ra để chống, chỉ khác ở chỗ nó im lặng hơn.
+     *
+     * Đã giữ được BAO NHIÊU cũng phải tính, chứ không phải "có bản ghi nào
+     * chưa". Bản đầu bỏ qua cả dòng nếu đã tồn tại một giữ chỗ ACTIVE, nên một
+     * dòng mới giữ được MỘT PHẦN sẽ không bao giờ được bù nốt khi hàng về —
+     * và đó chính là bước 5 của BC-04 mục 5.1.
+     */
     `SELECT ql.id AS quotation_line_id, ql.part_id, p.sku, p.name AS part_name,
-            ql.quantity
+            ql.quantity,
+            COALESCE((SELECT sum(sr.quantity) FROM stock_reservation sr
+                       WHERE sr.quotation_line_id = ql.id
+                         AND sr.status IN ('ACTIVE', 'CONSUMED')), 0) AS da_giu
        FROM quotation_line ql
        JOIN quotation q ON q.id = ql.quotation_id
        JOIN part      p ON p.id = ql.part_id
       WHERE q.repair_order_id = $1
         AND ql.line_type = 'PART'
         AND ql.status = 'APPROVED'
-        AND ql.is_warranty = false
-        AND NOT EXISTS (
-          SELECT 1 FROM stock_reservation sr
-           WHERE sr.quotation_line_id = ql.id
-             AND sr.status IN ('ACTIVE', 'CONSUMED')
-        )
       ORDER BY ql.part_id`,
     [repairOrderId],
   );
@@ -129,6 +141,9 @@ export async function reserveApprovedParts(
 
   for (const dong of canGiu) {
     const canCo = Number(dong.quantity);
+    const daGiu = Number(dong.da_giu);
+    const conThieu = canCo - daGiu;
+    if (conThieu <= 0) continue;   // dòng này đã giữ đủ ở lượt trước
 
     /*
      * Khoá dòng tồn TRƯỚC khi quyết định giữ bao nhiêu.
@@ -146,9 +161,10 @@ export async function reserveApprovedParts(
 
     // BC-04 mục 5.1: giữ phần có, đánh dấu phần thiếu. Không từ chối cả dòng —
     // khách đã đồng ý trả tiền cho nó rồi.
-    const giuDuoc = Math.min(canCo, Math.max(khaDung, 0));
+    const giuThem = Math.min(conThieu, Math.max(khaDung, 0));
+    const giuDuoc = daGiu + giuThem;
 
-    if (giuDuoc > 0) {
+    if (giuThem > 0) {
       await tx.query(
         `INSERT INTO stock_reservation (
            tenant_id, warehouse_id, part_id, repair_order_id, quotation_line_id,
@@ -160,7 +176,7 @@ export async function reserveApprovedParts(
           dong.part_id,
           repairOrderId,
           dong.quotation_line_id,
-          giuDuoc,
+          giuThem,
           String(soNgayGiu),
         ],
       );
