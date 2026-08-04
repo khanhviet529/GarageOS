@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-02 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1 (kho) xong**
+> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1 + 2.2 (kho, giữ chỗ) xong**
 
 ## Đang ở đâu
 
@@ -22,15 +22,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 1.5 | Trang tra cứu công khai + OTP + duyệt từng phần | ✅ merged |
 | 1.6 | Máy trạng thái `RepairOrder` (3 lớp: contracts → service → trigger) | ✅ merged |
 | 2.1 | Kho: sổ kho chỉ-thêm, tồn được ràng buộc, giá vốn bình quân | ✅ merged |
-| 2.2 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.2 | Giữ chỗ khi khách duyệt, khoá theo thứ tự part_id, giữ chỗ một phần | ✅ merged |
+| 2.3 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 237 (domain 12, db 42, api 183) |
+| Test tự động | 242 (domain 12, db 42, api 188) |
 | E2E Playwright | 42 kịch bản (5 accessibility bằng axe-core, 16 điểm ngắt responsive) |
-| Migration | 26 |
+| Migration | 27 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -66,6 +67,9 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | `node dist/main.js` báo `ERR_MODULE_NOT_FOUND` cho `@garageos/db` | `tsc` chỉ biên dịch `apps/api`; sản phẩm vẫn `import '@garageos/db'`, mà package đó trỏ `main` vào **TypeScript thô**. `tsx` hiểu, `node` không. Phải **gói** bằng esbuild — xem `apps/api/build.mjs` |
 
 | E2E chạy với `next dev` đỏ ngẫu nhiên và chậm gấp 10 lần | Cùng một commit: `next dev` → 8/42 đỏ trong 10,1 phút, mỗi lần đỏ một bộ khác; `next build && next start` → 42/42 xanh trong 1,0 phút. Dev server biên dịch lại theo yêu cầu nên timeout của Playwright bắn trúng lúc đang biên dịch. **Luôn chạy E2E trên bản build**, như CI làm — đỏ trên dev server không phải bằng chứng code sai |
+
+| Seed đỏ với "cannot truncate a table referenced in a foreign key constraint" | Thêm bảng mới mà quên đưa vào danh sách `TRUNCATE` của `infra/seed.ts`. Thiết kế **không** dùng CASCADE chính là để lỗi này ồn ào — nhưng chạy `pnpm db:seed >/dev/null` thì che mất, và mọi test sau đó chạy trên dữ liệu cũ |
+| Test duyệt báo giá làm cạn dần tồn kho seed | Từ 2.2, mỗi lần khách duyệt để lại một bản ghi giữ chỗ ACTIVE. Không nhả thì sau ~12 lần chạy `PT-BRAKE-PAD-F` hết khả dụng và những test **chẳng liên quan** bắt đầu đỏ. Bộ test phải tự nhả ở `after()` |
 
 ## Nợ kỹ thuật đã biết
 

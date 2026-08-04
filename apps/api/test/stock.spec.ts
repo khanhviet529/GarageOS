@@ -584,3 +584,322 @@ describe('🔒 Giá vốn dưới tranh chấp — phát hiện của codex-revi
     }
   });
 });
+
+describe('🔒 Giữ chỗ — Phase 2.2 (BC-04)', () => {
+  let demGiuCho = 0;
+  function uniqGiuCho(): string {
+    demGiuCho += 1;
+    return `${process.pid.toString().slice(-4)}${demGiuCho.toString().padStart(3, '0')}`;
+  }
+
+  /**
+   * Dựng một đơn có báo giá đã gửi kèm N dòng phụ tùng, trả về hàm "khách
+   * duyệt". Dựng cảnh bằng SQL vì luồng API đầy đủ đã có test riêng — trọng tâm
+   * ở đây là chuyện xảy ra LÚC duyệt, dưới tranh chấp.
+   */
+  async function dungDonChoDuyet(
+    phuTungCanDuyet: { partId: string; quantity: number }[],
+  ): Promise<{ orderId: string; duyet: () => Promise<void>; donDep: () => Promise<void> }> {
+    const { rows: br } = await pool.query<{ id: string }>(
+      `SELECT id FROM branch WHERE tenant_id = $1 AND code = 'HN01'`,
+      [TENANT_A],
+    );
+    const { rows: u } = await pool.query<{ id: string }>(
+      `SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1`,
+      [TENANT_A],
+    );
+    const { rows: cust } = await pool.query<{ id: string }>(
+      `INSERT INTO customer (tenant_id, type, display_name, phone)
+       VALUES ($1,'INDIVIDUAL',$2,$3) RETURNING id`,
+      [TENANT_A, `Khách giữ chỗ ${uniqGiuCho()}`, `036${uniqGiuCho()}`],
+    );
+    const { rows: veh } = await pool.query<{ id: string }>(
+      `INSERT INTO vehicle (tenant_id, customer_id, plate_number, powertrain)
+       VALUES ($1,$2,$3,'ICE') RETURNING id`,
+      [TENANT_A, cust[0]!.id, `99A-${uniqGiuCho()}`],
+    );
+    const { rows: ro } = await pool.query<{ id: string }>(
+      `INSERT INTO repair_order (tenant_id, branch_id, vehicle_id, customer_id, code,
+                                 customer_complaint, odometer_in, status,
+                                 customer_access_token, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,'Thử giữ chỗ',1000,'AWAITING_APPROVAL',$6,$7) RETURNING id`,
+      [
+        TENANT_A,
+        br[0]!.id,
+        veh[0]!.id,
+        cust[0]!.id,
+        `RO-GC-${uniqGiuCho()}`,
+        `tok-giu-cho-${uniqGiuCho()}-${uniqGiuCho()}-${uniqGiuCho()}-${uniqGiuCho()}`,
+        u[0]!.id,
+      ],
+    );
+    const { rows: pl } = await pool.query<{ id: string; labor_rate_per_hour: string }>(
+      `SELECT id, labor_rate_per_hour FROM price_list
+        WHERE tenant_id = $1 AND effective_from <= now()
+          AND (effective_to IS NULL OR effective_to > now())
+        ORDER BY (branch_id IS NULL) LIMIT 1`,
+      [TENANT_A],
+    );
+    const { rows: q } = await pool.query<{ id: string }>(
+      // Tạo ở NHÁP rồi mới gửi — trigger INV-Q-05 (0019) đóng băng mọi thay đổi
+      // sau khi gửi, kể cả việc thêm dòng. Đây đúng là thứ tự của luồng thật.
+      `INSERT INTO quotation (tenant_id, repair_order_id, seq, labor_rate_per_hour,
+                              price_list_id, created_by_user_id)
+       VALUES ($1,$2,1,$3,$4,$5) RETURNING id`,
+      [TENANT_A, ro[0]!.id, pl[0]!.labor_rate_per_hour, pl[0]!.id, u[0]!.id],
+    );
+
+    // Dòng công làm cha — INV-Q-02 bắt buộc phụ tùng phải gắn vào một hạng mục
+    const { rows: sv } = await pool.query<{ id: string }>(
+      `SELECT id FROM service_item WHERE tenant_id = $1 LIMIT 1`,
+      [TENANT_A],
+    );
+    const { rows: cha } = await pool.query<{ id: string }>(
+      `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, service_item_id,
+                                   description, quantity, unit_price)
+       VALUES ($1,$2,1,'LABOR',$3,'Công thử',1,100000) RETURNING id`,
+      [TENANT_A, q[0]!.id, sv[0]!.id],
+    );
+    let seq = 1;
+    for (const pt of phuTungCanDuyet) {
+      seq += 1;
+      await pool.query(
+        `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, part_id,
+                                     parent_line_id, description, quantity, unit_price)
+         VALUES ($1,$2,$3,'PART',$4,$5,'Phụ tùng thử',$6,100000)`,
+        [TENANT_A, q[0]!.id, seq, pt.partId, cha[0]!.id, pt.quantity],
+      );
+    }
+
+    await pool.query(
+      `UPDATE quotation
+          SET status = 'SENT', sent_at = now(), valid_until = now() + interval '7 days'
+        WHERE id = $1`,
+      [q[0]!.id],
+    );
+
+    /*
+     * "Khách duyệt": đặt dòng công APPROVED (trigger lan xuống dòng phụ tùng)
+     * rồi giữ chỗ — TRONG CÙNG MỘT giao dịch, như luồng thật.
+     *
+     * `ORDER BY ql.part_id` ở đây phải khớp với `reserveApprovedParts`: đó
+     * chính là thứ đang được kiểm ở test chống deadlock bên dưới.
+     */
+    const duyet = async (): Promise<void> => {
+      const p = new Pool({ connectionString: ADMIN_URL, max: 1 });
+      try {
+        const c = await p.connect();
+        try {
+          await c.query('BEGIN');
+          await c.query(
+            `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'CUSTOMER'
+              WHERE id = $1`,
+            [cha[0]!.id],
+          );
+          await c.query(
+            `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
+                                            quotation_line_id, quantity, expires_at)
+             SELECT $1, w.id, ql.part_id, $2, ql.id, ql.quantity, now() + interval '7 days'
+               FROM quotation_line ql
+               JOIN quotation qq   ON qq.id = ql.quotation_id
+               JOIN repair_order r ON r.id = qq.repair_order_id
+               JOIN warehouse w    ON w.branch_id = r.branch_id AND w.is_default
+              WHERE qq.repair_order_id = $2 AND ql.line_type = 'PART'
+                AND ql.status = 'APPROVED'
+              ORDER BY ql.part_id`,
+            [TENANT_A, ro[0]!.id],
+          );
+          await c.query('COMMIT');
+        } catch (e) {
+          await c.query('ROLLBACK');
+          throw e;
+        } finally {
+          c.release();
+        }
+      } finally {
+        await p.end();
+      }
+    };
+
+    /*
+     * Dọn sạch cảnh đã dựng, theo đúng thứ tự ngược.
+     *
+     * Phải hạ báo giá về NHÁP trước khi xoá dòng: trigger INV-Q-05 chặn cả
+     * DELETE trên báo giá đã gửi — đúng như nó phải làm. Đây là lý do dọn dẹp
+     * cần một hàm riêng chứ không phải vài câu DELETE rải rác ở `finally`.
+     *
+     * Không dọn thì mỗi lần chạy để lại một đơn + xe + khách trong dữ liệu
+     * demo, và màn "Xe trong xưởng" đầy xe 99A-… không có thật.
+     */
+    const donDep = async (): Promise<void> => {
+      await pool.query(
+        `UPDATE stock_reservation SET status = 'RELEASED', released_reason = 'Dọn test'
+          WHERE repair_order_id = $1 AND status = 'ACTIVE'`,
+        [ro[0]!.id],
+      );
+      await pool.query('DELETE FROM stock_reservation WHERE repair_order_id = $1', [ro[0]!.id]);
+      await pool.query(`UPDATE quotation SET status = 'DRAFT' WHERE id = $1`, [q[0]!.id]);
+      await pool.query('DELETE FROM quotation_line WHERE quotation_id = $1', [q[0]!.id]);
+      await pool.query('DELETE FROM quotation WHERE id = $1', [q[0]!.id]);
+      await pool.query('DELETE FROM repair_order WHERE id = $1', [ro[0]!.id]);
+      await pool.query('DELETE FROM vehicle_ownership WHERE vehicle_id = $1', [veh[0]!.id]);
+      await pool.query('DELETE FROM vehicle WHERE id = $1', [veh[0]!.id]);
+      await pool.query('DELETE FROM customer WHERE id = $1', [cust[0]!.id]);
+    };
+
+    return { orderId: ro[0]!.id, duyet, donDep };
+  }
+
+  test('🔒 INV-S-05: hai đơn tranh món cuối cùng, chỉ một đơn giữ được', async () => {
+    /*
+     * Đúng kịch bản mở đầu BC-04: kho còn một bộ má phanh, hai khách duyệt
+     * cách nhau một phút. Chỉ kiểm `tồn > 0` rồi cho qua thì cả hai đều nhận,
+     * và thợ thứ hai ra kho không có hàng — sau khi hệ thống đã hứa với khách
+     * và đã xếp lịch thợ.
+     */
+    const kho = await khoMacDinh();
+    const { rows: u } = await pool.query<{ id: string }>(
+      'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+      [TENANT_A],
+    );
+    const { rows: p } = await pool.query<{ id: string }>(
+      `INSERT INTO part (tenant_id, sku, name, unit, category, min_stock_level)
+       VALUES ($1, $2, 'Phụ tùng khan hiếm', 'cái', 'Thử', 0) RETURNING id`,
+      [TENANT_A, `PT-KHAN-${uniqGiuCho()}`],
+    );
+    const part = p[0]!.id;
+    await pool.query(
+      `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                   unit_cost, created_by_user_id)
+       VALUES ($1,$2,$3,'RECEIPT',1,500000,$4)`,
+      [TENANT_A, kho, part, u[0]!.id],
+    );
+
+    const donA = await dungDonChoDuyet([{ partId: part, quantity: 1 }]);
+    const donB = await dungDonChoDuyet([{ partId: part, quantity: 1 }]);
+
+    try {
+      const kq = await Promise.allSettled([donA.duyet(), donB.duyet()]);
+      const thanhCong = kq.filter((r) => r.status === 'fulfilled').length;
+      assert.equal(thanhCong, 1, `${thanhCong} đơn giữ được chỗ cho món chỉ còn 1`);
+
+      const { rows: bal } = await pool.query<{ on_hand: string; reserved: string }>(
+        'SELECT on_hand, reserved FROM stock_balance WHERE warehouse_id = $1 AND part_id = $2',
+        [kho, part],
+      );
+      // 🔒 Giữ chỗ KHÔNG đụng tồn thực tế — hàng vẫn nằm trên kệ tới lúc xuất
+      assert.equal(Number(bal[0]!.on_hand), 1, 'giữ chỗ làm đổi tồn thực tế');
+      assert.equal(Number(bal[0]!.reserved), 1);
+    } finally {
+      await donA.donDep();
+      await donB.donDep();
+      await pool.query('DELETE FROM stock_movement WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM stock_balance WHERE part_id = $1', [part]);
+      await pool.query('DELETE FROM part WHERE id = $1', [part]);
+    }
+  });
+
+  test('🔒 khoá theo thứ tự part_id: hai đơn cần cùng hai món, không deadlock', async () => {
+    /*
+     * Đơn 1 và đơn 2 cùng cần món A và món B. Nếu đơn 1 khoá A rồi chờ B trong
+     * khi đơn 2 khoá B rồi chờ A thì thành chu trình chờ, và PostgreSQL giết
+     * một trong hai sau `deadlock_timeout` — nạn nhân là một khách đang bấm
+     * duyệt trên điện thoại.
+     *
+     * `ORDER BY part_id` làm mọi giao dịch giành khoá cùng một thứ tự, nên
+     * không tạo được chu trình. CẢ HAI phải qua.
+     *
+     * Chú ý hai đơn khai phụ tùng theo thứ tự NGƯỢC nhau: nếu code khoá theo
+     * thứ tự dòng báo giá thay vì theo `part_id`, test này đỏ.
+     */
+    const kho = await khoMacDinh();
+    const { rows: u } = await pool.query<{ id: string }>(
+      'SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1',
+      [TENANT_A],
+    );
+    const taoPart = async (ten: string): Promise<string> => {
+      const { rows } = await pool.query<{ id: string }>(
+        `INSERT INTO part (tenant_id, sku, name, unit, category, min_stock_level)
+         VALUES ($1, $2, $3, 'cái', 'Thử', 0) RETURNING id`,
+        [TENANT_A, `PT-DL-${uniqGiuCho()}`, ten],
+      );
+      await pool.query(
+        `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                     unit_cost, created_by_user_id)
+         VALUES ($1,$2,$3,'RECEIPT',50,100000,$4)`,
+        [TENANT_A, kho, rows[0]!.id, u[0]!.id],
+      );
+      return rows[0]!.id;
+    };
+    const partA = await taoPart('Món A');
+    const partB = await taoPart('Món B');
+
+    const don1 = await dungDonChoDuyet([
+      { partId: partA, quantity: 2 },
+      { partId: partB, quantity: 2 },
+    ]);
+    const don2 = await dungDonChoDuyet([
+      { partId: partB, quantity: 3 },
+      { partId: partA, quantity: 3 },
+    ]);
+
+    try {
+      const kq = await Promise.allSettled([don1.duyet(), don2.duyet()]);
+      assert.deepEqual(
+        kq
+          .filter((r) => r.status === 'rejected')
+          .map((r) => String((r as PromiseRejectedResult).reason).slice(0, 90)),
+        [],
+        'có giao dịch bị giết — nhiều khả năng deadlock do khoá sai thứ tự',
+      );
+
+      for (const part of [partA, partB]) {
+        const { rows } = await pool.query<{ reserved: string }>(
+          'SELECT reserved FROM stock_balance WHERE warehouse_id = $1 AND part_id = $2',
+          [kho, part],
+        );
+        assert.equal(Number(rows[0]!.reserved), 5, 'phần giữ chỗ cộng dồn sai');
+      }
+    } finally {
+      await don1.donDep();
+      await don2.donDep();
+      for (const part of [partA, partB]) {
+        await pool.query('DELETE FROM stock_movement WHERE part_id = $1', [part]);
+        await pool.query('DELETE FROM stock_balance WHERE part_id = $1', [part]);
+        await pool.query('DELETE FROM part WHERE id = $1', [part]);
+      }
+    }
+  });
+
+  test('🔒 nhả chỗ trả lại hàng khả dụng, tồn thực tế không đổi', async () => {
+    const kho = await khoMacDinh();
+    const part = await phuTung('PT-CABIN-FILTER');
+    const doc = async (): Promise<{ onHand: number; reserved: number }> => {
+      const { rows } = await pool.query<{ on_hand: string; reserved: string }>(
+        'SELECT on_hand, reserved FROM stock_balance WHERE warehouse_id = $1 AND part_id = $2',
+        [kho, part],
+      );
+      return { onHand: Number(rows[0]!.on_hand), reserved: Number(rows[0]!.reserved) };
+    };
+
+    const truoc = await doc();
+    const don = await dungDonChoDuyet([{ partId: part, quantity: 3 }]);
+    await don.duyet();
+
+    const giua = await doc();
+    assert.equal(giua.reserved, truoc.reserved + 3);
+    assert.equal(giua.onHand, truoc.onHand, 'giữ chỗ làm đổi tồn thực tế');
+
+    await pool.query(
+      `UPDATE stock_reservation SET status = 'RELEASED', released_reason = 'Huỷ đơn thử'
+        WHERE repair_order_id = $1 AND status = 'ACTIVE'`,
+      [don.orderId],
+    );
+
+    const sau = await doc();
+    assert.equal(sau.reserved, truoc.reserved, 'nhả chỗ không trả lại hàng khả dụng');
+    assert.equal(sau.onHand, truoc.onHand, 'nhả chỗ làm đổi tồn thực tế');
+
+    await don.donDep();
+  });
+});

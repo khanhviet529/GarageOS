@@ -18,7 +18,11 @@ let token = '';
 let branchId = '';
 let customerId = '';
 let pool: Pool;
-const uniq = Date.now().toString().slice(-6);
+/*
+ * Sáu chữ số cuối của mili-giây quay vòng mỗi ~16,7 phút — hai lần chạy cách
+ * nhau đúng một vòng sinh ra cùng biển số. Thêm pid để không bao giờ trùng.
+ */
+const uniq = `${Date.now().toString().slice(-6)}${process.pid.toString().slice(-3)}`;
 let serviceIds: Record<string, string> = {};
 let partIds: Record<string, string> = {};
 
@@ -44,14 +48,35 @@ async function call(
  * Dựng một đơn có báo giá ĐÃ GỬI gồm 2 hạng mục công, mỗi hạng mục kèm 1 phụ
  * tùng — đúng hình dạng của ví dụ trong BC-02 mục 3.
  */
+/**
+ * Mọi đơn do file test này dựng lên — để nhả chỗ ở `after()`.
+ *
+ * 🔒 Cần thiết từ Phase 2.2: mỗi lần khách duyệt là một bản ghi giữ chỗ ACTIVE
+ * chiếm hàng trong seed. Không nhả thì chạy lại vài lần là `PT-BRAKE-PAD-F`
+ * hết khả dụng, và những test CHẲNG LIÊN QUAN bắt đầu đỏ với lý do khó hiểu —
+ * đúng loại lỗi tốn hàng giờ để lần ra.
+ */
+const donDaDung: string[] = [];
+
+/*
+ * `suffix` chỉ là NHÃN để đọc log — biển số còn kèm số đếm tăng dần.
+ *
+ * Trước đây tính duy nhất phụ thuộc vào việc người viết test nhớ chữ cái nào
+ * đã dùng. Bảng chữ cái cạn dần theo từng đợt, và hai test thêm ở Phase 2.2
+ * lấy trúng R/S đã có người dùng. Triệu chứng là "biển số đã có hồ sơ" ở một
+ * test chẳng liên quan gì tới biển số.
+ */
+let demDon = 0;
+
 async function newSentQuotation(suffix: string): Promise<{
   trackingToken: string;
   quotationId: string;
   laborLineIds: string[];
   totalAmount: number;
 }> {
+  demDon += 1;
   const v = await call('POST', '/api/v1/vehicles', {
-    customerId, plateNumber: `92T-${uniq}${suffix}`, powertrain: 'ICE',
+    customerId, plateNumber: `92T-${uniq}${suffix}${demDon}`, powertrain: 'ICE',
   });
   assert.equal(v.status, 201, JSON.stringify(v.body));
 
@@ -61,6 +86,8 @@ async function newSentQuotation(suffix: string): Promise<{
     odometerIn: 45_000,
   });
   assert.equal(o.status, 201, JSON.stringify(o.body));
+
+  donDaDung.push(o.body.id as string);
 
   const q = await call('POST', `/api/v1/repair-orders/${o.body.id}/quotations`);
   const laborLineIds: string[] = [];
@@ -136,6 +163,15 @@ before(async () => {
 });
 
 after(async () => {
+  // Nhả chỗ trước khi đóng kết nối. Đổi trạng thái chứ không xoá — 0027 thu
+  // hồi quyền DELETE, và bản ghi đã nhả vẫn là dữ liệu giải thích được.
+  if (donDaDung.length > 0) {
+    await pool.query(
+      `UPDATE stock_reservation SET status = 'RELEASED', released_reason = 'Dọn sau test'
+        WHERE repair_order_id = ANY($1) AND status = 'ACTIVE'`,
+      [donDaDung],
+    );
+  }
   await pool.end();
 });
 
@@ -671,5 +707,168 @@ describe('🔒 Đợt 4 — lỗ hổng logic từ vòng rà soát nhiều revie
       /INV-Q-05/,
       'gia hạn được báo giá đã gửi',
     );
+  });
+});
+
+describe('🔒 BC-04 — giữ chỗ chạy ngay khi khách duyệt (Phase 2.2)', () => {
+  /** Tồn khả dụng của một SKU ở kho mặc định của chi nhánh đang test */
+  async function khaDung(sku: string): Promise<number> {
+    const { rows } = await pool.query<{ kd: string }>(
+      `SELECT b.on_hand - b.reserved AS kd
+         FROM stock_balance b
+         JOIN part p ON p.id = b.part_id
+         JOIN warehouse w ON w.id = b.warehouse_id
+        WHERE p.sku = $1 AND w.branch_id = $2`,
+      [sku, branchId],
+    );
+    return Number(rows[0]?.kd ?? 0);
+  }
+
+  test('duyệt xong thì phụ tùng đã được giữ chỗ, tồn thực tế KHÔNG đổi', async () => {
+    /*
+     * BC-04 mục 1: giữ chỗ khác với xuất kho. Sau khi khách duyệt, hàng vẫn
+     * nằm trên kệ — thủ kho nhìn lên thấy đúng số cũ — nhưng `available` đã
+     * giảm, nên đơn tiếp theo không nhận nhầm món đã có chủ.
+     */
+    const s = await newSentQuotation('R');
+    const kdTruoc = await khaDung('PT-BRAKE-PAD-F');
+    const { rows: tonTruoc } = await pool.query<{ on_hand: string }>(
+      `SELECT b.on_hand FROM stock_balance b
+         JOIN part p ON p.id = b.part_id
+         JOIN warehouse w ON w.id = b.warehouse_id
+        WHERE p.sku = 'PT-BRAKE-PAD-F' AND w.branch_id = $1`,
+      [branchId],
+    );
+
+    const otp = await getOtp(s.trackingToken, s.quotationId);
+    const r = await call(
+      'POST',
+      `/api/v1/public/tracking/${s.trackingToken}/respond`,
+      {
+        quotationId: s.quotationId,
+        otp,
+        decisions: s.laborLineIds.map((id) => ({ lineId: id, approved: true })),
+      },
+      false,
+    );
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.deepEqual(r.body.thieuHang, [], 'kho đủ hàng mà vẫn báo thiếu');
+
+    assert.equal(await khaDung('PT-BRAKE-PAD-F'), kdTruoc - 1, 'không giữ chỗ khi khách duyệt');
+
+    const { rows: tonSau } = await pool.query<{ on_hand: string }>(
+      `SELECT b.on_hand FROM stock_balance b
+         JOIN part p ON p.id = b.part_id
+         JOIN warehouse w ON w.id = b.warehouse_id
+        WHERE p.sku = 'PT-BRAKE-PAD-F' AND w.branch_id = $1`,
+      [branchId],
+    );
+    assert.equal(
+      Number(tonSau[0]!.on_hand),
+      Number(tonTruoc[0]!.on_hand),
+      'giữ chỗ đã trừ tồn thực tế — thủ kho sẽ thấy sổ lệch với kệ',
+    );
+
+    // Đủ hàng thì đơn vào việc luôn
+    const { rows: ro } = await pool.query<{ status: string }>(
+      `SELECT ro.status FROM repair_order ro
+         JOIN quotation q ON q.repair_order_id = ro.id WHERE q.id = $1`,
+      [s.quotationId],
+    );
+    assert.equal(ro[0]!.status, 'IN_PROGRESS');
+  });
+
+  test('🔒 BC-04 mục 5.1: hết hàng thì vẫn duyệt được, đơn chuyển sang CHỜ PHỤ TÙNG', async () => {
+    /*
+     * Phương án bị loại: từ chối duyệt báo giá vì kho hết hàng. Vô lý — khách
+     * đã đồng ý trả tiền rồi, và việc kho có hàng hay không là chuyện của
+     * xưởng chứ không phải của khách.
+     *
+     * Phương án đã chọn: nhận quyết định, giữ phần có, ghi rõ phần thiếu, và
+     * đưa đơn sang AWAITING_PARTS thay vì IN_PROGRESS. Nhánh thứ ba này là
+     * nhánh bản trước không có — mọi đơn đều vào thẳng IN_PROGRESS kể cả khi
+     * kho trống, nên điều phối xếp thợ cho một việc không làm được.
+     */
+    const s = await newSentQuotation('S');
+
+    // Rút sạch hàng khả dụng của một mã bằng một phiếu điều chỉnh có lý do —
+    // không xoá dòng sổ, không sửa tồn tay. Chính là đường mà nghiệp vụ dùng.
+    const kd = await khaDung('PT-CABIN-FILTER');
+    const { rows: w } = await pool.query<{ id: string; part_id: string }>(
+      `SELECT w.id, p.id AS part_id
+         FROM warehouse w, part p
+        WHERE w.branch_id = $1 AND w.is_default AND p.sku = 'PT-CABIN-FILTER'
+          AND p.tenant_id = w.tenant_id`,
+      [branchId],
+    );
+    const { rows: u } = await pool.query<{ id: string }>(
+      `SELECT id FROM app_user WHERE tenant_id = (SELECT tenant_id FROM warehouse WHERE id = $1) LIMIT 1`,
+      [w[0]!.id],
+    );
+    await pool.query(
+      `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                   unit_cost, reason, created_by_user_id)
+       SELECT tenant_id, $1, $2, 'ADJUSTMENT', $3, 0, 'Rút sạch để test thiếu hàng', $4
+         FROM warehouse WHERE id = $1`,
+      [w[0]!.id, w[0]!.part_id, -kd, u[0]!.id],
+    );
+
+    try {
+      assert.equal(await khaDung('PT-CABIN-FILTER'), 0, 'chưa rút hết hàng, test vô nghĩa');
+
+      const otp = await getOtp(s.trackingToken, s.quotationId);
+      const r = await call(
+        'POST',
+        `/api/v1/public/tracking/${s.trackingToken}/respond`,
+        {
+          quotationId: s.quotationId,
+          otp,
+          decisions: s.laborLineIds.map((id) => ({ lineId: id, approved: true })),
+        },
+        false,
+      );
+
+      // 🔒 VẪN duyệt được — đây là điểm chính của cả test
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      assert.equal(r.body.quotationStatus, 'APPROVED');
+      assert.ok(r.body.approvedAmount > 0);
+
+      // ... nhưng khách được biết NGAY là thiếu gì
+      const thieu = r.body.thieuHang as { sku: string; canCo: number; giuDuoc: number }[];
+      assert.equal(thieu.length, 1, JSON.stringify(thieu));
+      assert.equal(thieu[0]!.sku, 'PT-CABIN-FILTER');
+      assert.equal(thieu[0]!.giuDuoc, 0);
+      assert.equal(thieu[0]!.canCo, 1);
+
+      // ... và đơn KHÔNG vào việc, vì không làm được
+      const { rows: ro } = await pool.query<{ status: string }>(
+        `SELECT ro.status FROM repair_order ro
+           JOIN quotation q ON q.repair_order_id = ro.id WHERE q.id = $1`,
+        [s.quotationId],
+      );
+      assert.equal(
+        ro[0]!.status,
+        'AWAITING_PARTS',
+        'đơn vào việc dù kho không có phụ tùng — điều phối sẽ xếp thợ cho việc không làm được',
+      );
+
+      // Món CÒN hàng vẫn được giữ chỗ bình thường: thiếu một mã không kéo cả
+      // đơn xuống. Đây là "giữ phần có" của BC-04 mục 5.1.
+      const { rows: gc } = await pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM stock_reservation sr
+           JOIN quotation q ON q.repair_order_id = sr.repair_order_id
+          WHERE q.id = $1 AND sr.status = 'ACTIVE'`,
+        [s.quotationId],
+      );
+      assert.equal(Number(gc[0]!.n), 1, 'thiếu một mã mà bỏ luôn mã còn hàng');
+    } finally {
+      await pool.query(
+        `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type, quantity,
+                                     unit_cost, reason, created_by_user_id)
+         SELECT tenant_id, $1, $2, 'ADJUSTMENT', $3, 0, 'Hoàn lại sau test thiếu hàng', $4
+           FROM warehouse WHERE id = $1`,
+        [w[0]!.id, w[0]!.part_id, kd, u[0]!.id],
+      );
+    }
   });
 });
