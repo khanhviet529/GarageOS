@@ -95,6 +95,28 @@ export const ACTION_ROLES = {
    * database bảo đảm không ai tự QC việc của chính mình.
    */
   'assignment:qc': ['TECHNICIAN', 'SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * Bấm giờ công — docs/02 ma trận, hàng "Bấm giờ công": thợ 🔶 "của mình",
+   * quản lý 🔶 "sửa hộ, có log", chủ ✅. Cố vấn và thu ngân ❌.
+   *
+   * 🔒 Điều kiện "của mình" KHÔNG enforce được ở đây — bảng phân quyền chỉ biết
+   * vai, không biết phân công nào thuộc ai. Nó enforce ở trigger
+   * `kiem_tra_bam_gio()` (0030): `time_log.technician_id` phải bằng
+   * `work_assignment.technician_id`. Không có nó thì một thợ bấm giờ hộ việc
+   * của người khác, và `INV-W-06` không bắt được vì nó chỉ kiểm theo người của
+   * DÒNG GIỜ — giờ của người làm thật bị thiếu, của người bấm hộ thì thừa.
+   */
+  'timeLog:write': ['TECHNICIAN', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Nhập hộ một đoạn giờ đã xảy ra — KHÔNG cho thợ.
+   *
+   * Đây là đường duy nhất ghi được giờ công với mốc thời gian trong quá khứ,
+   * tức là đường duy nhất tự khai giờ làm. PR-09 của docs/02 cho phép quản lý
+   * làm, kèm nhật ký bắt buộc.
+   */
+  'timeLog:enterForOther': ['BRANCH_MANAGER', 'OWNER'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -119,4 +141,6 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'assignment:read': 'xem lịch xưởng',
   'assignment:write': 'xếp khoang và thợ',
   'assignment:qc': 'kiểm tra chất lượng',
+  'timeLog:write': 'bấm giờ công',
+  'timeLog:enterForOther': 'nhập hộ giờ công',
 };

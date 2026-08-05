@@ -5,6 +5,8 @@ import { AppHeader } from '@/components/AppHeader';
 import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
 import { BangCuon } from '@/components/BangCuon';
+import { BangGioCong } from '@/components/BangGioCong';
+import { auth } from '@/lib/api';
 import {
   api,
   ApiCallError,
@@ -44,6 +46,9 @@ export default function TrangLichXuong() {
   const [thoId, setThoId] = useState('');
   const [dangXep, setDangXep] = useState(false);
   const [ketQua, setKetQua] = useState<string | null>(null);
+
+  /** Việc đang mở bảng giờ công. `null` = không mở cái nào. */
+  const [xemGio, setXemGio] = useState<WorkAssignmentItem | null>(null);
 
   const viec = choXep.find((w) => w.quotationLineId === viecId);
   const batDauISO = `${ngay}T${gio}:00`;
@@ -212,22 +217,39 @@ export default function TrangLichXuong() {
                                 <span className="small">
                                   {ASSIGNMENT_STATUS_LABEL[a.status] ?? a.status}
                                 </span>
+                                {/*
+                                  Một nút duy nhất mở bảng giờ công, thay cho
+                                  hai nút "Bắt đầu"/"Xong" trước đây.
+
+                                  🔒 Đổi trạng thái phân công KHÔNG còn là hành
+                                  động riêng: nó là HỆ QUẢ của việc bấm giờ
+                                  (0030 + TimeLogService). Để hai đường song
+                                  song thì có trạng thái "IN_PROGRESS mà không
+                                  có đoạn giờ nào", và giờ công của việc đó
+                                  vĩnh viễn bằng 0.
+                                */}
+                                <button
+                                  type="button"
+                                  className="secondary small-btn"
+                                  onClick={() => setXemGio(a)}
+                                >
+                                  Giờ công
+                                </button>
+                                {/*
+                                  Huỷ chỉ hiện khi CHƯA bấm giờ lần nào
+                                  (SCHEDULED). Đã có giờ công rồi thì huỷ là bỏ
+                                  đi dữ liệu lương của thợ — việc đó thuộc luồng
+                                  huỷ đơn có quyết toán ở BC-10, không phải một
+                                  nút trên lịch.
+                                */}
                                 {a.status === 'SCHEDULED' && (
                                   <button
                                     type="button"
                                     className="secondary small-btn"
-                                    onClick={() => void doiTrangThai(a.id, 'IN_PROGRESS')}
+                                    onClick={() => void doiTrangThai(a.id, 'CANCELLED')}
+                                    aria-label={`Huỷ phân công ${a.repairOrderCode} — ${a.description}`}
                                   >
-                                    Bắt đầu
-                                  </button>
-                                )}
-                                {a.status === 'IN_PROGRESS' && (
-                                  <button
-                                    type="button"
-                                    className="secondary small-btn"
-                                    onClick={() => void doiTrangThai(a.id, 'DONE')}
-                                  >
-                                    Xong
+                                    Huỷ
                                   </button>
                                 )}
                               </div>
@@ -242,6 +264,35 @@ export default function TrangLichXuong() {
             </BangCuon>
           )}
         </div>
+
+        {xemGio !== null && (
+          <div className="card">
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ marginBottom: 0 }}>
+                Giờ công · {xemGio.repairOrderCode} · {xemGio.description}
+              </h2>
+              <button type="button" className="secondary" onClick={() => setXemGio(null)}>
+                Đóng
+              </button>
+            </div>
+            <p className="hint" style={{ marginTop: 8 }}>
+              Thợ: {xemGio.technicianName} · khoang {xemGio.bayName}
+            </p>
+            <div style={{ marginTop: 12 }}>
+              <BangGioCong
+                assignmentId={xemGio.id}
+                /*
+                 * Chỉ thợ được phân công mới thấy nút bấm giờ. Đây CHỈ là tiện
+                 * dụng — token nằm trong tay client nên sửa được. Chặn thật ở
+                 * `assertOwnAssignment` trong TimeLogService và ở trigger
+                 * `kiem_tra_bam_gio()` (0030).
+                 */
+                laViecCuaToi={auth.user()?.id === xemGio.technicianId}
+                onDoiTrangThai={tai}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="card">
           <h2>Xếp việc chờ</h2>

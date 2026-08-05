@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1–2.4 (kho, giữ chỗ, phân công, xuất kho) xong**
+> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1–2.5 (kho, giữ chỗ, phân công, xuất kho, giờ công) xong**
 
 ## Đang ở đâu
 
@@ -25,15 +25,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 2.2 | Giữ chỗ khi khách duyệt, khoá theo thứ tự part_id, giữ chỗ một phần | ✅ merged |
 | 2.3 | Phân công khoang/thợ: exclusion constraint, chứng chỉ, năng lực khoang | ✅ merged |
 | 2.4 | Xuất kho, trả hàng về kho, nhả giữ chỗ quá hạn | ✅ merged |
-| 2.5 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.5 | Giờ công: các đoạn `TimeLog`, tạm dừng có lý do, job đóng hộ | ✅ merged |
+| 2.6 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 269 (domain 12, db 42, api 215) |
-| E2E Playwright | 52 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 29 |
+| Test tự động | 282 (domain 12, db 42, api 228) |
+| E2E Playwright | 56 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 30 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -122,9 +123,18 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | `stock_movement` ↔ `stock_reservation` tham chiếu **vòng** | `reservation_id` và `consumed_by_movement_id` trỏ vào nhau. Dọn dữ liệu test phải cắt vòng trước (`SET reservation_id = NULL`), và một phiếu CONSUMED thì không đổi trạng thái được nữa nên chỉ xoá được |
 | `test.skip()` dựa trên `count()` đọc trang chưa nạp xong | Mắc **hai lần** ở dự án này. Test tự bỏ qua đúng thứ nó sinh ra để kiểm, và báo cáo "passed" — nguy hiểm hơn đỏ. Phải `expect.poll` hoặc `waitForResponse` |
 
+## Bẫy đã gặp ở Phase 2.5 — giờ công
+
+| Bẫy | Vì sao |
+|---|---|
+| `pnpm test` **được turbo cache** | `turbo.json` thiếu `cache: false` cho task `test`. Turbo băm TỆP TRONG KHO, còn bộ test chạy trên Postgres thật mà trạng thái DB không nằm trong hash — nên "xanh" có thể là log **phát lại** trên một lược đồ khác. `test:invariants` đã có `cache: false` từ đợt 3; `test` bị bỏ sót. Chỉ lộ ra khi đi tìm nguyên nhân một lượt đỏ không tái hiện được |
+| Test để phân công ở `IN_PROGRESS` làm test SAU đỏ | `one_active_assignment_per_tech` chỉ cho một thợ một việc đang làm. Dọn phải trả cả trạng thái phân công, không chỉ xoá `time_log`. Test đỏ ở chỗ chẳng liên quan ("không có đoạn giờ nào đang mở") vì lời gọi `start` đã lặng lẽ thất bại từ trước |
+| E2E dùng `.first()` để chọn phần tử | Chạy riêng thì xanh, chạy cả bộ thì đỏ: bộ test khác đã xếp việc nên ô đầu tiên thuộc thợ khác. Nhắm theo **tên thợ** thì ý định của test khớp với điều nó khẳng định |
+| E2E tranh nhau dữ liệu seed | Seed chỉ có hai hạng mục chờ phân công; ba test mỗi test xếp một việc thì test thứ ba không còn gì. Đây là phụ thuộc ẩn giữa các test — đỏ theo THỨ TỰ CHẠY, không theo tính đúng đắn của code. Dùng `describe.serial` + một lần dựng cảnh dùng chung |
+
 ## ⚠️ Lát cắt CHƯA có review độc lập
 
-**Phase 2.2 (giữ chỗ), 2.3 (phân công) và 2.4 (xuất kho)** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
+**Phase 2.2 → 2.5** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
 2026-08-08. Thay vào đó tôi tự rà soát đối kháng và tìm ra ba lỗi, cả ba đều đã
 sửa và có test hồi quy:
 

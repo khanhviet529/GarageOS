@@ -22,7 +22,7 @@ export class ApiCallError extends Error {
 
 export const auth = {
   token: (): string | null => globalThis.localStorage?.getItem(TOKEN_KEY) ?? null,
-  user: (): { fullName: string; roles: string[]; branchIds: string[] } | null => {
+  user: (): { id: string; fullName: string; roles: string[]; branchIds: string[] } | null => {
     // 🔒 `JSON.parse` KHÔNG được để trần ở đây: hàm này chạy trong useEffect của
     //    AppHeader, tức là trên mọi màn hình nội bộ. Dữ liệu phiên hỏng (ghi dở
     //    do tab bị kill, phiên bản cũ lưu cấu trúc khác) sẽ ném lỗi và làm trắng
@@ -217,6 +217,39 @@ export interface WorkAssignmentItem {
   status: string; qcNote: string | null; completionPercent: number | null; version: number;
 }
 
+export interface TimeLogSegmentItem {
+  id: string; workAssignmentId: string;
+  technicianId: string; technicianName: string;
+  startedAt: string; endedAt: string | null;
+  pauseReason: string | null;
+  /** 🔒 Đoạn do job đóng hộ — số liệu KHÔNG đáng tin để tính lương */
+  autoClosed: boolean;
+  /** Khác `technicianName` nghĩa là có người nhập hộ */
+  enteredByName: string;
+  note: string | null;
+  hours: number;
+}
+
+export interface AssignmentTimeSummaryItem {
+  workAssignmentId: string;
+  standardHours: number;
+  actualHours: number;
+  efficiency: number | null;
+  dangLam: boolean;
+  vuotDinhMucNhieu: boolean;
+  coDoanDongHo: boolean;
+  segments: TimeLogSegmentItem[];
+}
+
+export const PAUSE_REASON_LABEL: Record<string, string> = {
+  WAITING_PARTS: 'Chờ phụ tùng',
+  WAITING_APPROVAL: 'Chờ khách duyệt',
+  WAITING_EQUIPMENT: 'Thiếu thiết bị',
+  SHIFT_END: 'Hết ca',
+  REASSIGNED: 'Chuyển người khác',
+  OTHER: 'Lý do khác',
+};
+
 export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
   SCHEDULED: 'Đã xếp lịch',
   IN_PROGRESS: 'Đang làm',
@@ -293,6 +326,15 @@ export const api = {
     call<WorkAssignmentItem[]>('GET', `/api/v1/assignments?date=${date}`),
   createAssignment: (input: unknown) =>
     call<{ id: string; plannedEnd: string }>('POST', '/api/v1/assignments', input),
+  timeSummary: (assignmentId: string) =>
+    call<AssignmentTimeSummaryItem>('GET', `/api/v1/assignments/${assignmentId}/time`),
+  startTimeLog: (workAssignmentId: string) =>
+    call<{ id: string }>('POST', '/api/v1/time-logs/start', { workAssignmentId }),
+  stopTimeLog: (input: unknown) =>
+    call<{ actualHours: number; assignmentStatus: string }>(
+      'POST', '/api/v1/time-logs/stop', input,
+    ),
+
   changeAssignmentStatus: (id: string, input: unknown) =>
     call<{ status: string }>('POST', `/api/v1/assignments/${id}/status`, input),
 
