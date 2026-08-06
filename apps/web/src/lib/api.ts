@@ -199,6 +199,9 @@ export interface PendingWorkItem {
   quotationLineId: string; repairOrderId: string; repairOrderCode: string;
   plateNumber: string; powertrain: string; description: string;
   standardHours: number; requiredCertifications: string[]; serviceCategory: string;
+  /** Có giá trị = hạng mục này đang chờ LÀM LẠI của việc đã QC không đạt */
+  reworkOfId: string | null;
+  reworkReason: string | null;
 }
 
 export interface TechnicianOption {
@@ -208,13 +211,43 @@ export interface TechnicianOption {
   reason: string | null;
 }
 
+export const REWORK_REASON_LABEL: Record<string, string> = {
+  TECHNICIAN_ERROR: 'Lỗi thi công',
+  PART_DEFECT: 'Phụ tùng lỗi',
+  DIAGNOSIS_ERROR: 'Chẩn đoán sai',
+  CUSTOMER_CHANGE: 'Khách đổi ý',
+};
+
+/** Ai chịu chi phí — hiện cho người QC thấy hệ quả TRƯỚC khi họ chọn */
+export const REWORK_WHO_PAYS: Record<string, string> = {
+  TECHNICIAN_ERROR: 'Garage chịu — không tính tiền khách',
+  PART_DEFECT: 'Nhà cung cấp chịu — không tính tiền khách',
+  DIAGNOSIS_ERROR: 'Garage chịu — không tính tiền khách',
+  CUSTOMER_CHANGE: 'Khách chịu — vẫn tính tiền như phát sinh',
+};
+
+export interface TechnicianQualityItem {
+  technicianId: string; technicianName: string;
+  soViecDaQc: number;
+  /** 🔒 KHÔNG gồm phụ tùng lỗi — đó không phải lỗi thợ */
+  soViecLoiTho: number;
+  soViecLoiPhuTung: number;
+  gioLamLai: number; gioTinhTien: number; tiLeLamLai: number;
+}
+
 export interface WorkAssignmentItem {
   id: string; repairOrderId: string; repairOrderCode: string; plateNumber: string;
   quotationLineId: string; description: string;
   technicianId: string; technicianName: string;
   bayId: string; bayName: string;
   plannedStart: string; plannedEnd: string;
-  status: string; qcNote: string | null; completionPercent: number | null; version: number;
+  status: string; qcNote: string | null; completionPercent: number | null;
+  reworkOfId: string | null;
+  reworkReason: string | null;
+  qcReworkReason: string | null;
+  /** 🔒 `false` = giờ công vẫn ghi cho thợ nhưng không tính doanh thu */
+  isBillable: boolean;
+  version: number;
 }
 
 export interface TimeLogSegmentItem {
@@ -324,6 +357,8 @@ export const api = {
     ),
   listSchedule: (date: string) =>
     call<WorkAssignmentItem[]>('GET', `/api/v1/assignments?date=${date}`),
+  technicianQuality: () =>
+    call<TechnicianQualityItem[]>('GET', '/api/v1/assignments/quality'),
   createAssignment: (input: unknown) =>
     call<{ id: string; plannedEnd: string }>('POST', '/api/v1/assignments', input),
   timeSummary: (assignmentId: string) =>

@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-04 · Nhánh `main` · CI xanh · **Phase 1 xong · Phase 2.1–2.5 (kho, giữ chỗ, phân công, xuất kho, giờ công) xong**
+> Cập nhật: 2026-08-06 · Nhánh `fix/giao-dien-theo-skill` · **Phase 1 xong · Phase 2.1–2.6 xong** (kho, giữ chỗ, phân công, xuất kho, giờ công, QC/làm lại)
 
 ## Đang ở đâu
 
@@ -26,15 +26,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 2.3 | Phân công khoang/thợ: exclusion constraint, chứng chỉ, năng lực khoang | ✅ merged |
 | 2.4 | Xuất kho, trả hàng về kho, nhả giữ chỗ quá hạn | ✅ merged |
 | 2.5 | Giờ công: các đoạn `TimeLog`, tạm dừng có lý do, job đóng hộ | ✅ merged |
-| 2.6 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.6 | QC + làm lại: phán định nguyên nhân, chỉ số chất lượng thợ | ✅ merged |
+| 2.7 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 282 (domain 12, db 42, api 228) |
-| E2E Playwright | 56 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 30 |
+| Test tự động | 292 (domain 12, db 42, api 238) |
+| E2E Playwright | 59 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 31 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -132,9 +133,20 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | E2E dùng `.first()` để chọn phần tử | Chạy riêng thì xanh, chạy cả bộ thì đỏ: bộ test khác đã xếp việc nên ô đầu tiên thuộc thợ khác. Nhắm theo **tên thợ** thì ý định của test khớp với điều nó khẳng định |
 | E2E tranh nhau dữ liệu seed | Seed chỉ có hai hạng mục chờ phân công; ba test mỗi test xếp một việc thì test thứ ba không còn gì. Đây là phụ thuộc ẩn giữa các test — đỏ theo THỨ TỰ CHẠY, không theo tính đúng đắn của code. Dùng `describe.serial` + một lần dựng cảnh dùng chung |
 
+## Bẫy đã gặp ở Phase 2.6 — QC và làm lại
+
+| Bẫy | Vì sao |
+|---|---|
+| Ghi lý do rework lên phân công GỐC làm việc gốc thành không tính tiền | `internal_rework_not_billable` (0028) buộc `rework_reason` đi kèm `is_billable = false`. Cột đó thuộc về phân công LÀM LẠI, không phải phân công gốc. Phải tách `qc_rework_reason` (phán định của QC) khỏi `rework_reason` (lý do việc này LÀ làm lại) |
+| Đơn ở `QUOTED` không nhảy thẳng sang `IN_PROGRESS` được | Câu `UPDATE repair_order` sau khi QC trượt bắn vào trigger máy trạng thái và ném 500 — biến một thao tác QC hợp lệ thành sự cố kỹ thuật. Phải liệt kê đúng những trạng thái nguồn hợp lệ |
+| Seed chỉ có MỘT thợ | Test "gợi ý thợ trả về cả người không đủ điều kiện" đỏ trên seed sạch và xanh ở lần chạy sau — nó chỉ xanh nhờ **rác trạng thái**. Đây chính là lỗi "1 test đỏ rồi xanh" ghi ở mục trước mà chưa xác định được. Đã thêm thợ thứ hai không có chứng chỉ cao áp |
+| Test INV-W-05 để lại một việc `IN_PROGRESS` không đóng | Chặn MỌI test sau dùng cùng người thợ, và chúng đỏ với "thợ đang có việc khác" — chẳng liên quan gì tới thứ chúng kiểm |
+| Đoạn giờ công của seed đụng đoạn mà test lùi 20 tiếng | `no_timelog_overlap`. Dữ liệu demo và dữ liệu test dùng chung một database nên luôn có nguy cơ va chạm; tách theo NGƯỜI là cách rẻ nhất |
+| `test.skip()` dựa trên `count()` — **lần thứ ba** | Kho, lịch xưởng, rồi QC. Từ giờ không dùng nữa: seed phải luôn có sẵn dữ liệu, và test `expect(...).toBeVisible()` chờ nó |
+
 ## ⚠️ Lát cắt CHƯA có review độc lập
 
-**Phase 2.2 → 2.5** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
+**Phase 2.2 → 2.6** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
 2026-08-08. Thay vào đó tôi tự rà soát đối kháng và tìm ra ba lỗi, cả ba đều đã
 sửa và có test hồi quy:
 

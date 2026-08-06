@@ -274,7 +274,9 @@ describe('🔒 Bất biến phân công', () => {
     const hm = await hangMucDaDuyet('SV-HV-SOH', 'BEV');
     const r = await call('POST', '/api/v1/assignments', {
       quotationLineId: hm.quotationLineId,
-      technicianId: await thoTheoDienThoai('0901000003'), // cố vấn, không có chứng chỉ
+      // Thợ THẬT nhưng chưa có chứng chỉ cao áp — sát thực tế hơn là dùng một
+      // vai không phải thợ, vốn bị chặn vì lý do khác hẳn.
+      technicianId: await thoTheoDienThoai('0901000007'),
       bayId: await khoang('K1-03'),
       plannedStart: khungGio(),
     });
@@ -424,6 +426,16 @@ describe('🔒 Bất biến phân công', () => {
       to: 'IN_PROGRESS',
     });
     assert.equal(s2.status, 409, 'thợ làm hai việc cùng lúc -> giờ công của cả hai đều sai');
+
+    /*
+     * Đóng việc đang mở lại.
+     *
+     * Không đóng thì chính INV-W-05 chặn MỌI test sau dùng cùng người thợ này —
+     * và chúng đỏ với thông báo "thợ đang có việc khác", chẳng liên quan gì tới
+     * thứ chúng đang kiểm. Cùng loại rác trạng thái với giữ chỗ ACTIVE không
+     * nhả đã ghi ở STATUS.md.
+     */
+    await call('POST', `/api/v1/assignments/${r1.body.id}/status`, { to: 'DONE' });
   });
 
   test('khoang được giải phóng sau khi việc xong', async () => {
@@ -543,5 +555,253 @@ describe('🔒 Phân quyền phân công', () => {
       plannedStart: khungGio(),
     });
     assert.notEqual(r.status, 201, 'xếp được xe vào khoang ở chi nhánh khác');
+  });
+});
+
+describe('🔒 QC và làm lại — Phase 2.6 (BC-14)', () => {
+  /** Xếp một việc rồi đưa nó tới trạng thái DONE, sẵn sàng cho QC */
+  async function viecDaXong(): Promise<{ id: string; quotationLineId: string }> {
+    const hm = await hangMucDaDuyet('SV-OIL-ENGINE');
+    const r = await call('POST', '/api/v1/assignments', {
+      quotationLineId: hm.quotationLineId,
+      technicianId: await thoTheoDienThoai('0901000004'),
+      bayId: await khoang('K1-01'),
+      plannedStart: khungGio(),
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const s1 = await call('POST', `/api/v1/assignments/${r.body.id}/status`, {
+      to: 'IN_PROGRESS',
+    });
+    assert.equal(s1.status, 201, `không chuyển được sang IN_PROGRESS: ${JSON.stringify(s1.body)}`);
+    const s2 = await call('POST', `/api/v1/assignments/${r.body.id}/status`, { to: 'DONE' });
+    assert.equal(s2.status, 201, `không chuyển được sang DONE: ${JSON.stringify(s2.body)}`);
+
+    /*
+     * Đưa ĐƠN tới trạng thái nó thật sự ở khi có việc chờ QC.
+     *
+     * `hangMucDaDuyet` duyệt dòng báo giá bằng SQL trực tiếp nên đơn còn đứng
+     * ở QUOTED. Đi từng bước theo đúng máy trạng thái (docs/06) chứ không nhảy
+     * cóc: trigger ở 0014 chặn nhảy cóc, và nếu test lách được thì nó đang
+     * kiểm một hệ thống khác với hệ thống thật.
+     */
+    for (const tt of ['AWAITING_APPROVAL', 'IN_PROGRESS', 'QUALITY_CHECK']) {
+      await pool.query(`UPDATE repair_order SET status = $2 WHERE id = $1`, [hm.repairOrderId, tt]);
+    }
+    return { id: r.body.id, quotationLineId: hm.quotationLineId };
+  }
+
+  test('🔒 QC không đạt BẮT BUỘC chọn nguyên nhân — nó quyết định ai trả tiền', async () => {
+    /*
+     * BC-14 mục 2: ranh giới rework / phát sinh / bảo hành "đôi khi mập mờ
+     * trong thực tế". Chính vì mập mờ nên phải bắt người QC quyết, tại thời
+     * điểm họ đang cầm chiếc xe trên tay. Để trống rồi suy luận sau là suy luận
+     * bằng trí nhớ.
+     */
+    const v = await viecDaXong();
+    const r = await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      qcNote: 'Má phanh lắp lệch, có tiếng kêu khi phanh',
+    });
+    assert.equal(r.status, 400, `QC trượt mà không phân loại: ${JSON.stringify(r.body)}`);
+  });
+
+  test('QC không đạt phải ghi rõ lỗi gì', async () => {
+    // Thợ làm lại cần biết sửa cái gì. "Không đạt" một mình là vô dụng.
+    const v = await viecDaXong();
+    const r = await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'TECHNICIAN_ERROR',
+      qcNote: 'hỏng',
+    });
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+  });
+
+  test('🔒 làm lại do LỖI THỢ thì không tính tiền khách', async () => {
+    const v = await viecDaXong();
+    const qc = await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'TECHNICIAN_ERROR',
+      qcNote: 'Má phanh lắp lệch, có tiếng kêu khi phanh',
+    });
+    assert.equal(qc.status, 201, JSON.stringify(qc.body));
+
+    const lamLai = await call('POST', '/api/v1/assignments', {
+      quotationLineId: v.quotationLineId,
+      technicianId: await thoTheoDienThoai('0901000004'),
+      bayId: await khoang('K1-02'),
+      plannedStart: khungGio(),
+      reworkOfId: v.id,
+      // Ứng dụng cố tình khai sai — phải bị database ghi đè
+      isBillable: true,
+      reworkReason: 'CUSTOMER_CHANGE',
+    });
+    assert.equal(lamLai.status, 201, JSON.stringify(lamLai.body));
+
+    const { rows } = await pool.query<{
+      is_billable: boolean;
+      rework_reason: string;
+      rework_of_id: string;
+    }>('SELECT is_billable, rework_reason, rework_of_id FROM work_assignment WHERE id = $1', [
+      lamLai.body.id,
+    ]);
+    assert.equal(rows[0]!.is_billable, false, 'làm lại do lỗi thợ mà vẫn tính tiền khách');
+    assert.equal(
+      rows[0]!.rework_reason,
+      'TECHNICIAN_ERROR',
+      'ứng dụng đổi được lý do -> đổi được luôn việc ai trả tiền',
+    );
+    assert.equal(rows[0]!.rework_of_id, v.id, 'chuỗi làm lại không nối được');
+  });
+
+  test('🔒 khách đổi ý KHÔNG phải rework thật — vẫn tính tiền', async () => {
+    // BC-14 mục 3: `CUSTOMER_CHANGE` là phát sinh, không phải lỗi của xưởng.
+    // Gộp nó vào rework là tự nhận một khoản lỗ không phải của mình.
+    const v = await viecDaXong();
+    await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'CUSTOMER_CHANGE',
+      qcNote: 'Khách đổi ý, muốn dùng loại má phanh khác',
+    });
+    const lamLai = await call('POST', '/api/v1/assignments', {
+      quotationLineId: v.quotationLineId,
+      technicianId: await thoTheoDienThoai('0901000004'),
+      bayId: await khoang('K1-02'),
+      plannedStart: khungGio(),
+      reworkOfId: v.id,
+    });
+    assert.equal(lamLai.status, 201, JSON.stringify(lamLai.body));
+
+    const { rows } = await pool.query<{ is_billable: boolean }>(
+      'SELECT is_billable FROM work_assignment WHERE id = $1',
+      [lamLai.body.id],
+    );
+    assert.equal(rows[0]!.is_billable, true, 'khách đổi ý mà garage phải chịu tiền');
+  });
+
+  test('🔒 không làm lại một việc chưa QC trượt', async () => {
+    // Trỏ "làm lại" về một việc đang làm dở hay đã đạt là quy chi phí lỗi cho
+    // một lỗi không có thật.
+    const v = await viecDaXong();
+    const hm2 = await hangMucDaDuyet('SV-OIL-ENGINE');
+    const r = await call('POST', '/api/v1/assignments', {
+      quotationLineId: hm2.quotationLineId,
+      technicianId: await thoTheoDienThoai('0901000004'),
+      bayId: await khoang('K1-02'),
+      plannedStart: khungGio(),
+      reworkOfId: v.id, // v mới ở DONE, chưa QC
+    });
+    assert.notEqual(r.status, 201, 'làm lại được một việc chưa QC trượt');
+  });
+
+  test('🔒 việc làm lại phải CÙNG hạng mục với việc gốc', async () => {
+    const v = await viecDaXong();
+    await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'TECHNICIAN_ERROR',
+      qcNote: 'Lắp sai, phải tháo ra làm lại từ đầu',
+    });
+
+    const khac = await hangMucDaDuyet('SV-BRAKE-PAD');
+    const r = await call('POST', '/api/v1/assignments', {
+      quotationLineId: khac.quotationLineId, // hạng mục KHÁC
+      technicianId: await thoTheoDienThoai('0901000004'),
+      bayId: await khoang('K1-02'),
+      plannedStart: khungGio(),
+      reworkOfId: v.id,
+    });
+    assert.notEqual(r.status, 201, 'quy chi phí lỗi của hạng mục này cho hạng mục kia');
+  });
+
+  test('hạng mục QC trượt quay lại danh sách chờ, kèm dấu làm lại', async () => {
+    /*
+     * Nếu không quay lại thì hạng mục biến mất: nó đã có phân công nên bị loại
+     * khỏi danh sách chờ, mà phân công đó thì hỏng. Chiếc xe nằm lại xưởng và
+     * không màn hình nào nói vì sao.
+     */
+    const v = await viecDaXong();
+    await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'PART_DEFECT',
+      qcNote: 'Phụ tùng lỗi ngay từ lô nhập, không phải lỗi lắp',
+    });
+
+    const cho = await call('GET', '/api/v1/assignments/pending-work');
+    const muc = cho.body.find(
+      (w: { quotationLineId: string }) => w.quotationLineId === v.quotationLineId,
+    );
+    assert.ok(muc, 'hạng mục QC trượt biến mất khỏi danh sách chờ');
+    assert.equal(muc.reworkOfId, v.id, 'không nói được nó là việc làm lại của cái nào');
+    assert.equal(muc.reworkReason, 'PART_DEFECT');
+  });
+
+  test('QC không đạt thì đơn quay về đang sửa', async () => {
+    const v = await viecDaXong();
+    const { rows: truoc } = await pool.query<{ status: string }>(
+      `SELECT ro.status FROM repair_order ro
+         JOIN work_assignment wa ON wa.repair_order_id = ro.id WHERE wa.id = $1`,
+      [v.id],
+    );
+    assert.ok(truoc[0]);
+
+    await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'TECHNICIAN_ERROR',
+      qcNote: 'Siết bu-lông chưa đủ lực, phải làm lại',
+    });
+
+    const { rows: sau } = await pool.query<{ status: string }>(
+      `SELECT ro.status FROM repair_order ro
+         JOIN work_assignment wa ON wa.repair_order_id = ro.id WHERE wa.id = $1`,
+      [v.id],
+    );
+    assert.equal(sau[0]!.status, 'IN_PROGRESS', 'đơn đứng yên trong khi còn việc phải làm');
+  });
+
+  test('🔒 phụ tùng lỗi KHÔNG tính vào chỉ số chất lượng của thợ', async () => {
+    /*
+     * BC-14 mục 3: gộp `PART_DEFECT` vào lỗi thợ sẽ oan cho họ, và hậu quả
+     * thực tế là thợ giấu lỗi thay vì báo QC — nguy hiểm hơn nhiều so với một
+     * con số thống kê xấu.
+     */
+    const tho = await thoTheoDienThoai('0901000004');
+    const truoc = await call('GET', '/api/v1/assignments/quality');
+    const cu = truoc.body.find((t: { technicianId: string }) => t.technicianId === tho);
+
+    const v = await viecDaXong();
+    await call('POST', `/api/v1/assignments/${v.id}/status`, {
+      to: 'QC_FAILED',
+      reworkReason: 'PART_DEFECT',
+      qcNote: 'Gioăng lỗi từ nhà cung cấp, thay cái khác là xong',
+    });
+
+    const sau = await call('GET', '/api/v1/assignments/quality');
+    const moi = sau.body.find((t: { technicianId: string }) => t.technicianId === tho);
+    assert.ok(moi, 'không có chỉ số cho thợ này');
+    assert.equal(
+      moi.soViecLoiTho,
+      cu?.soViecLoiTho ?? 0,
+      'phụ tùng lỗi bị tính vào lỗi thợ -> thợ sẽ giấu lỗi thay vì báo QC',
+    );
+    assert.equal(
+      moi.soViecLoiPhuTung,
+      (cu?.soViecLoiPhuTung ?? 0) + 1,
+      'không đếm được lỗi phụ tùng -> không đàm phán được với nhà cung cấp',
+    );
+  });
+
+  test('🔒 thợ không tự QC việc của mình, kể cả khi có vai QC', async () => {
+    const v = await viecDaXong();
+    const luu = token;
+    token = await dangNhap('0901000004'); // chính thợ đã làm
+    try {
+      const r = await call('POST', `/api/v1/assignments/${v.id}/status`, {
+        to: 'QC_FAILED',
+        reworkReason: 'TECHNICIAN_ERROR',
+        qcNote: 'Tôi tự kiểm và tự nhận là làm sai',
+      });
+      assert.equal(r.status, 403, 'tự kiểm việc mình làm chỉ là ký tên, không phải kiểm tra');
+    } finally {
+      token = luu;
+    }
   });
 });

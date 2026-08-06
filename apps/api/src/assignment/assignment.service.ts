@@ -12,6 +12,7 @@ import {
   type CreateAssignmentInput,
   type PendingWorkItem,
   type TechnicianOption,
+  type TechnicianQuality,
   type WorkAssignment,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
@@ -59,19 +60,43 @@ export class AssignmentService {
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT ql.id AS quotation_line_id, ro.id AS repair_order_id, ro.code,
                 v.plate_number, v.powertrain, ql.description,
-                si.standard_hours, si.required_certifications, si.category
+                si.standard_hours, si.required_certifications, si.category,
+                truot.id AS rework_of_id, truot.qc_rework_reason
            FROM quotation_line ql
            JOIN quotation q      ON q.id = ql.quotation_id
            JOIN repair_order ro  ON ro.id = q.repair_order_id
            JOIN vehicle v        ON v.id = ro.vehicle_id
            JOIN service_item si  ON si.id = ql.service_item_id
+           /*
+            * Lần QC không đạt GẦN NHẤT mà chưa ai xếp việc làm lại.
+            *
+            * Không có nhánh này thì một hạng mục QC trượt biến mất khỏi danh
+            * sách chờ — nó đã có phân công nên bị mệnh đề NOT EXISTS loại, mà
+            * phân công đó thì hỏng. Chiếc xe nằm lại xưởng và không màn hình
+            * nào nói vì sao.
+            */
+           LEFT JOIN LATERAL (
+             SELECT wa.id, wa.qc_rework_reason
+               FROM work_assignment wa
+              WHERE wa.quotation_line_id = ql.id
+                AND wa.status = 'QC_FAILED'
+                AND NOT EXISTS (
+                  SELECT 1 FROM work_assignment lam_lai
+                   WHERE lam_lai.rework_of_id = wa.id AND lam_lai.status <> 'CANCELLED'
+                )
+              ORDER BY wa.created_at DESC
+              LIMIT 1
+           ) truot ON true
           WHERE ql.line_type = 'LABOR'
             AND ql.status = 'APPROVED'
             AND ro.status NOT IN ('DELIVERED', 'CANCELLED')
-            AND NOT EXISTS (
-              SELECT 1 FROM work_assignment wa
-               WHERE wa.quotation_line_id = ql.id
-                 AND wa.status <> 'CANCELLED'
+            AND (
+              truot.id IS NOT NULL
+              OR NOT EXISTS (
+                SELECT 1 FROM work_assignment wa
+                 WHERE wa.quotation_line_id = ql.id
+                   AND wa.status <> 'CANCELLED'
+              )
             )${scope}
           ORDER BY ro.received_at, ql.seq`,
         params,
@@ -86,6 +111,8 @@ export class AssignmentService {
         standardHours: Number(r.standard_hours),
         requiredCertifications: r.required_certifications as string[],
         serviceCategory: r.category as string,
+        reworkOfId: (r.rework_of_id ?? null) as string | null,
+        reworkReason: (r.qc_rework_reason ?? null) as PendingWorkItem['reworkReason'],
       }));
     });
   }
@@ -209,8 +236,9 @@ export class AssignmentService {
         const { rows } = await tx.query<{ id: string }>(
           `INSERT INTO work_assignment (
              tenant_id, repair_order_id, quotation_line_id, technician_id, bay_id,
-             planned_start, planned_end, created_by_user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+             planned_start, planned_end, created_by_user_id,
+             rework_of_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
           [
             actor.tenantId,
             viec.repairOrderId,
@@ -220,6 +248,9 @@ export class AssignmentService {
             input.plannedStart,
             plannedEnd,
             actor.userId,
+            // 🔒 KHÔNG gửi `rework_reason` hay `is_billable`: trigger ở 0031 suy
+            //    ra cả hai từ phán định của người QC trên việc gốc.
+            input.reworkOfId ?? null,
           ],
         );
         return { id: rows[0]!.id, plannedEnd };
@@ -296,10 +327,46 @@ export class AssignmentService {
                   qc_by_user_id = CASE WHEN $3 THEN $4 ELSE qc_by_user_id END,
                   qc_at         = CASE WHEN $3 THEN now() ELSE qc_at END,
                   qc_note       = COALESCE($5, qc_note),
-                  completion_percent = COALESCE($6, completion_percent)
+                  completion_percent = COALESCE($6, completion_percent),
+                  -- 🔒 Phán định của người QC. Ràng buộc qc_failed_needs_reason
+                  --    ở 0031 chặn nếu để trống, và rework_reason_only_when_failed
+                  --    chặn nếu ghi vào một việc đã đạt.
+                  qc_rework_reason = $7
             WHERE id = $1`,
-          [id, input.to, laQc, actor.userId, input.qcNote ?? null, input.completionPercent ?? null],
+          [
+            id,
+            input.to,
+            laQc,
+            actor.userId,
+            input.qcNote ?? null,
+            input.completionPercent ?? null,
+            input.to === 'QC_FAILED' ? (input.reworkReason ?? null) : null,
+          ],
         );
+
+        /*
+         * QC không đạt thì đơn quay lại đang sửa — BC-14 mục 4 bước 6.
+         *
+         * Không đổi thì đơn đứng ở trạng thái cũ trong khi thực tế còn việc
+         * phải làm, và màn điều phối không biết chiếc xe này chưa xong.
+         *
+         * 🔒 Điều kiện `status IN (...)` liệt kê ĐÚNG những trạng thái mà máy
+         * trạng thái đơn cho phép đi tới IN_PROGRESS (docs/06). Không giới hạn
+         * thì câu này bắn vào trigger máy trạng thái và ném lỗi 500 — biến một
+         * thao tác QC hợp lệ thành sự cố kỹ thuật, chỉ vì đơn đang ở nhánh
+         * khác.
+         *
+         * Không match dòng nào cũng KHÔNG phải lỗi: phán định QC vẫn được ghi,
+         * và đơn ở nhánh khác thì nó tự đi tiếp theo đường của nó.
+         */
+        if (input.to === 'QC_FAILED') {
+          await tx.query(
+            `UPDATE repair_order SET status = 'IN_PROGRESS'
+              WHERE id = (SELECT repair_order_id FROM work_assignment WHERE id = $1)
+                AND status IN ('QUALITY_CHECK', 'AWAITING_APPROVAL', 'AWAITING_PARTS')`,
+            [id],
+          );
+        }
       } catch (err) {
         const e = err as { code?: string; constraint?: string };
         // 🔒 INV-W-05 — một thợ chỉ có MỘT việc đang làm
@@ -312,6 +379,45 @@ export class AssignmentService {
         throw err;
       }
       return { status: input.to };
+    });
+  }
+
+  /**
+   * Chỉ số chất lượng theo thợ — BC-14 mục 5.4.
+   *
+   * Đọc từ VIEW `chi_so_chat_luong_tho` chứ không tự cộng ở đây: cùng một định
+   * nghĩa "tỉ lệ làm lại" phải dùng cho màn điều phối, báo cáo Phase 6, và mọi
+   * truy vấn đối soát. Ba bản cài đặt của một công thức thì sớm muộn ra ba con
+   * số, và không ai biết con số nào đúng.
+   *
+   * 🔒 `docs/15` mục 6.3 yêu cầu hiển thị năng suất CÙNG tỉ lệ làm lại — đúng
+   * để một người làm nhanh vì làm ẩu không bị đọc thành người làm giỏi.
+   */
+  async technicianQuality(actor: ActorContext): Promise<TechnicianQuality[]> {
+    assertCan(actor, 'assignment:read');
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT technician_id, technician_name, so_viec_da_qc, so_viec_loi_tho,
+                so_viec_loi_phu_tung, gio_lam_lai, gio_tinh_tien
+           FROM chi_so_chat_luong_tho
+          ORDER BY technician_name`,
+      );
+      return rows.map((r) => {
+        const daQc = Number(r.so_viec_da_qc);
+        const loiTho = Number(r.so_viec_loi_tho);
+        return {
+          technicianId: r.technician_id as string,
+          technicianName: r.technician_name as string,
+          soViecDaQc: daQc,
+          soViecLoiTho: loiTho,
+          soViecLoiPhuTung: Number(r.so_viec_loi_phu_tung),
+          gioLamLai: Number(r.gio_lam_lai),
+          gioTinhTien: Number(r.gio_tinh_tien),
+          // Chưa QC việc nào thì tỉ lệ là 0, không phải NaN. Một màn hình hiện
+          // "NaN%" cạnh tên người là lỗi khó chịu hơn nó đáng có.
+          tiLeLamLai: daQc === 0 ? 0 : Math.round((loiTho / daQc) * 1000) / 10,
+        };
+      });
     });
   }
 
@@ -339,7 +445,8 @@ export class AssignmentService {
               wa.quotation_line_id, ql.description,
               wa.technician_id, u.full_name, wa.bay_id, b.name AS bay_name,
               wa.planned_start, wa.planned_end, wa.status, wa.qc_note,
-              wa.completion_percent, wa.version
+              wa.completion_percent, wa.rework_of_id, wa.rework_reason,
+              wa.qc_rework_reason, wa.is_billable, wa.version
          FROM work_assignment wa
          JOIN repair_order ro   ON ro.id = wa.repair_order_id
          JOIN vehicle v         ON v.id = ro.vehicle_id
@@ -367,6 +474,10 @@ export class AssignmentService {
       status: r.status as AssignmentStatus,
       qcNote: (r.qc_note ?? null) as string | null,
       completionPercent: r.completion_percent === null ? null : Number(r.completion_percent),
+      reworkOfId: (r.rework_of_id ?? null) as string | null,
+      reworkReason: (r.rework_reason ?? null) as WorkAssignment['reworkReason'],
+      qcReworkReason: (r.qc_rework_reason ?? null) as WorkAssignment['qcReworkReason'],
+      isBillable: r.is_billable as boolean,
       version: Number(r.version),
     }));
   }

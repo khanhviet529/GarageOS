@@ -89,6 +89,7 @@ khẩu **`demo1234`** cho tất cả):
 | `0901000004` | Kỹ thuật viên | Job card của mình, **không thấy tiền** |
 | `0901000005` | Thủ kho | Tồn kho, nhập/xuất, giá vốn |
 | `0901000006` | Thu ngân | Thanh toán |
+| `0901000007` | Kỹ thuật viên | Như trên, nhưng **chưa có chứng chỉ cao áp** — để nhìn thấy INV-W-03 chặn |
 
 **Kiểm chứng môi trường đã đúng:**
 
@@ -96,7 +97,7 @@ khẩu **`demo1234`** cho tất cả):
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-Phải ra **5/5 xanh** và **269 test xanh**. Nếu đỏ, xem mục 7 (cạm bẫy) trước
+Phải ra **5/5 xanh** và **292 test xanh**. Nếu đỏ, xem mục 7 (cạm bẫy) trước
 khi đi tìm nguyên nhân — nhiều khả năng nó đã được ghi lại rồi.
 
 ### ⚠️ Ba điều dễ vấp ngay ngày đầu
@@ -129,9 +130,9 @@ packages/contracts  DỮ LIỆU: Zod schema, type, enum, bảng hằng (state ma
 packages/domain     HÀM:    logic thuần, không import framework
 packages/db         Kết nối, ngữ cảnh tenant, test bất biến lược đồ
 packages/config     eslint, tsconfig, prettier
-infra/migrations    SQL viết tay — 🔒 NGUỒN SỰ THẬT của schema (29 file)
+infra/migrations    SQL viết tay — 🔒 NGUỒN SỰ THẬT của schema (31 file)
 infra/seed.ts       Dữ liệu demo
-e2e/                Playwright — 52 kịch bản
+e2e/                Playwright — 59 kịch bản
 ```
 
 🔒 **Chiều phụ thuộc một hướng:** `domain` → `contracts`. Không có vòng.
@@ -196,20 +197,18 @@ async reserve(tenantId: string, input: ReserveInput)      // ❌ SAI
 |---|---|---|
 | 0 | Walking skeleton, CI, RLS đa tenant | ✅ |
 | 1 | Tiếp nhận xe → báo giá → khách duyệt từng phần qua OTP | ✅ 6/6 lát cắt |
-| 2.1–2.4 | Kho, giữ chỗ, phân công khoang/thợ, xuất kho | ✅ 4/7 lát cắt |
+| 2.1–2.6 | Kho, giữ chỗ, phân công, xuất kho, giờ công, QC/làm lại | ✅ 6/7 lát cắt |
 
-**Con số:** 269 test · 52 kịch bản E2E · 29 migration · 7 ADR
+**Con số:** 292 test · 59 kịch bản E2E · 31 migration · 7 ADR
 
 ### Còn phải làm — toàn bộ
 
 Sắp theo thứ tự nên làm. Cột "Khó" là ước lượng độ khó kỹ thuật, không phải khối lượng.
 
-#### A. Phase 2 — hoàn tất kho & thi công (3 lát cắt còn lại)
+#### A. Phase 2 — hoàn tất kho & thi công (1 lát cắt còn lại)
 
 | Lát cắt | Nội dung | Khó | Đọc trước |
 |---|---|---|---|
-| **2.5** | Giờ công `TimeLog`: bấm bắt đầu / tạm dừng có lý do / kết thúc. 🔒 INV-W-06 các đoạn giờ không chồng nhau. Bàn giao giữa chừng thì giờ của hai thợ ghi **riêng**, không gộp | ⭐⭐⭐ | [BC-06](docs/07-business-cases/BC-06-gio-cong.md) |
-| **2.6** | QC + rework. 🔒 INV-W-04 người QC khác người làm (đã có ràng buộc DB). Rework do lỗi nội bộ **không tính tiền khách** | ⭐⭐⭐ | [BC-14](docs/07-business-cases/BC-14-rework.md) |
 | **2.7** | Báo giá bổ sung + tạm dừng có chọn lọc | ⭐⭐⭐⭐ | [BC-03](docs/07-business-cases/BC-03-bao-gia-bo-sung.md) |
 
 #### B. Phase 3 — tiền (6 lát cắt)
@@ -284,10 +283,11 @@ Danh sách đầy đủ kèm lý do chấp nhận ở [`STATUS.md`](STATUS.md). 
 | **Review độc lập cho 2.2, 2.3, 2.4** | Chưa chạy — công cụ review hết hạn mức tới 2026-08-08. Với 2.2, việc tự rà soát đã tìm ra **ba lỗi thật** (phụ tùng bảo hành không được giữ chỗ; huỷ đơn không nhả chỗ; giữ chỗ một phần không được bù nốt), nên tự rà soát **không thay thế được** review độc lập. Chạy lại ngay khi dùng được |
 | **Deploy** | `docs/DEPLOY.md` ghi "deploy-ready, CHƯA deploy". Đang chờ tài khoản nhà cung cấp. Phase 7 cần **link demo sống** nên việc này chặn Phase 7 |
 
-Ngoài ra: **một lượt `pnpm test` từng đỏ 1/215 rồi xanh lại ở 5 lượt sau**, và
-**chưa xác định được test nào**. Nếu bạn gặp lại, xin ghi lại tên test — nhiều
-khả năng do chạy `tsx --test` trực tiếp xen vào lúc turbo đang chạy, nhưng đó
-là suy đoán chưa kiểm chứng.
+Ghi chú: một lượt `pnpm test` từng đỏ 1 test rồi xanh lại, và lúc đó **chưa
+xác định được test nào**. Nguyên nhân đã tìm ra ở Phase 2.6: test "gợi ý thợ
+trả về cả người không đủ điều kiện" đòi phải có thợ KHÔNG đủ điều kiện, mà seed
+chỉ có một thợ và người đó có đủ chứng chỉ — nó chỉ xanh nhờ **rác trạng thái**
+của lần chạy trước. Đã sửa bằng cách thêm thợ thứ hai vào seed.
 
 ---
 
@@ -339,10 +339,12 @@ bảng. Tên gọi nghiệp vụ **chốt ở** [`docs/01-glossary.md`](docs/01-
 - Nợ kỹ thuật: *test kiến trúc chặn `withTenantId` dùng sai chỗ* → viết một
   test quét mã nguồn. Bắt bạn hiểu mô hình tenant, mà không phải sửa gì rủi ro.
 
-**Nếu bạn muốn vào phần kỹ thuật nặng ngay** — lát cắt **2.5 (giờ công)** là
-điểm vào tốt nhất: nó nối tiếp phân công (2.3) vốn đã có sẵn dữ liệu để chạy,
-có một bất biến rõ ràng để bám (INV-W-06 các đoạn giờ không chồng nhau), và
-[BC-06](docs/07-business-cases/BC-06-gio-cong.md) đã phân tích sẵn các nhánh.
+**Nếu bạn muốn vào phần kỹ thuật nặng ngay** — lát cắt **2.7 (báo giá bổ
+sung)** là việc còn lại của Phase 2. Nó khó hơn những lát cắt trước vì phải
+chạm lại vào báo giá đã gửi khách mà không phá bất biến đóng băng giá
+(INV-Q-05), và phải phân định rạch ròi với *rework* — ranh giới đã phân tích ở
+[BC-03](docs/07-business-cases/BC-03-bao-gia-bo-sung.md) và
+[BC-14](docs/07-business-cases/BC-14-rework.md) mục 2.
 
 **Trước khi nhận bất cứ việc gì chạm kho hoặc tiền:** đọc
 [`docs/05-invariants.md`](docs/05-invariants.md) hết một lượt. Không phải để

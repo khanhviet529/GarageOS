@@ -466,3 +466,18 @@ td.am { color: var(--c-danger); }
   outline: 2px solid var(--c-primary);
   outline-offset: 2px;
 }
+
+/* --- Hộp kiểm tra chất lượng (Phase 2.6) --- */
+
+.hop-qc {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3); margin-top: var(--sp-2);
+  border: 1px solid var(--c-border); border-radius: var(--r-sm);
+  background: var(--c-surface);
+}
+.hop-qc fieldset { border: none; padding: 0; margin: 0; }
+.hop-qc legend { color: var(--c-text-muted); font-weight: 600; padding: 0 0 var(--sp-1); }
+.hop-qc textarea { width: 100%; font-family: inherit; font-size: var(--fs-sm); }
+/* Nhãn nguyên nhân xuống dòng được: hệ quả tiền bạc đi kèm nên dòng khá dài */
+.hop-qc .hop-kiem { align-items: flex-start; }
+.hop-qc .hop-kiem input { margin-top: 3px; }

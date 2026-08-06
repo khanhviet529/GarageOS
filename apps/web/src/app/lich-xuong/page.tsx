@@ -6,11 +6,13 @@ import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
 import { BangCuon } from '@/components/BangCuon';
 import { BangGioCong } from '@/components/BangGioCong';
+import { HopQc } from '@/components/HopQc';
 import { auth } from '@/lib/api';
 import {
   api,
   ApiCallError,
   ASSIGNMENT_STATUS_LABEL,
+  REWORK_REASON_LABEL,
   type Bay,
   type PendingWorkItem,
   type TechnicianOption,
@@ -105,6 +107,9 @@ export default function TrangLichXuong() {
         technicianId: thoId,
         bayId,
         plannedStart: new Date(batDauISO).toISOString(),
+        // 🔒 Nối chuỗi làm lại. Không truyền thì lần làm lại trông như một việc
+        //    mới bình thường, và chi phí của nó bị tính vào doanh thu.
+        ...(viec?.reworkOfId == null ? {} : { reworkOfId: viec.reworkOfId }),
       });
       setKetQua(`Đã xếp lịch, dự kiến xong lúc ${hhmm(r.plannedEnd)}.`);
       setViecId('');
@@ -218,6 +223,30 @@ export default function TrangLichXuong() {
                                   {ASSIGNMENT_STATUS_LABEL[a.status] ?? a.status}
                                 </span>
                                 {/*
+                                  Việc làm lại phải nhìn ra NGAY trên lịch: nó
+                                  không tính tiền khách, nên điều phối cần phân
+                                  biệt được với việc thường khi quét mắt cả ngày.
+                                */}
+                                {a.reworkOfId !== null && (
+                                  <span className="tag canh-bao">
+                                    làm lại
+                                    {a.reworkReason !== null &&
+                                      ` · ${REWORK_REASON_LABEL[a.reworkReason] ?? a.reworkReason}`}
+                                  </span>
+                                )}
+                                {a.status === 'QC_FAILED' && a.qcNote !== null && (
+                                  <span className="small" title={a.qcNote}>
+                                    ✎ {a.qcNote.slice(0, 40)}
+                                  </span>
+                                )}
+                                {a.status === 'DONE' && (
+                                  <HopQc
+                                    assignmentId={a.id}
+                                    moTaViec={`${a.plateNumber} · ${a.description}`}
+                                    onXong={tai}
+                                  />
+                                )}
+                                {/*
                                   Một nút duy nhất mở bảng giờ công, thay cho
                                   hai nút "Bắt đầu"/"Xong" trước đây.
 
@@ -317,6 +346,7 @@ export default function TrangLichXuong() {
                     <option value="">— chọn hạng mục —</option>
                     {choXep.map((w) => (
                       <option key={w.quotationLineId} value={w.quotationLineId}>
+                        {w.reworkOfId === null ? '' : '↺ LÀM LẠI · '}
                         {w.repairOrderCode} · {formatPlate(w.plateNumber)} · {w.description}
                       </option>
                     ))}
@@ -373,6 +403,18 @@ export default function TrangLichXuong() {
                   {viec.requiredCertifications.length > 0 &&
                     ` · yêu cầu chứng chỉ: ${viec.requiredCertifications.join(', ')}`}
                   {viec.serviceCategory === 'HV_SYSTEM' && ' · phải làm ở khoang có vùng an toàn cao áp'}
+                  {viec.reworkOfId !== null && viec.reworkReason !== null && (
+                    <>
+                      {' · '}
+                      <strong>
+                        Làm lại vì {REWORK_REASON_LABEL[viec.reworkReason] ?? viec.reworkReason}
+                      </strong>
+                      {/* Nói thẳng ai trả tiền, ngay ở chỗ người xếp lịch đang nhìn */}
+                      {viec.reworkReason === 'CUSTOMER_CHANGE'
+                        ? ' — vẫn tính tiền khách'
+                        : ' — KHÔNG tính tiền khách'}
+                    </>
+                  )}
                 </p>
               )}
             </>

@@ -41,6 +41,19 @@ const USERS_A: SeedUser[] = [
   { phone: '0901000004', fullName: 'Phạm Văn Thợ', roles: ['TECHNICIAN'] },
   { phone: '0901000005', fullName: 'Hoàng Thị Kho', roles: ['STORE_KEEPER'] },
   { phone: '0901000006', fullName: 'Đỗ Thị Thu Ngân', roles: ['CASHIER'] },
+  /*
+   * Thợ THỨ HAI, cố ý KHÔNG có chứng chỉ cao áp.
+   *
+   * Một xưởng chỉ có một thợ làm cả hai thứ trở nên vô nghĩa: màn gợi ý thợ
+   * không có gì để gợi ý, cân tải giữa các thợ không có ai để cân, và hai bất
+   * biến an toàn INV-W-03 (chứng chỉ) / INV-W-05 (một việc một lúc) không bao
+   * giờ được nhìn thấy trong bản demo.
+   *
+   * Đây cũng là chỗ một test từng đỏ rồi xanh một cách ngẫu nhiên: nó đòi phải
+   * có thợ KHÔNG đủ điều kiện, và trên dữ liệu seed sạch thì không có ai như
+   * vậy — nó chỉ xanh nhờ rác trạng thái của lần chạy trước.
+   */
+  { phone: '0901000007', fullName: 'Vũ Đình Thợ Mới', roles: ['TECHNICIAN'] },
 ];
 
 const USERS_B: SeedUser[] = [
@@ -511,6 +524,64 @@ async function main(): Promise<void> {
          FROM warehouse w WHERE w.tenant_id = $1 AND w.branch_id = $5 AND w.is_default`,
       [TENANT_A, dongPt[0]!.part_id, don[0]!.id, dongPt[0]!.id, chiNhanh],
     );
+
+    /*
+     * Một việc ĐÃ XONG, đang chờ kiểm tra chất lượng — Phase 2.6.
+     *
+     * Không có nó thì hộp QC không bao giờ hiện ra trên dữ liệu seed: người xem
+     * demo không thấy được phần đáng xem nhất của lát cắt này (bốn nguyên nhân
+     * làm lại, mỗi cái nói rõ ai trả tiền), và một test E2E phải tự bỏ qua.
+     *
+     * Xếp vào 8h HÔM NAY để nó nằm đúng trong khung giờ màn lịch hiển thị.
+     */
+    /*
+     * Dùng thợ THỨ HAI (0901000007), không dùng 0901000004.
+     *
+     * Bộ test giờ công lùi thời gian đoạn của 0901000004 về 20 tiếng trước để
+     * kiểm job đóng hộ. Đoạn seed nằm ở hôm nay của cùng người sẽ đụng
+     * `no_timelog_overlap` — và test đỏ ở một chỗ chẳng liên quan gì tới thứ nó
+     * đang kiểm.
+     *
+     * Đây là loại va chạm mà dữ liệu demo và dữ liệu test luôn có nguy cơ gặp:
+     * cả hai dùng chung một database. Tách người là cách rẻ nhất để chúng không
+     * đụng nhau.
+     */
+    const { rows: thoChinh } = await db.query<{ id: string }>(
+      `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000007'`,
+      [TENANT_A],
+    );
+    const { rows: khoangDau } = await db.query<{ id: string }>(
+      `SELECT id FROM bay WHERE tenant_id = $1 AND branch_id = $2 ORDER BY code LIMIT 1`,
+      [TENANT_A, chiNhanh],
+    );
+    const { rows: dongCong2 } = await db.query<{ id: string }>(
+      `SELECT id FROM quotation_line
+        WHERE quotation_id = $1 AND line_type = 'LABOR' ORDER BY seq LIMIT 1`,
+      [bg[0]!.id],
+    );
+    const { rows: pc } = await db.query<{ id: string }>(
+      `INSERT INTO work_assignment (tenant_id, repair_order_id, quotation_line_id,
+                                    technician_id, bay_id, planned_start, planned_end,
+                                    created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,
+               date_trunc('day', now()) + interval '8 hours',
+               date_trunc('day', now()) + interval '9 hours 30 minutes',
+               $6)
+       RETURNING id`,
+      [TENANT_A, don[0]!.id, dongCong2[0]!.id, thoChinh[0]!.id, khoangDau[0]!.id, nguoi[0]!.id],
+    );
+    // Một đoạn giờ công đã đóng, rồi đưa việc sang DONE — đúng đường mà
+    // TimeLogService đi, không nhảy cóc trạng thái.
+    await db.query(
+      `INSERT INTO time_log (tenant_id, work_assignment_id, technician_id,
+                             started_at, ended_at, entered_by_user_id)
+       VALUES ($1,$2,$3,
+               date_trunc('day', now()) + interval '8 hours',
+               date_trunc('day', now()) + interval '9 hours 20 minutes',
+               $3)`,
+      [TENANT_A, pc[0]!.id, thoChinh[0]!.id],
+    );
+    await db.query(`UPDATE work_assignment SET status = 'DONE' WHERE id = $1`, [pc[0]!.id]);
 
     await db.query(
       `UPDATE quotation SET status = 'APPROVED', sent_at = now(),

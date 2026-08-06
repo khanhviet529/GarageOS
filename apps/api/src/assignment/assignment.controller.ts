@@ -11,6 +11,7 @@ import {
   type Bay,
   type PendingWorkItem,
   type TechnicianOption,
+  type TechnicianQuality,
   type WorkAssignment,
 } from '@garageos/contracts';
 import { AssignmentService } from './assignment.service';
@@ -44,6 +45,11 @@ export class AssignmentController {
     @Query('plannedStart') plannedStart: string,
   ): Promise<TechnicianOption[]> {
     return this.svc.suggestTechnicians(actor, quotationLineId, plannedStart);
+  }
+
+  @Get('assignments/quality')
+  technicianQuality(@Actor() actor: ActorContext): Promise<TechnicianQuality[]> {
+    return this.svc.technicianQuality(actor);
   }
 
   @Get('assignments')
