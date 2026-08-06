@@ -97,7 +97,7 @@ khẩu **`demo1234`** cho tất cả):
 pnpm lint && pnpm typecheck && pnpm test
 ```
 
-Phải ra **5/5 xanh** và **292 test xanh**. Nếu đỏ, xem mục 7 (cạm bẫy) trước
+Phải ra **5/5 xanh** và **303 test xanh**. Nếu đỏ, xem mục 7 (cạm bẫy) trước
 khi đi tìm nguyên nhân — nhiều khả năng nó đã được ghi lại rồi.
 
 ### ⚠️ Ba điều dễ vấp ngay ngày đầu
@@ -130,7 +130,7 @@ packages/contracts  DỮ LIỆU: Zod schema, type, enum, bảng hằng (state ma
 packages/domain     HÀM:    logic thuần, không import framework
 packages/db         Kết nối, ngữ cảnh tenant, test bất biến lược đồ
 packages/config     eslint, tsconfig, prettier
-infra/migrations    SQL viết tay — 🔒 NGUỒN SỰ THẬT của schema (31 file)
+infra/migrations    SQL viết tay — 🔒 NGUỒN SỰ THẬT của schema (32 file)
 infra/seed.ts       Dữ liệu demo
 e2e/                Playwright — 59 kịch bản
 ```
@@ -197,21 +197,15 @@ async reserve(tenantId: string, input: ReserveInput)      // ❌ SAI
 |---|---|---|
 | 0 | Walking skeleton, CI, RLS đa tenant | ✅ |
 | 1 | Tiếp nhận xe → báo giá → khách duyệt từng phần qua OTP | ✅ 6/6 lát cắt |
-| 2.1–2.6 | Kho, giữ chỗ, phân công, xuất kho, giờ công, QC/làm lại | ✅ 6/7 lát cắt |
+| 2 | Kho, giữ chỗ, phân công, xuất kho, giờ công, QC/làm lại, phát sinh | ✅ **7/7 lát cắt** |
 
-**Con số:** 292 test · 59 kịch bản E2E · 31 migration · 7 ADR
+**Con số:** 303 test · 59 kịch bản E2E · 32 migration · 7 ADR
 
 ### Còn phải làm — toàn bộ
 
 Sắp theo thứ tự nên làm. Cột "Khó" là ước lượng độ khó kỹ thuật, không phải khối lượng.
 
-#### A. Phase 2 — hoàn tất kho & thi công (1 lát cắt còn lại)
-
-| Lát cắt | Nội dung | Khó | Đọc trước |
-|---|---|---|---|
-| **2.7** | Báo giá bổ sung + tạm dừng có chọn lọc | ⭐⭐⭐⭐ | [BC-03](docs/07-business-cases/BC-03-bao-gia-bo-sung.md) |
-
-#### B. Phase 3 — tiền (6 lát cắt)
+#### A. Phase 3 — tiền (6 lát cắt)
 
 | Lát cắt | Nội dung | Khó |
 |---|---|---|
@@ -224,32 +218,32 @@ Sắp theo thứ tự nên làm. Cột "Khó" là ước lượng độ khó k�
 
 Bất biến phải xanh: `INV-M-*` ([05-invariants.md](docs/05-invariants.md))
 
-#### C. Phase 4 — app mobile cho thợ (6 lát cắt)
+#### B. Phase 4 — app mobile cho thợ (6 lát cắt)
 
 Expo + auth · danh sách job card · bấm giờ · chụp ảnh có hàng đợi upload · báo
 phát sinh · 🔒 kiểm chứng **thợ không thấy bất kỳ số tiền nào** · build APK.
 
 > ⚠️ `apps/mobile` **chưa tồn tại**. Đây là phase dựng mới hoàn toàn.
 
-#### D. Phase 5 — bảo hành, huỷ đơn, ngoại lệ (5 lát cắt)
+#### C. Phase 5 — bảo hành, huỷ đơn, ngoại lệ (5 lát cắt)
 
 Coverage bảo hành hạn kép tháng/km · đơn bảo hành quy chi phí về đơn gốc · huỷ
 đơn giữa chừng + quyết toán · kiểm kê kho · xe bỏ quên + phí lưu bãi.
 
-#### E. Phase 6 — báo cáo (5 lát cắt)
+#### D. Phase 6 — báo cáo (5 lát cắt)
 
 Doanh thu và lãi/lỗ theo đơn · ⭐ thời gian chờ theo bộ phận · năng suất thợ
 **hiển thị cùng** tỉ lệ rework (để năng suất cao vì làm ẩu không bị đọc thành
 năng suất tốt) · tồn kho và vòng quay · công nợ theo tuổi nợ.
 
-#### F. Phase 7 — hoàn thiện để trưng bày (7 việc)
+#### E. Phase 7 — hoàn thiện để trưng bày (7 việc)
 
 Đây là phase quyết định giá trị portfolio, **không được bỏ**: ảnh chụp màn hình
 + **link demo sống** + tài khoản demo trong README · seed phong phú trên môi
 trường demo · sơ đồ kiến trúc · viết đủ 7 ADR (đã có 7, rà lại) · badge CI ·
 **video demo 90 giây** · rà lịch sử commit.
 
-#### G. Phase 8 — AI (6 lát cắt) — ⚠️ chỉ làm sau khi 1–7 xong
+#### F. Phase 8 — AI (6 lát cắt) — ⚠️ chỉ làm sau khi 1–7 xong
 
 Bọc service thành tool cho agent · 🔒 authz enforce **trong tool**, không tin
 LLM · RAG có trích dẫn nguồn · bộ eval 30–50 câu chạy trong CI · guardrail +
@@ -339,12 +333,10 @@ bảng. Tên gọi nghiệp vụ **chốt ở** [`docs/01-glossary.md`](docs/01-
 - Nợ kỹ thuật: *test kiến trúc chặn `withTenantId` dùng sai chỗ* → viết một
   test quét mã nguồn. Bắt bạn hiểu mô hình tenant, mà không phải sửa gì rủi ro.
 
-**Nếu bạn muốn vào phần kỹ thuật nặng ngay** — lát cắt **2.7 (báo giá bổ
-sung)** là việc còn lại của Phase 2. Nó khó hơn những lát cắt trước vì phải
-chạm lại vào báo giá đã gửi khách mà không phá bất biến đóng băng giá
-(INV-Q-05), và phải phân định rạch ròi với *rework* — ranh giới đã phân tích ở
-[BC-03](docs/07-business-cases/BC-03-bao-gia-bo-sung.md) và
-[BC-14](docs/07-business-cases/BC-14-rework.md) mục 2.
+**Nếu bạn muốn vào phần kỹ thuật nặng ngay** — lát cắt **3.1 (hoá đơn từ công
+việc thực tế)** mở đầu Phase 3. Nó nối trực tiếp vào giờ công (2.5) và làm lại
+(2.6) vốn đã có sẵn dữ liệu, và mang theo cả nhóm bất biến `INV-M-*` — nhóm mà
+sai một chỗ là sai tiền của khách.
 
 **Trước khi nhận bất cứ việc gì chạm kho hoặc tiền:** đọc
 [`docs/05-invariants.md`](docs/05-invariants.md) hết một lượt. Không phải để

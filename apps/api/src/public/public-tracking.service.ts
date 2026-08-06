@@ -13,6 +13,7 @@ import {
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { reserveApprovedParts } from '../stock/reserve-parts';
+import { onSupplementQuotationResponded } from '../assignment/supplement-resume';
 
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
@@ -478,6 +479,16 @@ export class PublicTrackingService {
        * trên vài dòng `stock_balance` và chỉ trong vài mili-giây.
        */
       const giuCho = await reserveApprovedParts(tx, scope.tenantId, scope.repairOrderId);
+
+      /*
+       * 🔒 BC-03 — nếu đây là báo giá BỔ SUNG thì gỡ tạm dừng những việc đang
+       * chờ nó, trong CÙNG giao dịch này.
+       *
+       * Hàm tự nhận biết: nó chỉ tìm phát sinh đang ở `QUOTED` của đơn này, nên
+       * với một báo giá thường thì nó không làm gì. Không cần một cờ ở đầu vào
+       * để phân biệt — cờ đó sẽ là thứ đầu tiên bị quên.
+       */
+      await onSupplementQuotationResponded(tx, scope.repairOrderId, approvedAmount > 0);
 
       /*
        * Đơn chuyển tiếp. Ba nhánh, không phải hai:

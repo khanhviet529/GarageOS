@@ -97,6 +97,19 @@ export const ACTION_ROLES = {
   'assignment:qc': ['TECHNICIAN', 'SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 
   /**
+   * 🔒 BR-02-2 — thợ ĐỀ XUẤT phát sinh, cố vấn mới lập báo giá.
+   *
+   * Hai quyền tách hẳn nhau và đó là toàn bộ nội dung của quy tắc: người phát
+   * hiện vấn đề không phải người định giá. Gộp lại thì thợ vừa báo vừa chào
+   * giá, và không còn ai kiểm tra xem phát sinh có thật hay không.
+   *
+   * docs/02 ma trận, hàng "Đề xuất phát sinh": thợ ✅, cố vấn ✅.
+   */
+  'supplement:report': ['TECHNICIAN', 'SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
+  /** Quyết định sau khi khách từ chối — BC-03 mục 5.1/5.2, việc của cố vấn */
+  'supplement:resolve': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
    * Bấm giờ công — docs/02 ma trận, hàng "Bấm giờ công": thợ 🔶 "của mình",
    * quản lý 🔶 "sửa hộ, có log", chủ ✅. Cố vấn và thu ngân ❌.
    *
@@ -141,6 +154,8 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'assignment:read': 'xem lịch xưởng',
   'assignment:write': 'xếp khoang và thợ',
   'assignment:qc': 'kiểm tra chất lượng',
+  'supplement:report': 'báo phát sinh',
+  'supplement:resolve': 'quyết định phát sinh bị từ chối',
   'timeLog:write': 'bấm giờ công',
   'timeLog:enterForOther': 'nhập hộ giờ công',
 };

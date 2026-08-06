@@ -68,7 +68,7 @@ môi trường thật.
 | 2.4 | ✅ Xuất kho, `CONSUMED`, hết hạn giữ chỗ (job nền) | [BC-04](07-business-cases/BC-04-giu-cho-xuat-kho.md) |
 | 2.5 | ✅ Giờ công: `TimeLog`, tạm dừng có lý do | [BC-06](07-business-cases/BC-06-gio-cong.md) |
 | 2.6 | ✅ QC + rework | [BC-14](07-business-cases/BC-14-rework.md) |
-| 2.7 | Báo giá bổ sung + tạm dừng có chọn lọc | [BC-03](07-business-cases/BC-03-bao-gia-bo-sung.md) |
+| 2.7 | ✅ Báo giá bổ sung + tạm dừng có chọn lọc | [BC-03](07-business-cases/BC-03-bao-gia-bo-sung.md) |
 
 **Bất biến phải xanh:** `INV-S-*`, `INV-W-*`
 

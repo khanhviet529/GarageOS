@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-06 · Nhánh `fix/giao-dien-theo-skill` · **Phase 1 xong · Phase 2.1–2.6 xong** (kho, giữ chỗ, phân công, xuất kho, giờ công, QC/làm lại)
+> Cập nhật: 2026-08-06 · Nhánh `fix/giao-dien-theo-skill` · **Phase 1 xong · PHASE 2 XONG TOÀN BỘ (2.1–2.7)**
 
 ## Đang ở đâu
 
@@ -27,15 +27,16 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 2.4 | Xuất kho, trả hàng về kho, nhả giữ chỗ quá hạn | ✅ merged |
 | 2.5 | Giờ công: các đoạn `TimeLog`, tạm dừng có lý do, job đóng hộ | ✅ merged |
 | 2.6 | QC + làm lại: phán định nguyên nhân, chỉ số chất lượng thợ | ✅ merged |
-| 2.7 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 2.7 | Báo giá bổ sung + tạm dừng có chọn lọc (BR-07-5) | ✅ merged |
+| 3 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 292 (domain 12, db 42, api 238) |
+| Test tự động | 303 (domain 12, db 42, api 249) |
 | E2E Playwright | 59 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 31 |
+| Migration | 32 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -144,9 +145,18 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | Đoạn giờ công của seed đụng đoạn mà test lùi 20 tiếng | `no_timelog_overlap`. Dữ liệu demo và dữ liệu test dùng chung một database nên luôn có nguy cơ va chạm; tách theo NGƯỜI là cách rẻ nhất |
 | `test.skip()` dựa trên `count()` — **lần thứ ba** | Kho, lịch xưởng, rồi QC. Từ giờ không dùng nữa: seed phải luôn có sẵn dữ liệu, và test `expect(...).toBeVisible()` chờ nó |
 
+## Bẫy đã gặp ở Phase 2.7 — phát sinh
+
+| Bẫy | Vì sao |
+|---|---|
+| Seed đỏ "cannot truncate a table referenced in a foreign key" | Thêm `supplement_request`/`supplement_block` mà quên đưa vào `TRUNCATE`. Thiết kế **không** dùng CASCADE chính là để lỗi này ồn ào — và lần này nó ồn ào đúng lúc cần |
+| Hai bộ test đụng nhau trên **cùng một người thợ** | Bộ giờ công lùi một đoạn về `now() − 20 giờ` rồi để mở; khoảng đó phủ mọi đoạn mà bộ phát sinh vừa tạo quanh `now()`, và `no_timelog_overlap` bắn ở bộ chạy sau. Mỗi bộ phải dọn đúng thứ mình tạo |
+| Khung giờ xếp lịch trong test **cố định** | Lần chạy thứ hai đụng lần đầu với `no_bay_overlap`, đọc ra như lỗi tính năng. Mốc phải lệch theo tiến trình |
+| Xoá dữ liệu test sai chiều khoá ngoại | `supplement_request.found_in_assignment_id` trỏ về phân công, nên phải xoá chặn → bản khai → phân công |
+
 ## ⚠️ Lát cắt CHƯA có review độc lập
 
-**Phase 2.2 → 2.6** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
+**Phase 2.2 → 2.7** chưa qua `/codex-review`: Codex hết hạn mức dùng tới
 2026-08-08. Thay vào đó tôi tự rà soát đối kháng và tìm ra ba lỗi, cả ba đều đã
 sửa và có test hồi quy:
 

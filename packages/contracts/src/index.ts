@@ -13,3 +13,4 @@ export * from './permissions.js';
 export * from './stock.js';
 export * from './work-assignment.js';
 export * from './time-log.js';
+export * from './supplement.js';
