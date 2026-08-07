@@ -16,7 +16,7 @@ import {
   type WorkAssignment,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
-import { appendBranchScope, assertCan } from '../common/permissions';
+import { appendBranchScope, appendSelfScope, assertCan } from '../common/permissions';
 
 /** Năng lực khoang bắt buộc khi làm hệ thống cao áp — 🔒 INV-W-07 */
 const NANG_LUC_CAO_AP = 'HV_SAFE_ZONE';
@@ -439,9 +439,11 @@ export class AssignmentService {
       where += ` AND wa.planned_start::date = $${params.length}::date`;
     }
     const scope = appendBranchScope(actor, params, 'ro');
+    // 🔒 Thợ chỉ thấy việc của mình — docs/02 mục 1, phạm vi SELF
+    const scopeTho = appendSelfScope(actor, params);
 
     const { rows } = await tx.query<Record<string, unknown>>(
-      `SELECT wa.id, wa.repair_order_id, ro.code, v.plate_number,
+      `SELECT wa.id, wa.repair_order_id, ro.code, v.plate_number, v.id AS vehicle_id,
               wa.quotation_line_id, ql.description,
               wa.technician_id, u.full_name, wa.bay_id, b.name AS bay_name,
               wa.planned_start, wa.planned_end, wa.status, wa.qc_note,
@@ -453,7 +455,7 @@ export class AssignmentService {
          JOIN quotation_line ql ON ql.id = wa.quotation_line_id
          JOIN app_user u        ON u.id = wa.technician_id
          JOIN bay b             ON b.id = wa.bay_id
-        WHERE true${where}${scope}
+        WHERE true${where}${scope}${scopeTho}
         ORDER BY wa.planned_start, b.code`,
       params,
     );
@@ -463,6 +465,7 @@ export class AssignmentService {
       repairOrderId: r.repair_order_id as string,
       repairOrderCode: r.code as string,
       plateNumber: r.plate_number as string,
+      vehicleId: r.vehicle_id as string,
       quotationLineId: r.quotation_line_id as string,
       description: r.description as string,
       technicianId: r.technician_id as string,

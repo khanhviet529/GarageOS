@@ -28,7 +28,26 @@ async function bootstrap(): Promise<void> {
   });
 
   app.useGlobalFilters(new ErrorFilter());
-  app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
+  /*
+   * CORS — danh sách nguồn được phép, KHÔNG phải `origin: true`.
+   *
+   * Từ Phase 4 có hai giao diện gọi API: web nhân viên và bản web của app thợ
+   * (Expo chạy ở cổng khác). Mở `origin: true` cho tiện là cho phép MỌI trang
+   * web gọi API kèm cookie của người dùng — token đang ở `localStorage` nên
+   * chưa bị lợi dụng ngay, nhưng khi chuyển sang cookie HttpOnly (nợ kỹ thuật
+   * đã ghi) thì đó thành lỗ hổng CSRF thật.
+   *
+   * ⚠️ App thợ chạy trên THIẾT BỊ THẬT không đi qua CORS — React Native không
+   * phải trình duyệt. Danh sách này chỉ phục vụ bản web dùng để phát triển và
+   * chạy test.
+   */
+  const nguonChoPhep = (
+    process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3002'
+  )
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o !== '');
+  app.enableCors({ origin: nguonChoPhep, credentials: true });
 
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
