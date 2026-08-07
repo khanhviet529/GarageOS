@@ -1,5 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 
+const SHOTS = 'e2e/screenshots';
+
+/** Ảnh dùng cho README — chụp trong chính bài test, không chụp tay */
+function chup(page: Page, name: string): Promise<Buffer> {
+  return page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true, caret: 'initial' });
+}
+
 /**
  * Phase 6 — màn hình báo cáo.
  *
@@ -43,6 +50,8 @@ test('chủ xưởng thấy đủ năm khối báo cáo, mỗi khối nói rõ k
   // ⚠️ Cảnh báo doanh thu chưa phải hoá đơn phải nằm NGAY trong khối, không nằm
   //    ở một trang ghi chú nào khác
   await expect(page.getByText(/dòng báo giá đã duyệt/)).toBeVisible();
+
+  await chup(page, '60-bao-cao');
 });
 
 test('🔒 năng suất và tỉ lệ làm lại nằm CÙNG một bảng', async ({ page }) => {

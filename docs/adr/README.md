@@ -30,6 +30,7 @@ nhớ của người viết code.
 | [0005](0005-einvoice-adapter.md) | Hoá đơn điện tử qua adapter | ✅ Chấp nhận | Billing |
 | [0006](0006-rest-vs-trpc.md) | REST + OpenAPI thay vì tRPC | ✅ Chấp nhận | API, mobile |
 | [0007](0007-prisma-plus-raw-sql.md) | Prisma + SQL thô cho phần cần khoá | ✅ Chấp nhận | Tầng dữ liệu |
+| [0008](0008-bo-qua-hoa-don-co-chu-y.md) | Bỏ qua tầng hoá đơn/thanh toán ở bản này | ✅ Chấp nhận | Báo cáo, bảo hành, quyết toán |
 
 ## Khuôn mẫu
 

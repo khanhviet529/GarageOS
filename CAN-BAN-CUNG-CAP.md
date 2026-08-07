@@ -125,3 +125,27 @@ không thay thế được:
 - Điều khoản về **phí lưu bãi** — không thông báo trước thì không có cơ sở thu
 - Điều khoản **miễn trừ trách nhiệm** cho xe xuống cấp khi nằm lâu (ắc quy chết
   vì không nổ máy ba tháng là hậu quả tự nhiên, nhưng khách có thể không nghĩ vậy)
+
+---
+
+## 10. Phase 7 — hai việc chỉ bạn làm được
+
+| Việc | Vì sao tôi không làm được | Cần gì từ bạn |
+|---|---|---|
+| **Link demo sống trong README** | Cần một máy chủ và một tên miền công khai. `docs/DEPLOY.md` đã có hướng dẫn từng bước | Chọn nơi chạy (Railway / Fly.io / VPS), tạo tài khoản, chạy theo DEPLOY.md rồi gửi tôi URL để chèn vào README |
+| **Video demo 90 giây** | Cần quay màn hình có tiếng | Quay theo kịch bản ở phần dưới, hoặc bảo tôi viết kịch bản chi tiết hơn |
+
+Phần còn lại của Phase 7 đã xong: ảnh chụp màn hình (chụp tự động trong chính
+test Playwright, không chụp tay nên không bao giờ lỗi thời), sơ đồ kiến trúc,
+8 ADR, badge CI, số liệu test thật, và lịch sử commit chia nhỏ theo lát cắt.
+
+### Kịch bản video 90 giây đề xuất
+
+| Giây | Cảnh |
+|---|---|
+| 0–10 | Tiếp nhận xe: gõ biển số sai định dạng, hệ thống tự chuẩn hoá và tìm ra xe cũ |
+| 10–25 | Mở danh mục cho **xe điện** — không có "thay dầu động cơ". Đổi sang xe xăng, hạng mục xuất hiện lại |
+| 25–45 | Lập báo giá, gửi khách. Mở link trên điện thoại, khách **chọn từng hạng mục**, nhập OTP |
+| 45–60 | Màn nhân viên tự cập nhật: hạng mục nào duyệt, hạng mục nào khách từ chối |
+| 60–75 | App thợ: nhận job, bấm giờ, báo phát sinh. Màn thợ **không có một con số tiền nào** |
+| 75–90 | Báo cáo: năng suất đặt cạnh tỉ lệ làm lại, và ô "chưa đủ dữ liệu" là dấu gạch chứ không phải số 0 |
