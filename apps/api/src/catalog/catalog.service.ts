@@ -3,6 +3,7 @@ import { TenantAwareDb } from '@garageos/db';
 import { parseAmountFromDb } from '@garageos/domain';
 import {
   ErrorCode,
+  canDo,
   type ActorContext,
   type CatalogForVehicle,
   type PartItem,
@@ -66,12 +67,35 @@ export class CatalogService {
         [priceList.id],
       );
 
+      /*
+       * 🔒 Lược bỏ MỌI số tiền với vai không được xem giá bán — docs/02 ma
+       * trận, hàng "Xem giá bán".
+       *
+       * Thợ VẪN cần danh mục này để báo phát sinh (BC-03 mục 4 bước 2: chọn
+       * hạng mục đề xuất). Chặn cả endpoint sẽ làm hỏng luồng đó, nên lược
+       * trường thay vì trả 403.
+       *
+       * Lược ở SERVICE, không ở giao diện: ẩn một cột trên màn hình không làm
+       * nó biến mất khỏi response JSON, và app thợ chạy trên điện thoại của
+       * người dùng — ai cũng xem được response bằng một proxy.
+       *
+       * Đây là lỗ hổng thứ ba mà lát cắt 4.5 tìm ra bằng cách QUÉT toàn bộ
+       * endpoint với token thợ.
+       */
+      const xemGia = canDo(actor.roles, 'catalog:readPrice');
+
       return {
         powertrain: vehicle.powertrain,
-        laborRatePerHour: priceList.laborRatePerHour,
+        laborRatePerHour: xemGia ? priceList.laborRatePerHour : 0,
         priceListName: priceList.name,
-        serviceItems: services.map((s) => this.toServiceItem(s, priceList.laborRatePerHour)),
-        parts: parts.map(toPartItem),
+        serviceItems: services.map((s) => {
+          const item = this.toServiceItem(s, priceList.laborRatePerHour);
+          return xemGia ? item : { ...item, laborAmount: 0 };
+        }),
+        parts: parts.map((p) => {
+          const item = toPartItem(p);
+          return xemGia ? item : { ...item, sellPrice: null, taxRatePercent: null };
+        }),
       };
     });
   }

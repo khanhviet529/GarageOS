@@ -307,7 +307,20 @@ export class QuotationService {
     });
   }
 
+  /**
+   * 🔒 ĐỌC báo giá cần quyền riêng — `quotation:read`.
+   *
+   * Trước lát cắt 4.5, phương thức này KHÔNG có kiểm tra vai nào. Một tài
+   * khoản thợ gọi được và nhận về đơn giá từng dòng, tổng tiền, và đơn giá giờ
+   * công của cả xưởng — trong khi docs/02 mục 2.3 nói thẳng thợ "không được
+   * thấy bất kỳ số tiền nào".
+   *
+   * Lỗ hổng lộ ra khi quét TOÀN BỘ endpoint bằng token thợ, không phải khi đọc
+   * lại code — vì nhìn vào hàm này thì không thấy gì thiếu, cái thiếu nằm ở
+   * chỗ VẮNG MẶT một dòng.
+   */
   async getById(actor: ActorContext, quotationId: string): Promise<Quotation> {
+    assertCan(actor, 'quotation:read');
     return this.db.withTenant(actor, (tx) => this.readQuotation(tx, actor, quotationId));
   }
 
@@ -319,6 +332,7 @@ export class QuotationService {
    * dòng, rồi ghép trong bộ nhớ.
    */
   async listForOrder(actor: ActorContext, repairOrderId: string): Promise<Quotation[]> {
+    assertCan(actor, 'quotation:read');
     return this.db.withTenant(actor, async (tx) => {
       const listParams: unknown[] = [repairOrderId];
       const listScope = appendBranchScope(actor, listParams);
