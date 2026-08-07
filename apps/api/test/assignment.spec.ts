@@ -805,3 +805,76 @@ describe('🔒 QC và làm lại — Phase 2.6 (BC-14)', () => {
     }
   });
 });
+
+describe('🔒 Phạm vi SELF của thợ — nợ kỹ thuật đã trả ở Phase 4', () => {
+  test('thợ chỉ thấy việc CỦA MÌNH trên lịch', async () => {
+    /*
+     * `docs/02` mục 1 xếp TECHNICIAN vào phạm vi SELF, nhưng suốt Phase 1–2
+     * vai này dùng nhờ phạm vi BRANCH vì chưa có bảng phân công để lọc.
+     *
+     * Nợ đó lộ ra ngay khi app thợ chạy: màn hình hiện việc của CẢ CHI NHÁNH,
+     * và thợ bấm "Bắt đầu" trên việc của người khác thì nhận lỗi
+     * WRONG_TECHNICIAN từ trigger — thông báo đúng nhưng vô nghĩa với người
+     * dùng, vì họ không hiểu vì sao việc đó nằm trong danh sách của mình.
+     */
+    const thoA = await thoTheoDienThoai('0901000004');
+    const thoB = await thoTheoDienThoai('0901000007');
+    const hm = await hangMucDaDuyet('SV-OIL-ENGINE');
+    const batDau = khungGio();
+
+    const r = await call('POST', '/api/v1/assignments', {
+      quotationLineId: hm.quotationLineId,
+      technicianId: thoA,
+      bayId: await khoang('K1-01'),
+      plannedStart: batDau,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const ngay = batDau.slice(0, 10);
+
+    const luu = token;
+    try {
+      // Thợ A thấy việc của mình
+      token = await dangNhap('0901000004');
+      const cuaA = await call('GET', `/api/v1/assignments?date=${ngay}`);
+      assert.ok(
+        cuaA.body.some((x: { id: string }) => x.id === r.body.id),
+        'thợ không thấy việc của chính mình',
+      );
+
+      // Thợ B KHÔNG thấy việc của thợ A
+      token = await dangNhap('0901000007');
+      const cuaB = await call('GET', `/api/v1/assignments?date=${ngay}`);
+      assert.ok(
+        !cuaB.body.some((x: { id: string }) => x.id === r.body.id),
+        'thợ thấy việc của người khác — phạm vi SELF không được áp',
+      );
+      assert.ok(
+        cuaB.body.every((x: { technicianId: string }) => x.technicianId === thoB),
+        'lịch của thợ còn lẫn việc của người khác',
+      );
+    } finally {
+      token = luu;
+    }
+  });
+
+  test('ĐỐI CHỨNG: quản lý VẪN thấy toàn bộ lịch chi nhánh', async () => {
+    // Thiếu vế này thì một bộ lọc quá tay làm mọi vai chỉ thấy việc của mình,
+    // và màn điều phối trở nên vô dụng — mà test kia vẫn xanh.
+    const hm = await hangMucDaDuyet('SV-OIL-ENGINE');
+    const batDau = khungGio();
+    const r = await call('POST', '/api/v1/assignments', {
+      quotationLineId: hm.quotationLineId,
+      technicianId: await thoTheoDienThoai('0901000004'),
+      bayId: await khoang('K1-02'),
+      plannedStart: batDau,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+
+    // `token` đang là quản lý chi nhánh (xem before())
+    const lich = await call('GET', `/api/v1/assignments?date=${batDau.slice(0, 10)}`);
+    assert.ok(
+      lich.body.some((x: { id: string }) => x.id === r.body.id),
+      'quản lý không thấy việc vừa xếp cho thợ khác -> lọc quá tay',
+    );
+  });
+});

@@ -2,6 +2,8 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  // 🔒 Seed lại trước mỗi lượt — xem `e2e/global-setup.ts` để biết vì sao
+  globalSetup: './e2e/global-setup.ts',
   timeout: 30_000,
   fullyParallel: false,
   // 🔒 Một `test.only(...)` lỡ commit sẽ khiến CI chạy đúng 1 trong 17 kịch bản

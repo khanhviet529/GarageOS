@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-06 · Nhánh `fix/giao-dien-theo-skill` · **Phase 1 xong · PHASE 2 XONG TOÀN BỘ (2.1–2.7)**
+> Cập nhật: 2026-08-06 · Nhánh `fix/giao-dien-theo-skill` · **Phase 1–2 xong · Phase 4 đang làm** (app thợ)
 
 ## Đang ở đâu
 
@@ -28,14 +28,18 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 2.5 | Giờ công: các đoạn `TimeLog`, tạm dừng có lý do, job đóng hộ | ✅ merged |
 | 2.6 | QC + làm lại: phán định nguyên nhân, chỉ số chất lượng thợ | ✅ merged |
 | 2.7 | Báo giá bổ sung + tạm dừng có chọn lọc (BR-07-5) | ✅ merged |
-| 3 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ tiếp theo |
+| 4.1–4.2 | App thợ: Expo, đăng nhập, job card, bấm giờ | ✅ |
+| 4.4 | Báo phát sinh từ app | ✅ |
+| 4.5 | 🔒 Thợ không thấy tiền — **vá 3 lỗ hổng** | ✅ |
+| 4.3, 4.6 | Chụp ảnh (chờ lưu trữ đối tượng), build APK (chờ tài khoản Expo) | 🟡 |
+| 3, 5 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 303 (domain 12, db 42, api 249) |
-| E2E Playwright | 59 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Test tự động | 308 (domain 12, db 42, api 254) |
+| E2E Playwright | 65 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
 | Migration | 32 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
@@ -75,6 +79,10 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 
 | Seed đỏ với "cannot truncate a table referenced in a foreign key constraint" | Thêm bảng mới mà quên đưa vào danh sách `TRUNCATE` của `infra/seed.ts`. Thiết kế **không** dùng CASCADE chính là để lỗi này ồn ào — nhưng chạy `pnpm db:seed >/dev/null` thì che mất, và mọi test sau đó chạy trên dữ liệu cũ |
 | Test duyệt báo giá làm cạn dần tồn kho seed | Từ 2.2, mỗi lần khách duyệt để lại một bản ghi giữ chỗ ACTIVE. Không nhả thì sau ~12 lần chạy `PT-BRAKE-PAD-F` hết khả dụng và những test **chẳng liên quan** bắt đầu đỏ. Bộ test phải tự nhả ở `after()` |
+
+| Thêm `apps/mobile` (React 18) làm `next build` đỏ ở `layout.tsx` | Expo 52 cần React 18, Next 15 cần React 19. Hai bộ `@types/react` cùng tồn tại trong workspace, và TypeScript gom **mọi** `@types` nhìn thấy được lên cây thư mục — nên namespace `React` toàn cục của web bị trộn. Thông báo lỗi (`ReactNode is not assignable to React.ReactNode`) không hề nói ra điều đó. Sửa bằng `paths` + `typeRoots` trong `apps/web/tsconfig.json` để mỗi app chỉ thấy type của chính nó |
+| `pnpm install` đỏ `EPERM ... esbuild.exe` | API (`tsx`) hoặc web đang chạy giữ file. Dừng hết tiến trình node trước khi cài |
+| `pnpm install` treo ở `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | pnpm hỏi xác nhận xoá `node_modules` mà không có TTY. Đã đặt `confirm-modules-purge=false` trong `.npmrc` |
 
 ## Nợ kỹ thuật đã biết
 
@@ -153,6 +161,17 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | Hai bộ test đụng nhau trên **cùng một người thợ** | Bộ giờ công lùi một đoạn về `now() − 20 giờ` rồi để mở; khoảng đó phủ mọi đoạn mà bộ phát sinh vừa tạo quanh `now()`, và `no_timelog_overlap` bắn ở bộ chạy sau. Mỗi bộ phải dọn đúng thứ mình tạo |
 | Khung giờ xếp lịch trong test **cố định** | Lần chạy thứ hai đụng lần đầu với `no_bay_overlap`, đọc ra như lỗi tính năng. Mốc phải lệch theo tiến trình |
 | Xoá dữ liệu test sai chiều khoá ngoại | `supplement_request.found_in_assignment_id` trỏ về phân công, nên phải xoá chặn → bản khai → phân công |
+
+## Bẫy đã gặp ở Phase 4 — app thợ
+
+| Bẫy | Vì sao |
+|---|---|
+| **3 endpoint rò số tiền cho thợ** | `GET /quotations/:id` và `/repair-orders/:id/quotations` KHÔNG có `assertCan` nào; `/catalog/vehicle/:id` trả giá bán. Hai chỗ đầu sai ở chỗ **vắng mặt** một dòng — đọc code không thấy được, chỉ QUÉT mọi endpoint bằng token thợ mới lộ ra |
+| Thêm React 18 (Expo) làm `next build` đỏ | Hai bộ `@types/react` cùng tồn tại, TypeScript gom **mọi** `@types` nhìn thấy được lên cây thư mục nên namespace `React` của web bị trộn. Thông báo lỗi không hề nói ra điều đó. Sửa bằng `paths` + `typeRoots` trong `apps/web/tsconfig.json` |
+| E2E xanh lượt đầu, đỏ lượt hai | Nhiều kịch bản GHI dữ liệu (xếp lịch, bấm giờ). Lượt sau đụng `no_bay_overlap` với chính phân công lượt trước tạo ra, và `selectOption` treo tới hết timeout ở một kịch bản chẳng liên quan. Đã thêm `globalSetup` seed lại trước mỗi lượt |
+| Bộ E2E "đói" dữ liệu lẫn nhau | Seed để đúng MỘT hạng mục chờ xếp; bộ nào xếp lịch thì tiêu mất nó và bộ sau đỏ. Giờ seed để bốn |
+| CORS chỉ cho `localhost:3000` | Bản web của Expo chạy cổng 3002. Sửa bằng danh sách nguồn tường minh, KHÔNG `origin: true` — mở hết là mở đường CSRF khi chuyển sang cookie HttpOnly |
+| `pnpm install` đỏ `EPERM ... esbuild.exe` | Tiến trình API/web đang chạy giữ file. Dừng hết node trước khi cài |
 
 ## ⚠️ Lát cắt CHƯA có review độc lập
 

@@ -481,7 +481,25 @@ async function main(): Promise<void> {
        RETURNING id`,
       [TENANT_A, don[0]!.id, nguoi[0]!.id],
     );
-    for (const ma of ['SV-BRAKE-PAD', 'SV-OIL-ENGINE']) {
+    /*
+     * SÁU hạng mục, và con số này có chủ ý:
+     *  · một cái đã xếp và ĐÃ XONG   -> màn QC có việc để kiểm
+     *  · một cái đã xếp và CHỜ LÀM   -> app thợ có thẻ bấm "Bắt đầu"
+     *  · BỐN cái CHƯA xếp            -> nhiều bộ E2E cùng cần "việc chờ xếp"
+     *
+     * Vì sao bốn chứ không phải một: các bộ E2E chạy tuần tự trên CÙNG một
+     * database, và bộ nào xếp lịch thì TIÊU MẤT một hạng mục chờ. Để đúng một
+     * cái thì bộ chạy sau đói dữ liệu và đỏ ở chỗ chẳng liên quan gì tới thứ
+     * nó đang kiểm — đã xảy ra đúng như vậy khi thêm app thợ.
+     */
+    for (const ma of [
+      'SV-BRAKE-PAD',
+      'SV-OIL-ENGINE',
+      'SV-SPARK-PLUG',
+      'SV-TIRE-ROT',
+      'SV-AC-CLEAN',
+      'SV-SUSPENSION',
+    ]) {
       await db.query(
         `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, service_item_id,
                                      description, quantity, unit_price, status, approval_source)
@@ -583,6 +601,41 @@ async function main(): Promise<void> {
       [TENANT_A, pc[0]!.id, thoChinh[0]!.id],
     );
     await db.query(`UPDATE work_assignment SET status = 'DONE' WHERE id = $1`, [pc[0]!.id]);
+
+    /*
+     * Một việc CHỜ LÀM cho cùng người thợ — Phase 4.
+     *
+     * App thợ cần ít nhất một thẻ bấm được "Bắt đầu", nếu không thì test luồng
+     * bấm giờ tự bỏ qua, và người xem demo mở app ra chỉ thấy một việc đã xong.
+     *
+     * Xếp lúc 10h để không đụng khung 8h–9h30 của việc trên: exclusion
+     * constraint chặn cả theo khoang lẫn theo thợ.
+     */
+    const { rows: dongCongSau } = await db.query<{ id: string }>(
+      `SELECT id FROM quotation_line
+        WHERE quotation_id = $1 AND line_type = 'LABOR' AND id <> $2
+        ORDER BY seq LIMIT 1`,
+      [bg[0]!.id, dongCong2[0]!.id],
+    );
+    if (dongCongSau[0] !== undefined) {
+      await db.query(
+        `INSERT INTO work_assignment (tenant_id, repair_order_id, quotation_line_id,
+                                      technician_id, bay_id, planned_start, planned_end,
+                                      created_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,
+                 date_trunc('day', now()) + interval '10 hours',
+                 date_trunc('day', now()) + interval '11 hours',
+                 $6)`,
+        [
+          TENANT_A,
+          don[0]!.id,
+          dongCongSau[0].id,
+          thoChinh[0]!.id,
+          khoangDau[0]!.id,
+          nguoi[0]!.id,
+        ],
+      );
+    }
 
     await db.query(
       `UPDATE quotation SET status = 'APPROVED', sent_at = now(),

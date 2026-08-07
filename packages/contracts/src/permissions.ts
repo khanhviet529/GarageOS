@@ -33,6 +33,34 @@ export const ACTION_ROLES = {
   'quotation:send': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 
   /**
+   * 🔒 ĐỌC báo giá — tức là thấy TIỀN.
+   *
+   * Tách khỏi `quotation:write` vì thu ngân phải thấy số tiền để thu, nhưng
+   * không được lập báo giá. Và quan trọng hơn: THỢ không có quyền này.
+   *
+   * docs/02 mục 2.3 nói thẳng thợ "không được thấy bất kỳ số tiền nào". Trước
+   * lát cắt 4.5, `QuotationService.getById` và `listForOrder` KHÔNG có kiểm tra
+   * vai nào cả — một tài khoản thợ đọc được đơn giá từng dòng, tổng tiền, và
+   * đơn giá giờ công của cả xưởng.
+   *
+   * Đây là đúng hình dạng lỗ hổng mà vòng rà soát Phase 1 đã ghi lại: kiểm tra
+   * quyền rải rác theo từng phương thức thì chỗ nào không được review kỹ là chỗ
+   * đó thiếu.
+   */
+  'quotation:read': ['SERVICE_ADVISOR', 'CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Xem GIÁ BÁN trong danh mục — docs/02 ma trận, hàng "Xem giá bán".
+   *
+   * Thợ VẪN cần danh mục để báo phát sinh (chọn hạng mục đề xuất, BC-03 mục 4
+   * bước 2), nên không chặn cả endpoint — chỉ lược bỏ các trường tiền. Chặn
+   * hẳn sẽ làm hỏng luồng báo phát sinh trên app thợ.
+   *
+   * Thủ kho cũng ❌ ở đây: họ xem GIÁ VỐN (`stock:readCost`), không xem giá bán.
+   */
+  'catalog:readPrice': ['SERVICE_ADVISOR', 'CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
    * 🔒 Áp chiết khấu vượt ngưỡng của tenant — PR-03.
    * Cố vấn áp được chiết khấu trong ngưỡng; vượt ngưỡng cần quản lý duyệt.
    */
@@ -145,6 +173,8 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'repairOrder:create': 'tiếp nhận xe',
   'quotation:write': 'lập hoặc sửa báo giá',
   'quotation:send': 'gửi báo giá cho khách',
+  'quotation:read': 'xem báo giá',
+  'catalog:readPrice': 'xem giá bán trong danh mục',
   'quotation:discountOverThreshold': 'áp chiết khấu vượt ngưỡng',
   'stock:read': 'xem tồn kho',
   'stock:readCost': 'xem giá vốn',

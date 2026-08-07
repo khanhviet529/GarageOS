@@ -43,6 +43,9 @@ jobs:
       # Trả mã OTP trong response để test luồng duyệt báo giá chạy được.
       # ⚠️ Chỉ ở CI. Không bao giờ đặt ở production.
       OTP_DEV_ECHO: 'true'
+      # Bản web của app thợ chạy ở cổng khác nên phải nằm trong danh sách CORS.
+      # Liệt kê tường minh chứ không `origin: true` — xem apps/api/src/main.ts.
+      WEB_ORIGIN: 'http://localhost:3000,http://localhost:3002'
       # E2E cần danh sách tài khoản demo hiển thị trên trang đăng nhập
       NEXT_PUBLIC_DEMO_HINTS: '1'
 
@@ -125,6 +128,18 @@ jobs:
             sleep 2
           done
           curl -sf http://localhost:3000/dang-nhap >/dev/null || { echo "Web không khởi động được"; exit 1; }
+
+      # App thợ chạy qua bản web của Expo. Nó dùng CÙNG mã nguồn React Native,
+      # nên kiểm chứng được logic, luồng dữ liệu và phân quyền — nhưng không
+      # kiểm được cử chỉ chạm hay quyền camera. Xem apps/mobile/README.md.
+      - name: Khởi động app thợ nền
+        run: |
+          pnpm --filter @garageos/mobile web &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3002 >/dev/null && break
+            sleep 3
+          done
+          curl -sf http://localhost:3002 >/dev/null || { echo "App thợ không khởi động được"; exit 1; }
 
       # E2E gồm cả kiểm tra accessibility tự động bằng axe-core trên 4 màn hình.
       # Lỗi accessibility nặng nhất của dự án (nút duyệt báo giá không có tên

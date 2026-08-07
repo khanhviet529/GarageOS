@@ -97,12 +97,12 @@ môi trường thật.
 
 | Lát cắt | Nội dung |
 |---|---|
-| 4.1 | Expo + auth + danh sách job card của mình |
-| 4.2 | Bấm giờ: bắt đầu / tạm dừng / hoàn thành |
+| 4.1 | ✅ Expo + auth + danh sách job card của mình |
+| 4.2 | ✅ Bấm giờ: bắt đầu / tạm dừng / hoàn thành |
 | 4.3 | Chụp ảnh + hàng đợi upload |
-| 4.4 | Báo phát sinh, yêu cầu phụ tùng |
-| 4.5 | 🔒 Kiểm chứng: thợ **không thấy** bất kỳ số tiền nào |
-| 4.6 | Build APK + QR Expo Go trong README |
+| 4.4 | 🟡 Báo phát sinh xong; yêu cầu phụ tùng chưa |
+| 4.5 | ✅ 🔒 Kiểm chứng: thợ **không thấy** bất kỳ số tiền nào |
+| 4.6 | 🟡 Cấu hình + hướng dẫn xong; build thật cần tài khoản Expo |
 
 **Kết quả demo:** quét QR trên điện thoại thật, nhận job card, bấm giờ, chụp ảnh.
 

@@ -66,3 +66,33 @@ export function appendBranchScope(
   params.push(scope.params);
   return ` AND ${scope.sql.replace('$#', `$${params.length}`)}`;
 }
+
+/**
+ * 🔒 Phạm vi SELF — thợ chỉ thấy việc CỦA MÌNH.
+ *
+ * `docs/02-actors-and-permissions.md` mục 1 xếp `TECHNICIAN` vào phạm vi
+ * `SELF`, nhưng suốt Phase 1–2 vai này dùng nhờ phạm vi `BRANCH` vì chưa có
+ * bảng phân công để mà lọc. STATUS.md ghi lại như một khoản nợ, hẹn "thu hẹp
+ * khi có `work_assignment`".
+ *
+ * Nợ đó lộ ra ngay khi app thợ chạy: màn hình hiện việc của CẢ CHI NHÁNH, và
+ * thợ bấm "Bắt đầu" trên việc của người khác thì nhận lỗi
+ * `WRONG_TECHNICIAN` từ trigger ở 0030 — một thông báo đúng nhưng vô nghĩa với
+ * người dùng, vì họ không hiểu vì sao việc đó lại nằm trong danh sách của mình.
+ *
+ * KHÔNG thu hẹp nếu người dùng còn vai khác cho phép nhìn rộng hơn: một quản
+ * lý kiêm thợ vẫn phải thấy cả xưởng để điều phối.
+ */
+const VAI_NHIN_RONG = ['SERVICE_ADVISOR', 'STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'];
+
+export function appendSelfScope(
+  actor: ActorContext,
+  params: unknown[],
+  cot = 'wa.technician_id',
+): string {
+  const chiLaTho =
+    actor.roles.includes('TECHNICIAN') && !actor.roles.some((r) => VAI_NHIN_RONG.includes(r));
+  if (!chiLaTho) return '';
+  params.push(actor.userId);
+  return ` AND ${cot} = $${params.length}`;
+}

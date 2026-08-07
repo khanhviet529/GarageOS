@@ -159,6 +159,12 @@ export const WorkAssignment = z.object({
   repairOrderId: z.string().uuid(),
   repairOrderCode: z.string(),
   plateNumber: z.string(),
+  /**
+   * Cần cho app thợ: báo phát sinh phải tra danh mục hạng mục ÁP DỤNG ĐƯỢC cho
+   * chiếc xe này (lọc theo `powertrain` — 🔒 INV-V-01), mà endpoint danh mục
+   * nhận `vehicleId` chứ không nhận mã đơn.
+   */
+  vehicleId: z.string().uuid(),
   quotationLineId: z.string().uuid(),
   description: z.string(),
   technicianId: z.string().uuid(),

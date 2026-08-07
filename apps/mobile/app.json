@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "GarageOS Thợ",
+    "slug": "garageos-tho",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "garageos",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": { "resizeMode": "contain", "backgroundColor": "#0b4a8f" },
+    "android": {
+      "package": "com.garageos.tho",
+      "adaptiveIcon": { "backgroundColor": "#0b4a8f" }
+    },
+    "ios": { "supportsTablet": false, "bundleIdentifier": "com.garageos.tho" },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ứng dụng cần truy cập ảnh để đính kèm ảnh hiện trạng vào job card.",
+          "cameraPermission": "Ứng dụng cần dùng camera để chụp ảnh hiện trạng xe."
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3001"
+    }
+  }
+}
