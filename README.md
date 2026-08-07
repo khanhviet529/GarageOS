@@ -273,8 +273,8 @@ constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
 | 4 | App thợ (Expo) · rà soát phân quyền · thu hẹp phạm vi SELF | ✅ |
 | 5 | Bảo hành · huỷ đơn và quyết toán · kiểm kê kho · xe bỏ quên | ✅ |
 | 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
-| 7 | Hoàn thiện để trưng bày | 🔄 |
-| 8 | Tầng công cụ cho AI agent | ⏳ |
+| 7 | Hoàn thiện để trưng bày | ✅ trừ link demo sống và video |
+| 8 | Tầng công cụ cho AI agent: tool có phân quyền, guardrail, trần chi phí, nhật ký | ✅ phần không cần khoá API |
 
 | | |
 |---|---|
