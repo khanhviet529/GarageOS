@@ -78,6 +78,32 @@ hiện — làm mờ vẫn buộc người dùng đọc và loại trừ.
 
 ![Bước tiếp theo](docs/images/05-may-trang-thai.png)
 
+### 6. Báo cáo — ba chỗ cố ý không cho nhìn nửa sự thật
+
+![Màn hình báo cáo](docs/images/06-bao-cao.png)
+
+Ba thứ trên màn hình này là quyết định thiết kế, không phải bố cục ngẫu nhiên:
+
+| Thấy gì | Vì sao đặt như vậy |
+|---|---|
+| Năng suất và tỉ lệ làm lại **cùng một bảng** | Năng suất cao + rework cao = làm ẩu, không phải giỏi. Tách hai bảng là mời người xem khen nhầm người |
+| Tỉ lệ đúng hẹn đứng cạnh **số lần dời hẹn**, cùng cỡ chữ | 95% đúng hẹn mà mỗi đơn dời hẹn ba lần thì con số 95% vô nghĩa |
+| Ô "chưa đủ dữ liệu" là **dấu gạch**, không phải số 0 | Năng suất `null` nghĩa là giờ bấm quá ít để tính. Hiện 0 là vu oan cho một người bằng một lỗi hiển thị |
+
+Mỗi khối nói rõ **kỳ** nó tính và **đã loại trừ gì** — một báo cáo lặng lẽ bỏ
+bớt dữ liệu là báo cáo nói dối, kể cả khi việc bỏ bớt là đúng.
+
+### 7. Màn hình co được xuống điện thoại
+
+Thủ kho đứng giữa kệ hàng và quản lý đi quanh xưởng đều dùng điện thoại. Bảng
+không co lại thành thẻ — nó **cuộn ngang trong khung riêng**, để cột đầu tiên
+vẫn là mã hàng chứ không phải một nhãn lặp lại ở mọi thẻ.
+
+<p>
+  <img src="docs/images/07-kho-mobile.png" width="300" alt="Màn kho trên điện thoại" />
+  <img src="docs/images/08-lich-xuong-mobile.png" width="300" alt="Lịch xưởng trên điện thoại" />
+</p>
+
 ---
 
 ## Điều gì đáng xem về mặt kỹ thuật
@@ -153,11 +179,54 @@ kể cả những phát hiện chỉ ra lỗi của chính tôi:
 
 ---
 
-## Cấu trúc
+## Kiến trúc
+
+```mermaid
+flowchart TB
+  subgraph client["Người dùng"]
+    web["apps/web · Next.js 15<br/>nhân viên + trang tra cứu công khai"]
+    mob["apps/mobile · Expo<br/>app thợ ở xưởng"]
+  end
+
+  subgraph api["apps/api · NestJS"]
+    ctrl["Controller<br/>chỉ nhận và trả, không có nghiệp vụ"]
+    svc["Service<br/>nghiệp vụ + phân quyền"]
+    ctrl --> svc
+  end
+
+  subgraph shared["packages/ — dùng chung, một chiều phụ thuộc"]
+    contracts["contracts<br/>Zod schema · enum · bảng chuyển trạng thái"]
+    domain["domain<br/>logic thuần: tiền, biển số"]
+    dbpkg["db<br/>truy cập dữ liệu có cô lập tenant"]
+    domain --> contracts
+  end
+
+  subgraph pg["PostgreSQL 16 — nơi bất biến thật sự sống"]
+    rls["RLS FORCE<br/>cô lập tenant"]
+    trg["Trigger + CHECK + EXCLUDE<br/>41 bất biến"]
+    views["View báo cáo<br/>chỉ đọc"]
+  end
+
+  web --> ctrl
+  mob --> ctrl
+  svc --> dbpkg
+  svc --> domain
+  web -.dùng chung kiểu.-> contracts
+  dbpkg --> pg
+
+  style pg fill:#eef4fb,stroke:#0b4a8f
+  style shared fill:#f6f7f9,stroke:#8892a0
+```
+
+🔒 **Mũi tên vào PostgreSQL là mũi tên quan trọng nhất.** Bất biến không nằm ở
+service — service chỉ dịch lỗi database thành câu tiếng Việt. Một script bảo
+trì, một lần import, hay một service viết vội đều đi qua cùng những ràng buộc
+đó.
 
 ```
 apps/api        NestJS   — controller → service (nghiệp vụ + quyền) → repository → DB
 apps/web        Next.js  — nhân viên + trang tra cứu công khai cho khách
+apps/mobile     Expo     — app thợ: job card, bấm giờ, báo phát sinh
 packages/contracts  Zod schema, type, enum, bảng hằng (state machine)
 packages/domain     Logic thuần: tiền, biển số — không import framework
 packages/db         Truy cập dữ liệu có cô lập tenant
@@ -185,8 +254,8 @@ Mở http://localhost:3000, đăng nhập `0901000003` / `demo1234` (cố vấn 
 Trang đăng nhập liệt kê sẵn các tài khoản demo khác.
 
 ```bash
-pnpm test           # 162 test tích hợp trên Postgres THẬT — cần API đang chạy
-pnpm e2e            # 17 kịch bản Playwright — cần cả API lẫn web
+pnpm test           # 368 test tích hợp trên Postgres THẬT — cần API đang chạy
+pnpm e2e            # 69 kịch bản Playwright — cần cả API lẫn web
 ```
 
 🔒 Test dùng **PostgreSQL thật trong Docker, không dùng SQLite** — exclusion
@@ -196,15 +265,31 @@ constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
 
 ## Trạng thái
 
-**Phase 1 hoàn thành**: tiếp nhận → danh mục → báo giá → khách duyệt từng phần →
-máy trạng thái đầy đủ.
+| Phase | Nội dung | Tình trạng |
+|---|---|---|
+| 1 | Tiếp nhận → danh mục → báo giá → khách duyệt từng phần → máy trạng thái | ✅ |
+| 2 | Kho, giữ chỗ, xuất kho · phân công khoang/thợ · giờ công · QC và làm lại · báo phát sinh | ✅ |
+| 3 | Hoá đơn, thanh toán, công nợ | ⏸️ cố ý bỏ qua ở bản này |
+| 4 | App thợ (Expo) · rà soát phân quyền · thu hẹp phạm vi SELF | ✅ |
+| 5 | Bảo hành · huỷ đơn và quyết toán · kiểm kê kho · xe bỏ quên | ✅ |
+| 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
+| 7 | Hoàn thiện để trưng bày | 🔄 |
+| 8 | Tầng công cụ cho AI agent | ⏳ |
 
 | | |
 |---|---|
-| Test tự động | 162 |
-| E2E Playwright | 17 |
-| Migration | 15 |
+| Test tích hợp (Postgres thật) | 368 |
+| E2E Playwright | 69 |
+| Migration SQL viết tay | 41 |
 | Vòng codex-review | 6 · 17 phát hiện · 17 xác nhận |
+
+⏸️ **Phase 3 bỏ qua có chủ ý, không phải bỏ sót.** Hoá đơn và thanh toán là phần
+nghiệp vụ dễ đoán nhất của một hệ thống như thế này; những case khó — bảo hành
+hạn kép, huỷ đơn giữa chừng, kiểm kê kho, xe khách bỏ lại — nằm ở Phase 5. Chỗ
+nào cần hoá đơn, mã nguồn nói rõ nó đang dùng gì thay thế và vì sao (ví dụ:
+doanh thu trong báo cáo lấy từ **dòng báo giá đã duyệt**, và tên trường là
+`doanhThuDuKien` chứ không phải `doanhThu`). Lập luận đầy đủ, kèm những gì phải
+đánh đổi: [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md).
 
 Chi tiết, nợ kỹ thuật đã biết và các bẫy hạ tầng đã gặp: [`STATUS.md`](STATUS.md).
 Lộ trình các phase sau: [`docs/15-roadmap.md`](docs/15-roadmap.md).

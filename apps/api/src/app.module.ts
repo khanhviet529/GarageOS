@@ -9,11 +9,12 @@ import { StockModule } from './stock/stock.module';
 import { AssignmentModule } from './assignment/assignment.module';
 import { WarrantyModule } from './warranty/warranty.module';
 import { CancellationModule } from './cancellation/cancellation.module';
+import { ReportsModule } from './reports/reports.module';
 import { PublicTrackingModule } from './public/public-tracking.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
-  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, PublicTrackingModule],
+  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, PublicTrackingModule],
   controllers: [HealthController],
 })
 export class AppModule {}

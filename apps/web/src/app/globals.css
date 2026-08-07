@@ -481,3 +481,25 @@ td.am { color: var(--c-danger); }
 /* Nhãn nguyên nhân xuống dòng được: hệ quả tiền bạc đi kèm nên dòng khá dài */
 .hop-qc .hop-kiem { align-items: flex-start; }
 .hop-qc .hop-kiem input { margin-top: 3px; }
+
+/* ── Báo cáo (Phase 6) ───────────────────────────────────────────────────
+   Dải chỉ số đứng đầu mỗi khối báo cáo. Cố ý cho mọi ô CÙNG cỡ chữ: ở màn
+   "tỉ lệ đúng hẹn", con số dời hẹn phải nặng ngang con số đúng hẹn — làm nó
+   nhỏ hơn là ngầm bảo người đọc bỏ qua nó.
+------------------------------------------------------------------------- */
+.kpi-row { display: flex; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.kpi {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r-sm);
+  min-width: 150px;
+}
+.kpi-label { font-size: var(--fs-xs); color: var(--c-text-muted); text-transform: uppercase;
+             letter-spacing: .3px; }
+.kpi strong { font-size: var(--fs-lg); font-weight: 600; }
+
+/* Số âm — lãi âm là thứ phải nhìn ra ngay, không phải thứ đọc kỹ mới thấy */
+.am { color: var(--c-danger); font-weight: 600; }
+
+/* Vốn chết: tiền đang nằm im trên kệ */
+.tag.von-chet { background: var(--c-danger-soft); color: var(--c-danger); }

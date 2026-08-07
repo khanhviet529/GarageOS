@@ -20,7 +20,7 @@ const VAI_XEM_LICH = ['TECHNICIAN', 'SERVICE_ADVISOR', 'STORE_KEEPER', 'BRANCH_M
 export function AppHeader({
   current,
 }: {
-  current: 'tiep-nhan' | 'xe-trong-xuong' | 'don' | 'kho' | 'lich-xuong';
+  current: 'tiep-nhan' | 'xe-trong-xuong' | 'don' | 'kho' | 'lich-xuong' | 'bao-cao';
 }) {
   const [who, setWho] = useState<{ fullName: string; roles: string[] } | null>(null);
 
@@ -61,6 +61,17 @@ export function AppHeader({
         {who !== null && VAI_XEM_KHO.some((r) => who.roles.includes(r)) && (
           <Link href="/kho" className={current === 'kho' ? 'active' : ''}>
             Kho
+          </Link>
+        )}
+        {/*
+          Báo cáo mở cho MỌI vai đọc được lịch xưởng — thợ vào vẫn có phần xem
+          được (thời gian chờ, năng suất của chính mình), phần còn lại API trả
+          403 và trang tự bỏ qua khối đó. Ẩn hẳn mục này với thợ là lấy đi thứ
+          docs/09 mục 5 nói họ được xem.
+        */}
+        {who !== null && VAI_XEM_LICH.some((r) => who.roles.includes(r)) && (
+          <Link href="/bao-cao" className={current === 'bao-cao' ? 'active' : ''}>
+            Báo cáo
           </Link>
         )}
       </nav>

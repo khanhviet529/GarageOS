@@ -293,6 +293,91 @@ export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'Đã huỷ',
 };
 
+/* ── Báo cáo — Phase 6 ─────────────────────────────────────────────────── */
+
+export interface ProfitPerOrder {
+  repairOrderId: string;
+  code: string;
+  plateNumber: string;
+  powertrain: string;
+  status: string;
+  deliveredAt: string | null;
+  doanhThuDuKien: number;
+  giaVonPhuTung: number;
+  chiPhiCong: number;
+  chiPhiRework: number;
+  chiPhiBaoHanh: number;
+  lai: number;
+  bienLoi: number | null;
+  laDonBaoHanh: boolean;
+}
+
+export interface ProfitReport {
+  from: string;
+  to: string;
+  orders: ProfitPerOrder[];
+  tongDoanhThu: number;
+  tongChiPhi: number;
+  tongLai: number;
+  daLoaiTru: string[];
+}
+
+export interface WaitTimeReport {
+  from: string;
+  to: string;
+  stages: {
+    trangThai: string;
+    boPhan: string;
+    soLuot: number;
+    trungViGio: number;
+    p90Gio: number;
+    tongGio: number;
+  }[];
+  daLoaiTru: string[];
+}
+
+export interface TechnicianProductivity {
+  technicianId: string;
+  technicianName: string;
+  soViecXong: number;
+  gioDinhMuc: number | null;
+  gioThucTe: number | null;
+  nangSuat: number | null;
+  soLanQcTruot: number;
+  soViecLamLai: number;
+  tiLeRework: number | null;
+  chiPhiLamLai: number;
+}
+
+export interface StockReportLine {
+  warehouseId: string;
+  warehouseName: string;
+  partId: string;
+  sku: string;
+  partName: string;
+  category: string | null;
+  onHand: number;
+  reserved: number;
+  available: number;
+  minStockLevel: number;
+  giaTriTon: number;
+  duoiMucToiThieu: boolean;
+  vongQuay: number | null;
+  soNgayTon: number | null;
+  laVonChet: boolean;
+}
+
+export interface OnTimeReport {
+  from: string;
+  to: string;
+  soDonBanGiao: number;
+  soDonDungHen: number;
+  tiLeDungHen: number | null;
+  tongSoLanDoiHen: number;
+  soDonCoDoiHen: number;
+  daLoaiTru: string[];
+}
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -346,6 +431,13 @@ export const api = {
     ),
   receiveStock: (input: unknown) =>
     call<{ id: string; onHand: number; avgCost: number }>('POST', '/api/v1/stock/receipts', input),
+
+  reportProfit: () => call<ProfitReport>('GET', '/api/v1/reports/profit'),
+  reportWaitTime: () => call<WaitTimeReport>('GET', '/api/v1/reports/wait-time'),
+  reportProductivity: () =>
+    call<TechnicianProductivity[]>('GET', '/api/v1/reports/productivity'),
+  reportStock: () => call<StockReportLine[]>('GET', '/api/v1/reports/stock'),
+  reportOnTime: () => call<OnTimeReport>('GET', '/api/v1/reports/on-time'),
 
   listBays: () => call<Bay[]>('GET', '/api/v1/bays'),
   listPendingWork: () => call<PendingWorkItem[]>('GET', '/api/v1/assignments/pending-work'),
