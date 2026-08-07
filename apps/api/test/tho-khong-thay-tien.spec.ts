@@ -122,6 +122,9 @@ before(async () => {
   );
   const homNay = new Date().toISOString().slice(0, 10);
 
+  // Phiếu kiểm kê: lấy một phiếu bất kỳ nếu có, để route chi tiết cũng được quét
+  const { rows: kk } = await pool.query<{ id: string }>(`SELECT id FROM stock_take LIMIT 1`);
+
   duongDan = [
     '/api/v1/auth/me',
     '/api/v1/repair-orders?open=true',
@@ -145,7 +148,9 @@ before(async () => {
     '/api/v1/stock/parts',
     '/api/v1/stock/pending-issues',
     '/api/v1/warehouses',
+    '/api/v1/stock-takes',
     '/api/v1/vehicles/lookup?plate=30A12345',
+    ...(kk[0] === undefined ? [] : [`/api/v1/stock-takes/${kk[0].id}`]),
     ...(wa[0] === undefined ? [] : [`/api/v1/assignments/${wa[0].id}/time`]),
     ...(ql[0] === undefined
       ? []
