@@ -200,6 +200,7 @@ async function main(): Promise<void> {
    *    im lặng xoá luôn — tức là quên một bảng sẽ không bao giờ bị phát hiện.
    */
   await db.query(`TRUNCATE
+    cancellation_settlement_line, cancellation_settlement,
     warranty_cost_attribution, warranty_coverage,
     supplement_block, supplement_request,
     time_log, work_assignment, bay, user_certification, certification,
