@@ -147,6 +147,7 @@ before(async () => {
     '/api/v1/reports/stock',
     '/api/v1/reports/stock-variance',
     '/api/v1/reports/on-time',
+    '/api/v1/ai/usage',
     `/api/v1/assignments?date=${homNay}`,
     '/api/v1/assignments/pending-work',
     '/api/v1/assignments/quality',
