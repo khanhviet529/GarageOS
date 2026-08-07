@@ -68,12 +68,25 @@ thật không hiểu `localhost`.
 
 ---
 
-## 6. Phase 8 (AI) — cần khoá và ngân sách
+## 6. Phase 8 (AI) — phần nào xong, phần nào chờ khoá
+
+Phase 8 **đã làm phần không cần khoá API**, và đó là phần quyết định tính năng
+này chạy được ở môi trường thật hay chỉ chạy trong bản demo:
+
+| Lát cắt | Tình trạng |
+|---|---|
+| 8.1 Bọc service thành tool | ✅ 5 tool đọc, sinh mô tả cho mô hình từ chính định nghĩa |
+| 8.2 🔒 Phân quyền enforce TRONG tool | ✅ có test đi đúng đường tấn công prompt injection |
+| 8.3 RAG có trích dẫn nguồn | ⏳ **cần khoá** — phần sinh câu trả lời |
+| 8.4 Bộ eval chạy trong CI | ✅ 12 câu kiểm ĐỊNH TUYẾN tool (chạy với adapter mock) · ⏳ đo chất lượng cần khoá |
+| 8.5 Guardrail + trần token/ngày | ✅ trần chi phí và trần số lượt, đếm cả lượt bị chặn |
+| 8.6 Log mọi lời gọi | ✅ bảng chỉ-thêm: prompt, token, độ trễ, chi phí, tool đã gọi |
 
 | | |
 |---|---|
-| **Cần** | API key mô hình ngôn ngữ + ngân sách token; thêm secret vào GitHub Actions cho 8.4 (bộ eval chạy trong CI) |
-| **Ghi chú** | `docs/15-roadmap.md` ghi Phase 8 "⚠️ chỉ làm sau khi 1–7 xong" |
+| **Cần từ bạn** | API key mô hình ngôn ngữ + ngân sách token; thêm secret vào GitHub Actions |
+| **Khi có khoá, phải làm gì** | Viết một lớp cài `LlmProvider` ở `apps/api/src/ai/provider.ts` (~50 dòng). Không chỗ nào khác phải sửa — không chỗ nào khác biết nhà cung cấp là ai |
+| **Bật cho tenant** | `UPDATE tenant SET ai_enabled = true, ai_daily_cost_limit = <đồng>, ai_daily_call_limit = <số lượt>` — mặc định TẮT |
 
 ---
 

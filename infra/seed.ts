@@ -200,6 +200,7 @@ async function main(): Promise<void> {
    *    im lặng xoá luôn — tức là quên một bảng sẽ không bao giờ bị phát hiện.
    */
   await db.query(`TRUNCATE
+    llm_call_log,
     storage_fee, customer_contact_attempt,
     stock_take_line, stock_take,
     cancellation_settlement_line, cancellation_settlement,
@@ -582,27 +583,64 @@ async function main(): Promise<void> {
         WHERE quotation_id = $1 AND line_type = 'LABOR' ORDER BY seq LIMIT 1`,
       [bg[0]!.id],
     );
+    /*
+     * 🔒 Mốc "đầu ngày" phải tính theo MÚI GIỜ CHI NHÁNH, không theo múi giờ
+     * của database.
+     *
+     * `date_trunc('day', now())` chạy theo timezone của phiên PostgreSQL — trong
+     * Docker là UTC. Màn lịch xưởng thì hỏi "hôm nay" theo giờ trình duyệt
+     * (UTC+7). Từ 00:00 tới 07:00 giờ Việt Nam, hai bên ở HAI NGÀY KHÁC NHAU:
+     * lịch xưởng trống trơn, app thợ không có việc nào, và mọi test dựa vào
+     * lịch hôm nay đều đỏ.
+     *
+     * Đã xảy ra thật: bộ E2E xanh lúc 23h, đỏ 5 bài lúc 0h30 cùng đêm, không có
+     * dòng code nào thay đổi ở giữa.
+     */
+    const { rows: mocNgay } = await db.query<{ dau_ngay: Date }>(
+      `SELECT (date_trunc('day', now() AT TIME ZONE b.timezone) AT TIME ZONE b.timezone)
+                AS dau_ngay
+         FROM branch b WHERE b.id = $1`,
+      [chiNhanh],
+    );
+    const dauNgay = mocNgay[0]!.dau_ngay;
+
     const { rows: pc } = await db.query<{ id: string }>(
       `INSERT INTO work_assignment (tenant_id, repair_order_id, quotation_line_id,
                                     technician_id, bay_id, planned_start, planned_end,
                                     created_by_user_id)
        VALUES ($1,$2,$3,$4,$5,
-               date_trunc('day', now()) + interval '8 hours',
-               date_trunc('day', now()) + interval '9 hours 30 minutes',
+               $7::timestamptz + interval '8 hours',
+               $7::timestamptz + interval '9 hours 30 minutes',
                $6)
        RETURNING id`,
-      [TENANT_A, don[0]!.id, dongCong2[0]!.id, thoChinh[0]!.id, khoangDau[0]!.id, nguoi[0]!.id],
+      [TENANT_A, don[0]!.id, dongCong2[0]!.id, thoChinh[0]!.id, khoangDau[0]!.id, nguoi[0]!.id,
+       dauNgay],
     );
-    // Một đoạn giờ công đã đóng, rồi đưa việc sang DONE — đúng đường mà
-    // TimeLogService đi, không nhảy cóc trạng thái.
+    /*
+     * Một đoạn giờ công đã đóng, rồi đưa việc sang DONE — đúng đường mà
+     * TimeLogService đi, không nhảy cóc trạng thái.
+     *
+     * 🔒 Đoạn giờ này phải nằm HOÀN TOÀN TRONG QUÁ KHỨ, không phải "8h sáng
+     * hôm nay".
+     *
+     * `no_timelog_overlap` (exclusion constraint) coi một đoạn đang mở là
+     * `[bắt đầu, ∞)`. Seed chạy lúc 0h30 sáng thì đoạn 8h–9h20 hôm nay nằm ở
+     * TƯƠNG LAI, và thợ bấm "Bắt đầu" lúc 0h30 sẽ tạo một đoạn mở chồng lên nó
+     * — bị chặn với thông báo "đang có đoạn giờ khác chồng lấn", trong khi
+     * người dùng chưa làm gì cả.
+     *
+     * `LEAST(...)` giữ mốc 8h sáng cho lịch nhìn hợp lý ban ngày, và tự lùi về
+     * quá khứ nếu seed chạy sớm hơn thế.
+     */
     await db.query(
       `INSERT INTO time_log (tenant_id, work_assignment_id, technician_id,
                              started_at, ended_at, entered_by_user_id)
        VALUES ($1,$2,$3,
-               date_trunc('day', now()) + interval '8 hours',
-               date_trunc('day', now()) + interval '9 hours 20 minutes',
+               LEAST($4::timestamptz + interval '8 hours', now() - interval '100 minutes'),
+               LEAST($4::timestamptz + interval '8 hours', now() - interval '100 minutes')
+                 + interval '80 minutes',
                $3)`,
-      [TENANT_A, pc[0]!.id, thoChinh[0]!.id],
+      [TENANT_A, pc[0]!.id, thoChinh[0]!.id, dauNgay],
     );
     await db.query(`UPDATE work_assignment SET status = 'DONE' WHERE id = $1`, [pc[0]!.id]);
 
@@ -627,8 +665,8 @@ async function main(): Promise<void> {
                                       technician_id, bay_id, planned_start, planned_end,
                                       created_by_user_id)
          VALUES ($1,$2,$3,$4,$5,
-                 date_trunc('day', now()) + interval '10 hours',
-                 date_trunc('day', now()) + interval '11 hours',
+                 $7::timestamptz + interval '10 hours',
+                 $7::timestamptz + interval '11 hours',
                  $6)`,
         [
           TENANT_A,
@@ -637,6 +675,7 @@ async function main(): Promise<void> {
           thoChinh[0]!.id,
           khoangDau[0]!.id,
           nguoi[0]!.id,
+          dauNgay,
         ],
       );
     }

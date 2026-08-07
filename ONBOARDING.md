@@ -198,14 +198,53 @@ async reserve(tenantId: string, input: ReserveInput)      // ❌ SAI
 | 0 | Walking skeleton, CI, RLS đa tenant | ✅ |
 | 1 | Tiếp nhận xe → báo giá → khách duyệt từng phần qua OTP | ✅ 6/6 lát cắt |
 | 2 | Kho, giữ chỗ, phân công, xuất kho, giờ công, QC/làm lại, phát sinh | ✅ **7/7 lát cắt** |
+| 4 | App thợ (Expo): job card, bấm giờ, báo phát sinh, 🔒 không thấy tiền | ✅ 4/6 lát cắt |
+| 5 | Bảo hành · huỷ đơn + quyết toán · kiểm kê kho · xe bỏ quên | ✅ **5/5 lát cắt** |
+| 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
+| 7 | Sơ đồ kiến trúc · ADR-0008 · số liệu README thật · ảnh tự sinh | ✅ trừ 2 việc chờ bạn |
+| 8 | Tool có phân quyền · guardrail · trần chi phí · nhật ký lời gọi | ✅ phần không cần khoá API |
 
-**Con số:** 303 test · 59 kịch bản E2E · 32 migration · 7 ADR
+**Con số:** 368 test · 69 kịch bản E2E · 42 migration · 8 ADR
 
-### Còn phải làm — toàn bộ
+⏸️ **Phase 3 (tiền) bỏ qua CÓ CHỦ Ý.** Đây là quyết định, không phải bỏ sót —
+lập luận đầy đủ kèm những gì phải đánh đổi ở
+[ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md). Đọc nó **trước khi** bắt
+tay vào Phase 3, đặc biệt là mục "phương án đã cân nhắc": phương án "làm bảng
+`invoice` tối giản cho có" đã bị loại, và loại vì một lý do cụ thể.
 
-Sắp theo thứ tự nên làm. Cột "Khó" là ước lượng độ khó kỹ thuật, không phải khối lượng.
+### Còn phải làm
 
-#### A. Phase 3 — tiền (6 lát cắt)
+Phần lớn những gì còn lại **chặn bởi thứ ở ngoài mã nguồn** (tài khoản, máy chủ,
+khoá API) chứ không phải bởi việc chưa viết. Danh sách đầy đủ những thứ đó, kèm
+việc cần làm gì để gỡ: [`CAN-BAN-CUNG-CAP.md`](CAN-BAN-CUNG-CAP.md).
+
+Cột "Khó" là ước lượng độ khó kỹ thuật, không phải khối lượng.
+
+#### A. Phần còn lại của Phase 4 — app thợ
+
+| Lát cắt | Nội dung | Chặn bởi |
+|---|---|---|
+| 4.3 | Chụp ảnh hiện trạng, có hàng đợi upload | Lưu trữ đối tượng (S3/R2) |
+| 4.6 | Build APK để cài lên máy thật | Tài khoản Expo |
+
+#### B. Phần còn lại của Phase 7 — hai việc chỉ chủ dự án làm được
+
+Link demo sống trong README (cần máy chủ — `docs/DEPLOY.md` đã có hướng dẫn) và
+video demo 90 giây. Kịch bản quay đề xuất nằm ở
+[`CAN-BAN-CUNG-CAP.md`](CAN-BAN-CUNG-CAP.md) mục 10.
+
+#### C. Phần còn lại của Phase 8 — cần khoá API
+
+| Lát cắt | Nội dung |
+|---|---|
+| 8.3 | RAG trên bảng giá + chính sách bảo hành, có trích dẫn nguồn |
+| 8.4 | Phần **đo chất lượng** — bộ câu hỏi đã có, chạy lại với provider thật |
+
+💡 Khi có khoá: viết một lớp cài `LlmProvider` ở `apps/api/src/ai/provider.ts`
+(~50 dòng). **Không chỗ nào khác phải sửa** — không chỗ nào khác biết nhà cung
+cấp là ai. Đó là mục đích của adapter, cùng khuôn với hoá đơn điện tử (ADR-0005).
+
+#### D. Phase 3 — tiền (6 lát cắt), khi nào quyết định làm
 
 | Lát cắt | Nội dung | Khó |
 |---|---|---|
@@ -216,45 +255,19 @@ Sắp theo thứ tự nên làm. Cột "Khó" là ước lượng độ khó k�
 | 3.5 | Công nợ khách doanh nghiệp | ⭐⭐⭐ |
 | 3.6 | Adapter hoá đơn điện tử (**bản giả lập** — không tích hợp thật) | ⭐⭐ |
 
+🔒 Ba chỗ phải nối lại khi làm xong, đã ghi sẵn trong mã nguồn:
+
+| Nối gì | Ở đâu |
+|---|---|
+| Thêm `invoice_line_id` **nullable** vào `warranty_coverage` — KHÔNG chuyển cột | migration 0033 |
+| Dựng hoá đơn **từ** `cancellation_settlement` sau khi khách chốt | migration 0034 |
+| Báo cáo doanh thu đổi nguồn từ dòng báo giá sang `invoice_line` | `reports.service.ts` |
+
 Bất biến phải xanh: `INV-M-*` ([05-invariants.md](docs/05-invariants.md))
-
-#### B. Phase 4 — app mobile cho thợ (6 lát cắt)
-
-Expo + auth · danh sách job card · bấm giờ · chụp ảnh có hàng đợi upload · báo
-phát sinh · 🔒 kiểm chứng **thợ không thấy bất kỳ số tiền nào** · build APK.
-
-> ⚠️ `apps/mobile` **chưa tồn tại**. Đây là phase dựng mới hoàn toàn.
-
-#### C. Phase 5 — bảo hành, huỷ đơn, ngoại lệ (5 lát cắt)
-
-Coverage bảo hành hạn kép tháng/km · đơn bảo hành quy chi phí về đơn gốc · huỷ
-đơn giữa chừng + quyết toán · kiểm kê kho · xe bỏ quên + phí lưu bãi.
-
-#### D. Phase 6 — báo cáo (5 lát cắt)
-
-Doanh thu và lãi/lỗ theo đơn · ⭐ thời gian chờ theo bộ phận · năng suất thợ
-**hiển thị cùng** tỉ lệ rework (để năng suất cao vì làm ẩu không bị đọc thành
-năng suất tốt) · tồn kho và vòng quay · công nợ theo tuổi nợ.
-
-#### E. Phase 7 — hoàn thiện để trưng bày (7 việc)
-
-Đây là phase quyết định giá trị portfolio, **không được bỏ**: ảnh chụp màn hình
-+ **link demo sống** + tài khoản demo trong README · seed phong phú trên môi
-trường demo · sơ đồ kiến trúc · viết đủ 7 ADR (đã có 7, rà lại) · badge CI ·
-**video demo 90 giây** · rà lịch sử commit.
-
-#### F. Phase 8 — AI (6 lát cắt) — ⚠️ chỉ làm sau khi 1–7 xong
-
-Bọc service thành tool cho agent · 🔒 authz enforce **trong tool**, không tin
-LLM · RAG có trích dẫn nguồn · bộ eval 30–50 câu chạy trong CI · guardrail +
-giới hạn token · log prompt/token/độ trễ/chi phí.
-
-💡 Nhờ nguyên tắc "nghiệp vụ ở `packages/domain` thuần" từ Phase 0, bước 8.1
-chỉ là lớp bọc mỏng — không phải refactor.
 
 ---
 
-### H. Nợ kỹ thuật — làm xen kẽ, không đợi hết phase
+### E. Nợ kỹ thuật — làm xen kẽ, không đợi hết phase
 
 Danh sách đầy đủ kèm lý do chấp nhận ở [`STATUS.md`](STATUS.md). Những cái
 đáng làm sớm:

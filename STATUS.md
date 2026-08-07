@@ -1,6 +1,7 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-06 · Nhánh `fix/giao-dien-theo-skill` · **Phase 1–2 xong · Phase 4 đang làm** (app thợ)
+> Cập nhật: 2026-08-08 · Nhánh `feat/phase-8-ai` · **Phase 1, 2, 4, 5, 6, 7, 8 xong** ·
+> Phase 3 (hoá đơn) bỏ qua có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md)
 
 ## Đang ở đâu
 
@@ -32,15 +33,22 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 4.4 | Báo phát sinh từ app | ✅ |
 | 4.5 | 🔒 Thợ không thấy tiền — **vá 3 lỗ hổng** | ✅ |
 | 4.3, 4.6 | Chụp ảnh (chờ lưu trữ đối tượng), build APK (chờ tài khoản Expo) | 🟡 |
-| 3, 5 → 8 | Xem [`docs/15-roadmap.md`](docs/15-roadmap.md) | ⬜ |
+| 3 | Hoá đơn, thanh toán, công nợ | ⏸️ bỏ qua có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md) |
+| 5.1–5.2 | Bảo hành hạn kép, chi phí bảo hành quy về đơn gốc (BC-09) | ✅ |
+| 5.3 | Huỷ đơn giữa chừng + quyết toán phần dở dang (BC-10) | ✅ |
+| 5.4 | Kiểm kê kho: snapshot, tính bù, hai người duyệt (BC-12) | ✅ |
+| 5.5 | Xe bỏ quên: nhật ký liên hệ, phí lưu bãi, legal hold (BC-15) | ✅ |
+| 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
+| 7 | Sơ đồ kiến trúc, ADR-0008, số liệu README thật, ảnh tự sinh | ✅ trừ link demo + video |
+| 8 | Tool có phân quyền, guardrail, trần chi phí, nhật ký lời gọi | ✅ phần không cần khoá API |
 
 ## Con số
 
 | | |
 |---|---|
-| Test tự động | 308 (domain 12, db 42, api 254) |
-| E2E Playwright | 65 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 32 |
+| Test tự động | 368 (domain 12, db 42, api 314) |
+| E2E Playwright | 69 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 42 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -83,6 +91,25 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 | Thêm `apps/mobile` (React 18) làm `next build` đỏ ở `layout.tsx` | Expo 52 cần React 18, Next 15 cần React 19. Hai bộ `@types/react` cùng tồn tại trong workspace, và TypeScript gom **mọi** `@types` nhìn thấy được lên cây thư mục — nên namespace `React` toàn cục của web bị trộn. Thông báo lỗi (`ReactNode is not assignable to React.ReactNode`) không hề nói ra điều đó. Sửa bằng `paths` + `typeRoots` trong `apps/web/tsconfig.json` để mỗi app chỉ thấy type của chính nó |
 | `pnpm install` đỏ `EPERM ... esbuild.exe` | API (`tsx`) hoặc web đang chạy giữ file. Dừng hết tiến trình node trước khi cài |
 | `pnpm install` treo ở `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` | pnpm hỏi xác nhận xoá `node_modules` mà không có TTY. Đã đặt `confirm-modules-purge=false` trong `.npmrc` |
+
+## 🔒 Bẫy đã gặp ở Phase 5–8 — mỗi cái mất ít nhất một vòng chẩn đoán
+
+| Triệu chứng | Nguyên nhân |
+|---|---|
+| `record "new" has no field "repair_order_id"` khi bấm giờ trên đơn **bình thường** | Một trigger dùng chung cho ba bảng, lấy id đơn bằng **một biểu thức CASE** trên `TG_TABLE_NAME`. plpgsql giao cả biểu thức cho SQL, và **mọi nhánh đều được phân giải tên cột** trước khi biết nhánh nào trúng. Hàng rào dựng để chặn một trường hợp hiếm lại chặn luôn đường đi hằng ngày. Sửa bằng IF/ELSIF, mỗi nhánh một câu lệnh (0035) |
+| Phiếu kiểm kê **vừa mở đã báo vượt ngưỡng** | `COALESCE(counted_quantity, 0)` trong cột sinh `variance`. Dòng chưa ai đếm biến thành chênh lệch âm **đúng bằng toàn bộ tồn kho**. Ai bấm duyệt lúc đó thì hệ thống sinh điều chỉnh đưa cả kho về 0. "Chưa biết" và "bằng không" là hai thứ khác nhau — NULL diễn đạt được cái đầu (0038) |
+| Năng suất thợ = **12000** | View đã phòng chia cho 0, nhưng mẫu số là 0,0001 giờ — dấu vết một lần bấm nhầm. Con số 12000 thì ai cũng thấy sai; **con số 3,4 thì không**, và nó sẽ được dùng để đánh giá con người. Ngưỡng 3 phút, dưới đó trả NULL (0041) |
+| Vốn chết **lọt lưới** | Cách tự nhiên là `soNgayTon > 365`. Khi vòng quay bằng 0 thì `soNgayTon` là NULL, phép so sánh im lặng trả false, và **đúng những mã tệ nhất** không bị nhận diện |
+| `FOR UPDATE cannot be applied to the nullable side of an outer join` | Câu đọc số dư dùng `LEFT JOIN stock_balance` (mã hàng có thể chưa có dòng cân đối). Rồi `permission denied for table stock_balance`: `garageos_app` **không có quyền ghi** bảng tổng hợp, và đó là chủ ý từ 0025. Khoá phải đi qua `khoa_va_doc_kha_dung()` (0027) |
+| `column reference "version" is ambiguous` | `UPDATE … FROM tenant t` — cả hai bảng có cột `version` |
+| `inconsistent types deduced for parameter $2` | Cùng một tham số vừa làm giá trị enum vừa đem so với chuỗi. Bẫy này **đã được ghi thành comment** ở `repair-order.service.ts` từ Phase 1, và vẫn dẫm lại ở Phase 5.5 |
+| Ghi hai bản ghi, đọc ra một | `logContact()` gọi `contacts()` để trả kết quả — mà `contacts()` **tự mở một kết nối mới**, nên lần ghi vừa rồi chưa commit và không nhìn thấy. Màn hình hiện thiếu đúng dòng người dùng vừa tạo |
+| Test đỏ trong lượt chạy đầy đủ, xanh khi chạy riêng | Đang có một lượt `playwright test` chạy song song trên **cùng database**. Không phải lỗi code — nhưng mất một vòng chẩn đoán để nhận ra |
+
+💡 Ba trong số này (`variance`, năng suất 12000, vốn chết) là **cùng một loại
+lỗi**: một phép tính hoàn toàn hợp lệ cho ra con số hoàn toàn vô nghĩa, và
+không có ngoại lệ nào được ném. Với báo cáo, "không lỗi" không có nghĩa là
+"đúng" — chỉ có việc đọc con số trên dữ liệu thật mới phát hiện được.
 
 ## Nợ kỹ thuật đã biết
 
