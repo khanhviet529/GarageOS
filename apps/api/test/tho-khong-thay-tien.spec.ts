@@ -122,6 +122,9 @@ before(async () => {
   );
   const homNay = new Date().toISOString().slice(0, 10);
 
+  // Phiếu kiểm kê: lấy một phiếu bất kỳ nếu có, để route chi tiết cũng được quét
+  const { rows: kk } = await pool.query<{ id: string }>(`SELECT id FROM stock_take LIMIT 1`);
+
   duongDan = [
     '/api/v1/auth/me',
     '/api/v1/repair-orders?open=true',
@@ -131,6 +134,13 @@ before(async () => {
     `/api/v1/repair-orders/${ro[0]!.id}/assignments`,
     `/api/v1/repair-orders/${ro[0]!.id}/supplements`,
     `/api/v1/catalog/vehicle/${ro[0]!.vehicle_id}`,
+    `/api/v1/vehicles/${ro[0]!.vehicle_id}/warranty`,
+    `/api/v1/repair-orders/${ro[0]!.id}/warranty-costs`,
+    `/api/v1/repair-orders/${ro[0]!.id}/cancel-preview`,
+    `/api/v1/repair-orders/${ro[0]!.id}/settlement`,
+    `/api/v1/repair-orders/${ro[0]!.id}/contacts`,
+    `/api/v1/repair-orders/${ro[0]!.id}/storage-fee`,
+    '/api/v1/abandoned-vehicles',
     `/api/v1/assignments?date=${homNay}`,
     '/api/v1/assignments/pending-work',
     '/api/v1/assignments/quality',
@@ -141,7 +151,9 @@ before(async () => {
     '/api/v1/stock/parts',
     '/api/v1/stock/pending-issues',
     '/api/v1/warehouses',
+    '/api/v1/stock-takes',
     '/api/v1/vehicles/lookup?plate=30A12345',
+    ...(kk[0] === undefined ? [] : [`/api/v1/stock-takes/${kk[0].id}`]),
     ...(wa[0] === undefined ? [] : [`/api/v1/assignments/${wa[0].id}/time`]),
     ...(ql[0] === undefined
       ? []

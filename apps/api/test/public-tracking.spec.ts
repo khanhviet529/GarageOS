@@ -578,8 +578,11 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
       [s.quotationId],
     );
     await pool.query(
+      // `cancel_category` bắt buộc từ migration 0034: nhóm lý do quyết định AI
+      // TRẢ TIỀN khi quyết toán, nên nó không được để trống.
       `UPDATE repair_order SET status = 'CANCELLED', cancelled_at = now(),
-                               cancel_reason = 'Khach doi y'
+                               cancel_reason = 'Khach doi y',
+                               cancel_category = 'CUSTOMER_REQUEST'
         WHERE id = $1`,
       [ro[0]!.id],
     );

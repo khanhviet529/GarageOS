@@ -99,3 +99,29 @@ Những chỗ tài liệu đánh dấu ⚠️ là giả định chưa xác minh 
 | Phụ tùng hỏng do tháo lắp, ai chịu? | Garage chịu nếu chưa hỏi khách trước khi tháo | BC-03 mục 5.3 |
 | Phí lắp lại khi khách từ chối sau khi đã tháo | Cần khách xác nhận điều khoản trước khi tháo | BC-03 mục 5.4 |
 | Chính sách trả lương cho giờ làm lại | Trả đủ, nhưng tính vào chỉ số chất lượng | BC-14 mục 5.2 |
+| Kênh xác nhận bảng quyết toán khi huỷ đơn | Cố vấn ghi nhận việc khách đồng ý; **chưa có OTP/chữ ký** như duyệt báo giá | BC-10 mục 3 |
+| Tỉ lệ hoàn thành hạng mục do thợ tự khai | Lưu nguyên lời khai và ai khai; duyệt là quy trình, không phải ràng buộc dữ liệu | BC-10 mục 9 |
+| Tần suất kiểm kê kho | Chưa cài lịch — phiếu tạo thủ công khi cần | BC-12 mục 8 |
+| Đếm mù đôi cho hàng giá trị cao | Giai đoạn 1 chỉ một người đếm + quản lý duyệt | BC-12 mục 8 |
+
+---
+
+## 9. ⚠️ Xe bị bỏ lại — CẦN Ý KIẾN PHÁP LÝ
+
+Đây là mục **cần bạn xác minh trước khi dùng thật**, không chỉ là một tuỳ chọn
+cấu hình.
+
+| | |
+|---|---|
+| **Vấn đề** | Thủ tục xử lý xe khách bỏ lại liên quan tới quy định pháp luật về **tài sản gửi giữ**. Tôi không xác minh được điều này từ tài liệu dự án |
+| **Phần mềm đang làm gì** | CHỈ ghi nhận và nhắc việc: nhật ký liên hệ (chỉ-thêm, làm bằng chứng), mốc leo thang, phí lưu bãi |
+| **Phần mềm KHÔNG làm gì** | Không có hành động pháp lý tự động nào. `DECLARED_ABANDONED` chỉ là một cái nhãn để người dùng biết cần tham vấn luật sư |
+| **Mốc đang dùng** | 7 ngày miễn phí → `OVERDUE`; 30 ngày → `UNREACHABLE` (gửi thư bảo đảm); 60 ngày → `DECLARED_ABANDONED`. **Toàn bộ là giả định của tài liệu** |
+| **Cần bạn** | Xác nhận mốc thời gian với garage thật, và hỏi luật sư về thủ tục xử lý tài sản |
+
+Thêm nữa, BC-15 nêu hai điều khoản cần có trên **phiếu tiếp nhận** mà phần mềm
+không thay thế được:
+
+- Điều khoản về **phí lưu bãi** — không thông báo trước thì không có cơ sở thu
+- Điều khoản **miễn trừ trách nhiệm** cho xe xuống cấp khi nằm lâu (ắc quy chết
+  vì không nổ máy ba tháng là hậu quả tự nhiên, nhưng khách có thể không nghĩ vậy)

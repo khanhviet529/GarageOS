@@ -19,7 +19,9 @@ export const REPAIR_ORDER_TRANSITIONS: Record<RepairOrderStatus, readonly Repair
   AWAITING_APPROVAL: ['AWAITING_PARTS', 'IN_PROGRESS', 'AWAITING_DELIVERY', 'QUOTED', 'CANCELLED'],
   AWAITING_PARTS: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['AWAITING_APPROVAL', 'AWAITING_PARTS', 'QUALITY_CHECK', 'CANCELLED'],
-  QUALITY_CHECK: ['IN_PROGRESS', 'AWAITING_PAYMENT'],
+  // CANCELLED thêm ở migration 0034: xe sửa xong đang chờ kiểm tra thì khách
+  // vẫn có quyền đổi ý, và garage vẫn có quyền nhận là mình làm không đạt.
+  QUALITY_CHECK: ['IN_PROGRESS', 'AWAITING_PAYMENT', 'CANCELLED'],
   AWAITING_PAYMENT: ['AWAITING_DELIVERY'],
   AWAITING_DELIVERY: ['DELIVERED'],
   DELIVERED: [],
