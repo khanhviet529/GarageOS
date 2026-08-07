@@ -11,6 +11,7 @@
  * bảo dưỡng"), không tìm theo tên chính xác.
  */
 import { useEffect, useState } from 'react';
+import { BangCuon } from '@/components/BangCuon';
 import {
   api, ApiCallError,
   SERVICE_CATEGORY_LABEL, CERTIFICATION_LABEL, formatMoney,
@@ -68,7 +69,7 @@ export function CatalogSection({ vehicleId }: { vehicleId: string }) {
         áp dụng được sẽ không xuất hiện — không phải bị làm mờ.
       </p>
 
-      <div className="table-scroll">
+      <BangCuon moTa="Danh mục hạng mục và phụ tùng">
         <table>
           <thead>
             <tr>
@@ -108,7 +109,7 @@ export function CatalogSection({ vehicleId }: { vehicleId: string }) {
             </tbody>
           ))}
         </table>
-      </div>
+      </BangCuon>
 
       <div className="alert info small" style={{ marginTop: 12 }}>
         Bước tiếp theo (Phase 1.4): chọn hạng mục ở đây để lập báo giá, giá được

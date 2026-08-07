@@ -41,6 +41,19 @@ const USERS_A: SeedUser[] = [
   { phone: '0901000004', fullName: 'Phạm Văn Thợ', roles: ['TECHNICIAN'] },
   { phone: '0901000005', fullName: 'Hoàng Thị Kho', roles: ['STORE_KEEPER'] },
   { phone: '0901000006', fullName: 'Đỗ Thị Thu Ngân', roles: ['CASHIER'] },
+  /*
+   * Thợ THỨ HAI, cố ý KHÔNG có chứng chỉ cao áp.
+   *
+   * Một xưởng chỉ có một thợ làm cả hai thứ trở nên vô nghĩa: màn gợi ý thợ
+   * không có gì để gợi ý, cân tải giữa các thợ không có ai để cân, và hai bất
+   * biến an toàn INV-W-03 (chứng chỉ) / INV-W-05 (một việc một lúc) không bao
+   * giờ được nhìn thấy trong bản demo.
+   *
+   * Đây cũng là chỗ một test từng đỏ rồi xanh một cách ngẫu nhiên: nó đòi phải
+   * có thợ KHÔNG đủ điều kiện, và trên dữ liệu seed sạch thì không có ai như
+   * vậy — nó chỉ xanh nhờ rác trạng thái của lần chạy trước.
+   */
+  { phone: '0901000007', fullName: 'Vũ Đình Thợ Mới', roles: ['TECHNICIAN'] },
 ];
 
 const USERS_B: SeedUser[] = [
@@ -187,6 +200,9 @@ async function main(): Promise<void> {
    *    im lặng xoá luôn — tức là quên một bảng sẽ không bao giờ bị phát hiện.
    */
   await db.query(`TRUNCATE
+    supplement_block, supplement_request,
+    time_log, work_assignment, bay, user_certification, certification,
+    stock_reservation, stock_movement, stock_balance, warehouse,
     otp_challenge, quotation_line, quotation,
     repair_order_asset, repair_order_photo, repair_order, doc_counter,
     price_list_item, price_list, part, service_item,
@@ -284,6 +300,297 @@ async function main(): Promise<void> {
         [priceListId, t, partIds.get(p.sku), p.price],
       );
     }
+  }
+
+  /*
+   * Kho và tồn đầu kỳ — Phase 2.1.
+   *
+   * 🔒 Tồn đầu kỳ đi qua `stock_movement` với `ref_type = 'OPENING'`, KHÔNG
+   * `INSERT` thẳng `stock_balance`. Đó là quy tắc ở docs/10 mục 5 và EC-M-01,
+   * và từ migration 0025 thì cũng là điều duy nhất làm được — `stock_balance`
+   * chỉ nhận ghi từ trigger.
+   *
+   * Giá vốn đặt bằng ~70% giá bán để bảng lãi/lỗ ở Phase 6 có số thật để hiển
+   * thị, thay vì mọi đơn đều lãi 100%.
+   */
+  console.log('Tạo kho và tồn đầu kỳ...');
+  const khoIds: string[] = [];
+  for (const [i, b] of branchesA.entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO warehouse (tenant_id, branch_id, code, name, is_default)
+       VALUES ($1,$2,$3,$4,true) RETURNING id`,
+      [TENANT_A, b.id, `KHO-${String(i + 1).padStart(2, '0')}`, 'Kho chính'],
+    );
+    khoIds.push(rows[0]!.id);
+  }
+  const { rows: khoB } = await db.query<{ id: string }>(
+    `INSERT INTO warehouse (tenant_id, branch_id, code, name, is_default)
+     SELECT $1, id, 'KHO-B01', 'Kho đối chứng', true FROM branch WHERE tenant_id = $1
+     RETURNING id`,
+    [TENANT_B],
+  );
+
+  const { rows: thuKho } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 AND 'STORE_KEEPER' = ANY(roles) LIMIT 1`,
+    [TENANT_A],
+  );
+  const { rows: nguoiB } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 LIMIT 1`,
+    [TENANT_B],
+  );
+
+  // Kho chi nhánh 1 đủ hàng; chi nhánh 2 để MỘT mã dưới mức tối thiểu, để màn
+  // cảnh báo sắp hết hàng có dữ liệu thật thay vì luôn rỗng khi demo.
+  const TON_DAU_KY: Record<string, number> = {
+    'PT-OIL-5W30': 120, 'PT-FILTER-OIL': 40, 'PT-BRAKE-PAD-F': 12,
+    'PT-SPARK-PLUG': 60, 'PT-CABIN-FILTER': 25,
+    'PT-HV-MODULE': 2, 'PT-HV-COOLANT': 18, 'PT-CHARGE-PORT': 3,
+  };
+  for (const [ti, t] of [TENANT_A, TENANT_B].entries()) {
+    const khoCuaTenant = ti === 0 ? khoIds : [khoB[0]!.id];
+    const nguoiGhi = ti === 0 ? thuKho[0]!.id : nguoiB[0]!.id;
+    const { rows: parts } = await db.query<{ id: string; sku: string }>(
+      'SELECT id, sku FROM part WHERE tenant_id = $1',
+      [t],
+    );
+    for (const [ki, kho] of khoCuaTenant.entries()) {
+      for (const p of parts) {
+        const goc = TON_DAU_KY[p.sku] ?? 10;
+        // Kho thứ hai trở đi giữ 1/4 lượng -> có mã tụt dưới min_stock_level (5)
+        const luong = ki === 0 ? goc : Math.max(1, Math.round(goc / 4));
+        const gia = PARTS.find((x) => x.sku === p.sku)?.price ?? 100_000;
+        await db.query(
+          `INSERT INTO stock_movement (tenant_id, warehouse_id, part_id, type,
+                                       quantity, unit_cost, ref_type, reason,
+                                       created_by_user_id)
+           VALUES ($1,$2,$3,'RECEIPT',$4,$5,'OPENING','Tồn đầu kỳ chuyển từ sổ Excel',$6)`,
+          [t, kho, p.id, luong, Math.round(gia * 0.7), nguoiGhi],
+        );
+      }
+    }
+  }
+
+  /*
+   * Khoang và chứng chỉ — Phase 2.3.
+   *
+   * 🔒 Chỉ MỘT khoang có `HV_SAFE_ZONE`, và chỉ MỘT thợ có chứng chỉ cao áp.
+   * Dựng dư ra thì mọi phân công đều hợp lệ và hai bất biến an toàn (INV-W-03,
+   * INV-W-07) không bao giờ được nhìn thấy trong bản demo — trong khi chúng
+   * chính là phần đáng xem nhất của lát cắt này.
+   */
+  console.log('Tạo khoang và chứng chỉ...');
+  const CHUNG_CHI = [
+    { code: 'HV_ELECTRICAL', name: 'An toàn điện cao áp' },
+    { code: 'EV_DIAGNOSTICS', name: 'Chẩn đoán xe điện' },
+  ];
+  const certIds = new Map<string, string>();
+  for (const c of CHUNG_CHI) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO certification (tenant_id, code, name) VALUES ($1,$2,$3) RETURNING id`,
+      [TENANT_A, c.code, c.name],
+    );
+    certIds.set(c.code, rows[0]!.id);
+  }
+
+  const { rows: thoList } = await db.query<{ id: string; phone: string }>(
+    `SELECT id, phone FROM app_user WHERE tenant_id = $1 AND 'TECHNICIAN' = ANY(roles)
+      ORDER BY phone`,
+    [TENANT_A],
+  );
+  // Thợ đầu tiên có đủ hai chứng chỉ; những người sau KHÔNG — để màn gợi ý thợ
+  // có cả trường hợp "không chọn được, và đây là lý do".
+  const thoCaoAp = thoList[0];
+  if (thoCaoAp !== undefined) {
+    for (const c of CHUNG_CHI) {
+      await db.query(
+        `INSERT INTO user_certification (tenant_id, user_id, certification_id, issued_at, expires_at)
+         VALUES ($1,$2,$3, now() - interval '1 year', now() + interval '2 years')`,
+        [TENANT_A, thoCaoAp.id, certIds.get(c.code)],
+      );
+    }
+  }
+
+  for (const [i, b] of branchesA.entries()) {
+    const khoangs =
+      i === 0
+        ? [
+            { code: `K${i + 1}-01`, name: 'Khoang 1 — cầu nâng', caps: ['LIFT'] },
+            { code: `K${i + 1}-02`, name: 'Khoang 2 — cầu nâng', caps: ['LIFT'] },
+            {
+              code: `K${i + 1}-03`,
+              name: 'Khoang 3 — vùng an toàn cao áp',
+              caps: ['LIFT', 'HV_SAFE_ZONE', 'EV_CHARGER'],
+            },
+          ]
+        : [{ code: `K${i + 1}-01`, name: 'Khoang 1 — cầu nâng', caps: ['LIFT'] }];
+    for (const k of khoangs) {
+      await db.query(
+        `INSERT INTO bay (tenant_id, branch_id, code, name, capabilities)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [TENANT_A, b.id, k.code, k.name, k.caps],
+      );
+    }
+  }
+
+  /*
+   * Một đơn demo đã được khách duyệt — Phase 2.3.
+   *
+   * Không có nó thì màn "Lịch xưởng" luôn rỗng trên dữ liệu seed: người xem
+   * demo mở ra thấy "không còn hạng mục nào chờ phân công" và không hiểu màn
+   * hình này để làm gì. Một test E2E cũng phải tự bỏ qua vì không có gì để
+   * kiểm — mà test bị bỏ qua thì không chứng minh được điều gì.
+   *
+   * Duyệt bằng SQL trực tiếp thay vì đi qua OTP: seed không phải chỗ diễn lại
+   * luồng nghiệp vụ, và luồng đó đã có test riêng.
+   */
+  console.log('Tạo đơn demo đã duyệt để lịch xưởng có việc...');
+  {
+    const chiNhanh = branchesA[0]!.id;
+    const { rows: kh } = await db.query<{ id: string }>(
+      `INSERT INTO customer (tenant_id, type, display_name, phone)
+       VALUES ($1,'INDIVIDUAL','Trần Minh Khoa','0912345678') RETURNING id`,
+      [TENANT_A],
+    );
+    const { rows: xe } = await db.query<{ id: string }>(
+      `INSERT INTO vehicle (tenant_id, customer_id, plate_number, powertrain, make_name, model_name)
+       VALUES ($1,$2,'30A12345','ICE','Toyota','Vios') RETURNING id`,
+      [TENANT_A, kh[0]!.id],
+    );
+    const { rows: nguoi } = await db.query<{ id: string }>(
+      `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000003'`,
+      [TENANT_A],
+    );
+    const { rows: don } = await db.query<{ id: string }>(
+      `INSERT INTO repair_order (tenant_id, branch_id, vehicle_id, customer_id, code,
+                                 customer_complaint, odometer_in, status,
+                                 customer_access_token, created_by_user_id)
+       VALUES ($1,$2,$3,$4,'RO-DEMO-0001',
+               'Xe kêu ở phanh trước, cần kiểm tra và thay dầu', 42000, 'IN_PROGRESS',
+               'demo-tra-cuu-0001-token-du-dai-de-qua-rang-buoc', $5)
+       RETURNING id`,
+      [TENANT_A, chiNhanh, xe[0]!.id, kh[0]!.id, nguoi[0]!.id],
+    );
+    const { rows: bg } = await db.query<{ id: string }>(
+      `INSERT INTO quotation (tenant_id, repair_order_id, seq, labor_rate_per_hour,
+                              price_list_id, created_by_user_id)
+       SELECT $1, $2, 1, pl.labor_rate_per_hour, pl.id, $3
+         FROM price_list pl
+        WHERE pl.tenant_id = $1 AND pl.branch_id IS NULL
+          AND pl.effective_from <= now() AND (pl.effective_to IS NULL OR pl.effective_to > now())
+        LIMIT 1
+       RETURNING id`,
+      [TENANT_A, don[0]!.id, nguoi[0]!.id],
+    );
+    for (const ma of ['SV-BRAKE-PAD', 'SV-OIL-ENGINE']) {
+      await db.query(
+        `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, service_item_id,
+                                     description, quantity, unit_price, status, approval_source)
+         SELECT $1, $2, (SELECT COALESCE(max(seq),0)+1 FROM quotation_line WHERE quotation_id = $2),
+                'LABOR', si.id, si.name, 1,
+                round(si.standard_hours * (SELECT labor_rate_per_hour FROM quotation WHERE id = $2)),
+                'APPROVED', 'CUSTOMER'
+           FROM service_item si WHERE si.tenant_id = $1 AND si.code = $3`,
+        [TENANT_A, bg[0]!.id, ma],
+      );
+    }
+    /*
+     * Một dòng phụ tùng KÈM phiếu giữ chỗ đang chờ xuất.
+     *
+     * Không có nó thì màn "Chờ xuất kho" luôn rỗng trên dữ liệu seed, và test
+     * E2E của luồng xuất phải tự bỏ qua — mà test bị bỏ qua thì không chứng
+     * minh được gì. Cùng lý do với đơn demo ở trên.
+     */
+    const { rows: dongCong } = await db.query<{ id: string }>(
+      `SELECT id FROM quotation_line
+        WHERE quotation_id = $1 AND line_type = 'LABOR' ORDER BY seq LIMIT 1`,
+      [bg[0]!.id],
+    );
+    const { rows: dongPt } = await db.query<{ id: string; part_id: string }>(
+      `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, part_id,
+                                   parent_line_id, description, quantity, unit_price,
+                                   status, approval_source)
+       SELECT $1, $2, (SELECT COALESCE(max(seq),0)+1 FROM quotation_line WHERE quotation_id = $2),
+              'PART', p.id, $3, p.name, 1, pli.sell_price, 'APPROVED', 'CUSTOMER'
+         FROM part p
+         JOIN price_list_item pli ON pli.part_id = p.id
+         JOIN price_list pl ON pl.id = pli.price_list_id AND pl.branch_id IS NULL
+        WHERE p.tenant_id = $1 AND p.sku = 'PT-BRAKE-PAD-F'
+       RETURNING id, part_id`,
+      [TENANT_A, bg[0]!.id, dongCong[0]!.id],
+    );
+    await db.query(
+      `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
+                                      quotation_line_id, quantity, expires_at)
+       SELECT $1, w.id, $2, $3, $4, 1, now() + interval '7 days'
+         FROM warehouse w WHERE w.tenant_id = $1 AND w.branch_id = $5 AND w.is_default`,
+      [TENANT_A, dongPt[0]!.part_id, don[0]!.id, dongPt[0]!.id, chiNhanh],
+    );
+
+    /*
+     * Một việc ĐÃ XONG, đang chờ kiểm tra chất lượng — Phase 2.6.
+     *
+     * Không có nó thì hộp QC không bao giờ hiện ra trên dữ liệu seed: người xem
+     * demo không thấy được phần đáng xem nhất của lát cắt này (bốn nguyên nhân
+     * làm lại, mỗi cái nói rõ ai trả tiền), và một test E2E phải tự bỏ qua.
+     *
+     * Xếp vào 8h HÔM NAY để nó nằm đúng trong khung giờ màn lịch hiển thị.
+     */
+    /*
+     * Dùng thợ THỨ HAI (0901000007), không dùng 0901000004.
+     *
+     * Bộ test giờ công lùi thời gian đoạn của 0901000004 về 20 tiếng trước để
+     * kiểm job đóng hộ. Đoạn seed nằm ở hôm nay của cùng người sẽ đụng
+     * `no_timelog_overlap` — và test đỏ ở một chỗ chẳng liên quan gì tới thứ nó
+     * đang kiểm.
+     *
+     * Đây là loại va chạm mà dữ liệu demo và dữ liệu test luôn có nguy cơ gặp:
+     * cả hai dùng chung một database. Tách người là cách rẻ nhất để chúng không
+     * đụng nhau.
+     */
+    const { rows: thoChinh } = await db.query<{ id: string }>(
+      `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000007'`,
+      [TENANT_A],
+    );
+    const { rows: khoangDau } = await db.query<{ id: string }>(
+      `SELECT id FROM bay WHERE tenant_id = $1 AND branch_id = $2 ORDER BY code LIMIT 1`,
+      [TENANT_A, chiNhanh],
+    );
+    const { rows: dongCong2 } = await db.query<{ id: string }>(
+      `SELECT id FROM quotation_line
+        WHERE quotation_id = $1 AND line_type = 'LABOR' ORDER BY seq LIMIT 1`,
+      [bg[0]!.id],
+    );
+    const { rows: pc } = await db.query<{ id: string }>(
+      `INSERT INTO work_assignment (tenant_id, repair_order_id, quotation_line_id,
+                                    technician_id, bay_id, planned_start, planned_end,
+                                    created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,
+               date_trunc('day', now()) + interval '8 hours',
+               date_trunc('day', now()) + interval '9 hours 30 minutes',
+               $6)
+       RETURNING id`,
+      [TENANT_A, don[0]!.id, dongCong2[0]!.id, thoChinh[0]!.id, khoangDau[0]!.id, nguoi[0]!.id],
+    );
+    // Một đoạn giờ công đã đóng, rồi đưa việc sang DONE — đúng đường mà
+    // TimeLogService đi, không nhảy cóc trạng thái.
+    await db.query(
+      `INSERT INTO time_log (tenant_id, work_assignment_id, technician_id,
+                             started_at, ended_at, entered_by_user_id)
+       VALUES ($1,$2,$3,
+               date_trunc('day', now()) + interval '8 hours',
+               date_trunc('day', now()) + interval '9 hours 20 minutes',
+               $3)`,
+      [TENANT_A, pc[0]!.id, thoChinh[0]!.id],
+    );
+    await db.query(`UPDATE work_assignment SET status = 'DONE' WHERE id = $1`, [pc[0]!.id]);
+
+    await db.query(
+      `UPDATE quotation SET status = 'APPROVED', sent_at = now(),
+                            valid_until = now() + interval '7 days', responded_at = now(),
+                            approval_channel = 'IN_PERSON'
+        WHERE id = $1`,
+      [bg[0]!.id],
+    );
   }
 
   await db.query('COMMIT');

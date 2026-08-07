@@ -100,3 +100,33 @@ test('🔒 trang khách duyệt báo giá không có lỗi accessibility', async
   await staff.close();
   await phone.close();
 });
+
+test('màn kho không có lỗi accessibility', async ({ page }) => {
+  // Đăng nhập bằng thủ kho, không phải cố vấn: cố vấn không có quyền xem kho
+  // nên sẽ chỉ soi được một thông báo lỗi — tức là soi nhầm màn hình.
+  await page.goto('/dang-nhap');
+  await page.getByLabel('Số điện thoại').fill('0901000005');
+  await page.getByLabel('Mật khẩu').fill('demo1234');
+  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.waitForURL((u) => !u.pathname.includes('dang-nhap'));
+
+  await page.goto('/kho');
+  await expect(page.getByRole('columnheader', { name: 'Mã' })).toBeVisible();
+
+  const kq = await soi(page).analyze();
+  expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
+});
+
+test('màn lịch xưởng không có lỗi accessibility', async ({ page }) => {
+  await page.goto('/dang-nhap');
+  await page.getByLabel('Số điện thoại').fill('0901000002');
+  await page.getByLabel('Mật khẩu').fill('demo1234');
+  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.waitForURL((u) => !u.pathname.includes('dang-nhap'));
+
+  await page.goto('/lich-xuong');
+  await expect(page.getByRole('columnheader', { name: 'Khoang' })).toBeVisible();
+
+  const kq = await soi(page).analyze();
+  expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
+});

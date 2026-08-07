@@ -20,8 +20,10 @@ import {
   type CatalogForVehicle, type Quotation, type RepairOrderDetail,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { IconBo, IconKhoa } from '@/components/Icon';
 import { ErrorState, Loading } from '@/components/ErrorState';
 import { formatPlate } from '@garageos/domain';
+import { BangCuon } from '@/components/BangCuon';
 
 export default function QuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orderId } = use(params);
@@ -189,7 +191,7 @@ function CatalogPicker({
             Đã lọc theo loại động cơ của chính chiếc xe này — hạng mục không áp dụng
             được sẽ không xuất hiện.
           </p>
-          <div className="table-scroll">
+          <BangCuon moTa="Bảng dữ liệu báo giá">
             <table>
               <thead>
                 <tr>
@@ -221,7 +223,7 @@ function CatalogPicker({
                 ))}
               </tbody>
             </table>
-          </div>
+          </BangCuon>
         </>
       )}
 
@@ -238,15 +240,16 @@ function CatalogPicker({
                 <option key={l.id} value={l.id}>{l.description}</option>
               ))}
             </select>
-            <span className="hint">
-              🔒 BẮT BUỘC. Khách duyệt theo hạng mục công, nên phụ tùng không gắn vào
+            <span className="hint co-icon">
+              <IconKhoa />
+              BẮT BUỘC. Khách duyệt theo hạng mục công, nên phụ tùng không gắn vào
               hạng mục nào là phụ tùng khách không có cách nào duyệt. Gắn rồi thì khi
               khách từ chối công, phụ tùng tự từ chối theo — kho không xuất hàng cho
               việc không ai làm.
             </span>
           </div>
 
-          <div className="table-scroll">
+          <BangCuon moTa="Bảng dữ liệu báo giá">
             <table>
               <thead>
                 <tr>
@@ -282,7 +285,7 @@ function CatalogPicker({
                 ))}
               </tbody>
             </table>
-          </div>
+          </BangCuon>
         </>
       )}
     </div>
@@ -309,7 +312,7 @@ function DraftPanel({
           Chọn hạng mục ở bên trái để thêm vào báo giá.
         </div>
       ) : (
-        <div className="table-scroll" style={{ marginTop: 12 }}>
+        <BangCuon moTa="Bảng dữ liệu báo giá" style={{ marginTop: 12 }}>
           <table>
             <thead>
               <tr>
@@ -337,14 +340,14 @@ function DraftPanel({
                       aria-label={`Bỏ ${l.description}`}
                       onClick={() => onRemove(l.id)}
                     >
-                      ×
+                      <IconBo />
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </BangCuon>
       )}
 
       <Totals quotation={quotation} />
@@ -356,8 +359,9 @@ function DraftPanel({
         >
           Gửi khách duyệt
         </button>
-        <span className="hint" style={{ alignSelf: 'center' }}>
-          🔒 Gửi rồi thì giá đóng băng. Muốn đổi phải lập bản mới.
+        <span className="hint co-icon" style={{ alignSelf: 'center' }}>
+          <IconKhoa />
+          Gửi rồi thì giá đóng băng. Muốn đổi phải lập bản mới.
         </span>
       </div>
     </div>
@@ -403,7 +407,7 @@ function SentQuotation({ quotation }: { quotation: Quotation }) {
         {quotation.validUntil !== null && <>Có hiệu lực đến {formatDateTime(quotation.validUntil)}.</>}
       </p>
 
-      <div className="table-scroll" style={{ marginTop: 12 }}>
+      <BangCuon moTa="Bảng dữ liệu báo giá" style={{ marginTop: 12 }}>
         <table>
           <thead>
             <tr>
@@ -427,7 +431,7 @@ function SentQuotation({ quotation }: { quotation: Quotation }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </BangCuon>
 
       <Totals quotation={quotation} />
     </div>

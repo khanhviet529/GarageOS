@@ -4,8 +4,27 @@
     "build":      { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
     "lint":       { "dependsOn": ["^build"] },
     "typecheck":  { "dependsOn": ["^build"] },
-    "test":       { "dependsOn": ["^build"] },
+
+    // 🔒 `cache: false` cho CẢ HAI task test — không phải tối ưu bị bỏ sót.
+    //
+    // Turbo quyết định cache-hit theo hash của TỆP TRONG KHO. Nhưng bộ test của
+    // dự án này chạy trên một Postgres THẬT (bắt buộc — exclusion constraint và
+    // RLS không tồn tại ở SQLite), và trạng thái database KHÔNG nằm trong hash
+    // đó. Hệ quả: chạy migration mới, gọi `pnpm test`, thấy "xanh" — nhưng đó
+    // là log PHÁT LẠI của lần chạy trước, trên một lược đồ khác.
+    //
+    // Nói cách khác, cache biến `pnpm test` từ một phép kiểm chứng thành một
+    // phép tra bảng. Dự án này có nguyên tắc "trọng tài là code chạy được"; một
+    // kết quả test được cache thì không phải code chạy được.
+    //
+    // Đánh đổi: mỗi lần gọi mất thêm khoảng một phút. Chấp nhận — rẻ hơn một
+    // lần tin vào kết quả sai.
+    //
+    // (`test:invariants` đã có `cache: false` từ đợt 3; `test` thì bị bỏ sót,
+    // và chỉ lộ ra khi đi tìm nguyên nhân một lượt đỏ không tái hiện được.)
+    "test":            { "dependsOn": ["^build"], "cache": false },
     "test:invariants": { "dependsOn": ["^build"], "cache": false },
+
     "dev":        { "cache": false, "persistent": true }
   }
 }

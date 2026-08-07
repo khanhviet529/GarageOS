@@ -1,5 +1,7 @@
 'use client';
 
+import { ROLE_LABEL } from '@garageos/contracts';
+
 /** Client gọi API — giữ token trong localStorage cho Phase 1 (đủ cho demo). */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const TOKEN_KEY = 'garageos.accessToken';
@@ -20,7 +22,7 @@ export class ApiCallError extends Error {
 
 export const auth = {
   token: (): string | null => globalThis.localStorage?.getItem(TOKEN_KEY) ?? null,
-  user: (): { fullName: string; roles: string[]; branchIds: string[] } | null => {
+  user: (): { id: string; fullName: string; roles: string[]; branchIds: string[] } | null => {
     // 🔒 `JSON.parse` KHÔNG được để trần ở đây: hàm này chạy trong useEffect của
     //    AppHeader, tức là trên mọi màn hình nội bộ. Dữ liệu phiên hỏng (ghi dở
     //    do tab bị kill, phiên bản cũ lưu cấu trúc khác) sẽ ném lỗi và làm trắng
@@ -143,6 +145,154 @@ export interface Quotation {
   lines: QuotationLine[];
 }
 
+
+// --- Kho (Phase 2.1) --------------------------------------------------------
+
+export interface Warehouse {
+  id: string; branchId: string; code: string; name: string; isDefault: boolean;
+}
+
+export interface StockBalance {
+  warehouseId: string; warehouseName: string;
+  partId: string; sku: string; partName: string; unit: string;
+  onHand: number; reserved: number; available: number;
+  /** 🔒 `null` khi vai đăng nhập không được xem giá vốn — API lọc, không phải giao diện */
+  avgCost: number | null;
+  minStockLevel: number;
+  belowMinimum: boolean;
+}
+
+export interface PendingIssue {
+  reservationId: string; repairOrderId: string; repairOrderCode: string;
+  plateNumber: string; partId: string; sku: string; partName: string; unit: string;
+  quantity: number; expiresAt: string;
+  /** Đã quá hạn giữ chỗ — job nhả chạy theo chu kỳ nên vẫn còn thấy ở đây */
+  quaHan: boolean;
+}
+
+export interface StockMovementItem {
+  id: string; warehouseId: string; partId: string;
+  sku: string; partName: string;
+  type: string; quantity: number;
+  unitCost: number | null;
+  refType: string | null; refId: string | null; reason: string | null;
+  createdByName: string; createdAt: string;
+}
+
+export const MOVEMENT_TYPE_LABEL: Record<string, string> = {
+  RECEIPT: 'Nhập kho',
+  ISSUE: 'Xuất cho đơn',
+  RETURN: 'Trả về kho',
+  TRANSFER_IN: 'Chuyển đến',
+  TRANSFER_OUT: 'Chuyển đi',
+  ADJUSTMENT: 'Điều chỉnh',
+};
+
+
+// --- Phân công (Phase 2.3) --------------------------------------------------
+
+export interface Bay {
+  id: string; branchId: string; code: string; name: string; capabilities: string[];
+}
+
+export interface PendingWorkItem {
+  quotationLineId: string; repairOrderId: string; repairOrderCode: string;
+  plateNumber: string; powertrain: string; description: string;
+  standardHours: number; requiredCertifications: string[]; serviceCategory: string;
+  /** Có giá trị = hạng mục này đang chờ LÀM LẠI của việc đã QC không đạt */
+  reworkOfId: string | null;
+  reworkReason: string | null;
+}
+
+export interface TechnicianOption {
+  id: string; fullName: string; loadHours: number;
+  eligible: boolean;
+  /** Vì sao không chọn được — hiện ra thay vì ẩn người đó đi */
+  reason: string | null;
+}
+
+export const REWORK_REASON_LABEL: Record<string, string> = {
+  TECHNICIAN_ERROR: 'Lỗi thi công',
+  PART_DEFECT: 'Phụ tùng lỗi',
+  DIAGNOSIS_ERROR: 'Chẩn đoán sai',
+  CUSTOMER_CHANGE: 'Khách đổi ý',
+};
+
+/** Ai chịu chi phí — hiện cho người QC thấy hệ quả TRƯỚC khi họ chọn */
+export const REWORK_WHO_PAYS: Record<string, string> = {
+  TECHNICIAN_ERROR: 'Garage chịu — không tính tiền khách',
+  PART_DEFECT: 'Nhà cung cấp chịu — không tính tiền khách',
+  DIAGNOSIS_ERROR: 'Garage chịu — không tính tiền khách',
+  CUSTOMER_CHANGE: 'Khách chịu — vẫn tính tiền như phát sinh',
+};
+
+export interface TechnicianQualityItem {
+  technicianId: string; technicianName: string;
+  soViecDaQc: number;
+  /** 🔒 KHÔNG gồm phụ tùng lỗi — đó không phải lỗi thợ */
+  soViecLoiTho: number;
+  soViecLoiPhuTung: number;
+  gioLamLai: number; gioTinhTien: number; tiLeLamLai: number;
+}
+
+export interface WorkAssignmentItem {
+  id: string; repairOrderId: string; repairOrderCode: string; plateNumber: string;
+  quotationLineId: string; description: string;
+  technicianId: string; technicianName: string;
+  bayId: string; bayName: string;
+  plannedStart: string; plannedEnd: string;
+  status: string; qcNote: string | null; completionPercent: number | null;
+  reworkOfId: string | null;
+  reworkReason: string | null;
+  qcReworkReason: string | null;
+  /** 🔒 `false` = giờ công vẫn ghi cho thợ nhưng không tính doanh thu */
+  isBillable: boolean;
+  version: number;
+}
+
+export interface TimeLogSegmentItem {
+  id: string; workAssignmentId: string;
+  technicianId: string; technicianName: string;
+  startedAt: string; endedAt: string | null;
+  pauseReason: string | null;
+  /** 🔒 Đoạn do job đóng hộ — số liệu KHÔNG đáng tin để tính lương */
+  autoClosed: boolean;
+  /** Khác `technicianName` nghĩa là có người nhập hộ */
+  enteredByName: string;
+  note: string | null;
+  hours: number;
+}
+
+export interface AssignmentTimeSummaryItem {
+  workAssignmentId: string;
+  standardHours: number;
+  actualHours: number;
+  efficiency: number | null;
+  dangLam: boolean;
+  vuotDinhMucNhieu: boolean;
+  coDoanDongHo: boolean;
+  segments: TimeLogSegmentItem[];
+}
+
+export const PAUSE_REASON_LABEL: Record<string, string> = {
+  WAITING_PARTS: 'Chờ phụ tùng',
+  WAITING_APPROVAL: 'Chờ khách duyệt',
+  WAITING_EQUIPMENT: 'Thiếu thiết bị',
+  SHIFT_END: 'Hết ca',
+  REASSIGNED: 'Chuyển người khác',
+  OTHER: 'Lý do khác',
+};
+
+export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
+  SCHEDULED: 'Đã xếp lịch',
+  IN_PROGRESS: 'Đang làm',
+  PAUSED: 'Tạm dừng',
+  DONE: 'Đã xong',
+  QC_PASSED: 'Đạt kiểm tra',
+  QC_FAILED: 'Không đạt',
+  CANCELLED: 'Đã huỷ',
+};
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -171,6 +321,58 @@ export const api = {
     call<void>('DELETE', `/api/v1/quotations/${quotationId}/lines/${lineId}`),
   sendQuotation: (quotationId: string) =>
     call<{ validUntil: string }>('POST', `/api/v1/quotations/${quotationId}/send`),
+  listWarehouses: () => call<Warehouse[]>('GET', '/api/v1/warehouses'),
+  listStockParts: () =>
+    call<{ id: string; sku: string; name: string; unit: string }[]>('GET', '/api/v1/stock/parts'),
+  listStockBalances: (q: { warehouseId?: string; search?: string; belowMinimum?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.warehouseId !== undefined) p.set('warehouseId', q.warehouseId);
+    if (q.search !== undefined && q.search !== '') p.set('search', q.search);
+    if (q.belowMinimum === true) p.set('belowMinimum', '1');
+    const qs = p.toString();
+    return call<StockBalance[]>('GET', `/api/v1/stock/balances${qs === '' ? '' : `?${qs}`}`);
+  },
+  listStockMovements: (q: { warehouseId?: string; partId?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (q.warehouseId !== undefined) p.set('warehouseId', q.warehouseId);
+    if (q.partId !== undefined) p.set('partId', q.partId);
+    const qs = p.toString();
+    return call<StockMovementItem[]>('GET', `/api/v1/stock/movements${qs === '' ? '' : `?${qs}`}`);
+  },
+  listPendingIssues: () => call<PendingIssue[]>('GET', '/api/v1/stock/pending-issues'),
+  issueStock: (input: unknown) =>
+    call<{ movementId: string; quantity: number; vuotDinhMuc: boolean }>(
+      'POST', '/api/v1/stock/issues', input,
+    ),
+  receiveStock: (input: unknown) =>
+    call<{ id: string; onHand: number; avgCost: number }>('POST', '/api/v1/stock/receipts', input),
+
+  listBays: () => call<Bay[]>('GET', '/api/v1/bays'),
+  listPendingWork: () => call<PendingWorkItem[]>('GET', '/api/v1/assignments/pending-work'),
+  suggestTechnicians: (quotationLineId: string, plannedStart: string) =>
+    call<TechnicianOption[]>(
+      'GET',
+      `/api/v1/assignments/technician-options?quotationLineId=${quotationLineId}` +
+        `&plannedStart=${encodeURIComponent(plannedStart)}`,
+    ),
+  listSchedule: (date: string) =>
+    call<WorkAssignmentItem[]>('GET', `/api/v1/assignments?date=${date}`),
+  technicianQuality: () =>
+    call<TechnicianQualityItem[]>('GET', '/api/v1/assignments/quality'),
+  createAssignment: (input: unknown) =>
+    call<{ id: string; plannedEnd: string }>('POST', '/api/v1/assignments', input),
+  timeSummary: (assignmentId: string) =>
+    call<AssignmentTimeSummaryItem>('GET', `/api/v1/assignments/${assignmentId}/time`),
+  startTimeLog: (workAssignmentId: string) =>
+    call<{ id: string }>('POST', '/api/v1/time-logs/start', { workAssignmentId }),
+  stopTimeLog: (input: unknown) =>
+    call<{ actualHours: number; assignmentStatus: string }>(
+      'POST', '/api/v1/time-logs/stop', input,
+    ),
+
+  changeAssignmentStatus: (id: string, input: unknown) =>
+    call<{ status: string }>('POST', `/api/v1/assignments/${id}/status`, input),
+
   changeOrderStatus: (orderId: string, input: unknown) =>
     call<{ status: string; version: number }>(
       'POST', `/api/v1/repair-orders/${orderId}/status`, input,
@@ -199,15 +401,9 @@ export const POWERTRAIN_LABEL: Record<string, string> = {
  * Nhãn vai trò — người dùng là cố vấn dịch vụ ở xưởng, không phải lập trình
  * viên: họ không nên nhìn thấy tên hằng số trong mã nguồn trên giao diện.
  */
-export const ROLE_LABEL: Record<string, string> = {
-  OWNER: 'Chủ garage',
-  MANAGER: 'Quản lý',
-  SERVICE_ADVISOR: 'Cố vấn dịch vụ',
-  TECHNICIAN: 'Kỹ thuật viên',
-  WAREHOUSE_KEEPER: 'Thủ kho',
-  ACCOUNTANT: 'Kế toán',
-};
-export const roleLabel = (r: string): string => ROLE_LABEL[r] ?? r;
+export { ROLE_LABEL };
+export const roleLabel = (r: string): string =>
+  (ROLE_LABEL as Record<string, string>)[r] ?? r;
 
 export const POWERTRAIN_CLASS: Record<string, string> = {
   ICE: 'ice',

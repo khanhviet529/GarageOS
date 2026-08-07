@@ -12,6 +12,8 @@ import {
   type RespondQuotationResult,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { reserveApprovedParts } from '../stock/reserve-parts';
+import { onSupplementQuotationResponded } from '../assignment/supplement-resume';
 
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
@@ -465,14 +467,65 @@ export class PublicTrackingService {
         );
       }
 
-      // Đơn chuyển tiếp: có hạng mục được duyệt thì vào việc, không thì chờ giao xe
+      /*
+       * 🔒 BC-04 — giữ chỗ phụ tùng NGAY TRONG giao dịch này.
+       *
+       * Không đẩy sang một job nền hay một lời gọi sau: giữa lúc khách bấm
+       * duyệt và lúc job chạy, một khách khác duyệt xong và lấy mất món cuối
+       * cùng. Cả hai đơn đều đã được hứa. Nằm chung giao dịch nghĩa là hoặc cả
+       * quyết định lẫn chỗ giữ cùng có, hoặc không có gì.
+       *
+       * Đổi lại, giao dịch này giữ khoá lâu hơn — chấp nhận được vì khoá chỉ
+       * trên vài dòng `stock_balance` và chỉ trong vài mili-giây.
+       */
+      const giuCho = await reserveApprovedParts(tx, scope.tenantId, scope.repairOrderId);
+
+      /*
+       * 🔒 BC-03 — nếu đây là báo giá BỔ SUNG thì gỡ tạm dừng những việc đang
+       * chờ nó, trong CÙNG giao dịch này.
+       *
+       * Hàm tự nhận biết: nó chỉ tìm phát sinh đang ở `QUOTED` của đơn này, nên
+       * với một báo giá thường thì nó không làm gì. Không cần một cờ ở đầu vào
+       * để phân biệt — cờ đó sẽ là thứ đầu tiên bị quên.
+       */
+      await onSupplementQuotationResponded(tx, scope.repairOrderId, approvedAmount > 0);
+
+      /*
+       * Đơn chuyển tiếp. Ba nhánh, không phải hai:
+       *
+       *  - Không duyệt gì      -> chờ giao xe
+       *  - Duyệt, đủ hàng      -> vào việc
+       *  - Duyệt, THIẾU hàng   -> chờ phụ tùng (BC-04 mục 5.1)
+       *
+       * Nhánh thứ ba là nhánh bản trước không có: đơn vào thẳng IN_PROGRESS
+       * kể cả khi kho không có phụ tùng, nên điều phối xếp thợ cho một việc
+       * không làm được, và chỗ trống trong xưởng bị chiếm bởi chiếc xe đang
+       * chờ hàng.
+       */
+      const trangThaiDon =
+        approvedAmount === 0
+          ? 'AWAITING_DELIVERY'
+          : giuCho.thieu.length > 0
+            ? 'AWAITING_PARTS'
+            : 'IN_PROGRESS';
+
       await tx.query(
         `UPDATE repair_order SET status = $2
           WHERE id = $1 AND status NOT IN ('DELIVERED','CANCELLED')`,
-        [scope.repairOrderId, approvedAmount > 0 ? 'IN_PROGRESS' : 'AWAITING_DELIVERY'],
+        [scope.repairOrderId, trangThaiDon],
       );
 
-      return { quotationStatus: newStatus, approvedAmount, rejectedAmount };
+      return {
+        quotationStatus: newStatus,
+        approvedAmount,
+        rejectedAmount,
+        thieuHang: giuCho.thieu.map((t) => ({
+          sku: t.sku,
+          partName: t.partName,
+          canCo: t.canCo,
+          giuDuoc: t.giuDuoc,
+        })),
+      };
     });
   }
 

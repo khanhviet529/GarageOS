@@ -15,6 +15,7 @@ import {
 import { REPAIR_ORDER_STATUS_LABEL, ORDER_ACTION_LABEL } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { assertCan, branchScope } from '../common/permissions';
+import { releaseReservationsForOrder } from '../stock/reserve-parts';
 
 /**
  * Số km chênh lệch lớn bất thường — BC-01 mục 4.
@@ -499,6 +500,26 @@ export class RepairOrderService {
           input.to === 'DELIVERED' && input.odometerUnavailable === true ? true : null,
         ],
       );
+
+      /*
+       * 🔒 Huỷ đơn phải NHẢ CHỖ đang giữ — nếu không, hàng bị treo VĨNH VIỄN.
+       *
+       * Đây là hệ quả trực tiếp của Phase 2.2 mà lát cắt đó không tự thấy:
+       * `available` thấp hơn thực tế, xưởng từ chối đơn mới cho món vẫn nằm
+       * nguyên trên kệ, và KHÔNG CÓ BÁO ĐỘNG NÀO — `on_hand` vẫn đúng, đối
+       * soát INV-S-02 vẫn xanh. Chỉ có thủ kho nhận ra, sau vài tuần.
+       *
+       * Chính comment ở migration 0027 đã liệt kê huỷ đơn là một trong bốn
+       * đường làm nhả chỗ. Viết ra được mà vẫn quên nối — đó là lý do danh
+       * sách trong comment không thay được một lời gọi hàm.
+       */
+      if (input.to === 'CANCELLED') {
+        await releaseReservationsForOrder(
+          tx,
+          id,
+          `Huỷ đơn: ${input.cancelReason ?? 'không ghi lý do'}`,
+        );
+      }
 
       // Số km của xe cập nhật lúc GIAO, vì đó là con số mới nhất đọc được
       if (input.to === 'DELIVERED' && input.odometerOut !== undefined) {

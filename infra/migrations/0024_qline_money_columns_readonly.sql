@@ -1,0 +1,44 @@
+-- =============================================================================
+-- 0024 — Cột tiền của dòng báo giá: ghi một lần lúc INSERT, sau đó không sửa
+--
+-- Phát hiện từ vòng phản biện với Codex trên 0022/0023. Nó không bác bỏ được ba
+-- điểm kia nhưng giữ đúng điểm này, và điểm này đúng:
+--
+--   PR-03 (chiết khấu vượt ngưỡng cần quản lý duyệt) chỉ chặn được ở tầng
+--   service, vì database KHÔNG BIẾT vai của người đang thao tác. Trong khi đó
+--   `garageos_app` vẫn có `GRANT UPDATE (discount_amount)` trên
+--   `quotation_line`. Một câu UPDATE ở bất kỳ đâu là đi vòng qua PR-03.
+--
+-- Nguyên tắc 1 của dự án nói bất biến phải enforce ở tầng thấp nhất có thể. Với
+-- PR-03 thì tầng thấp nhất CÓ THỂ chính là service — vai người dùng không tồn
+-- tại ở tầng DB. Nhưng điều đó không có nghĩa là DB hết việc: DB làm được việc
+-- ĐÓNG MỌI ĐƯỜNG KHÁC, để tầng service không phải là "một trong nhiều lối vào"
+-- mà là lối vào DUY NHẤT.
+--
+-- -----------------------------------------------------------------------------
+-- Quét trước khi thu hồi (bài học 0016/0017: đừng liệt kê tay)
+--
+-- Mọi câu UPDATE lên `quotation_line` trong toàn bộ mã nguồn:
+--
+--   apps/api/.../public-tracking.service.ts:389
+--     SET status, reject_reason, approval_source
+--   0010 lan_trang_thai_xuong_phu_tung() (trigger)
+--     SET status, reject_reason
+--
+-- Chín cột còn lại trong `GRANT UPDATE` của 0010 KHÔNG có đường code nào ghi.
+-- Chúng được cấp cho một màn hình "sửa dòng báo giá" chưa từng được làm — đúng
+-- cái sai mà 0016 đã ghi lại: cấp quyền trước cho màn hình chưa tồn tại là mở
+-- sẵn một lỗ mà không có test nào canh.
+--
+-- Ba cột `gross_amount`, `tax_amount`, `line_total` do trigger `tinh_tien_dong()`
+-- gán vào NEW. Quyền cột được kiểm theo các cột mà CÂU LỆNH nhắc tên, không
+-- theo cột trigger gán — nên thu hồi không làm trigger hỏng.
+--
+-- Nếu Phase sau cần màn "sửa dòng báo giá nháp", cấp lại đúng cột cần, ĐI KÈM
+-- lời gọi `assertDiscountWithinAuthority` ở đường ghi mới — cấp quyền và kiểm
+-- quyền trong cùng một lần thay đổi.
+-- =============================================================================
+
+REVOKE UPDATE (description, quantity, unit_price, discount_amount, tax_rate_percent,
+               gross_amount, tax_amount, line_total, is_warranty)
+  ON quotation_line FROM garageos_app;

@@ -158,3 +158,70 @@ describe('🔒 Bảng sổ và chứng từ chỉ được THÊM', () => {
     );
   });
 });
+
+describe('🔒 Trigger dùng chung không được gán cột mà bảng không có', () => {
+  test('mọi bảng gắn touch_row() đều có cột version', async () => {
+    /*
+     * `touch_row()` gán `NEW.version`. Bảng nào gắn trigger đó mà thiếu cột sẽ
+     * làm MỌI câu UPDATE lên bảng đó lỗi 42703 — không phải "version không
+     * tăng", mà là không sửa được gì cả.
+     *
+     * Lỗi này sống từ 0001 tới 0023 ở hai bảng (`tenant`, `vehicle_ownership`)
+     * vì chưa có màn hình nào sửa chúng. Nó lộ ra do một test cần đổi cấu hình
+     * tenant — tức là hoàn toàn tình cờ.
+     *
+     * Đọc từng file migration không bắt được: trigger khai ở một file, cột khai
+     * ở file khác, và cái sai nằm ở CHỖ THIẾU. Chỉ quét mới thấy được chỗ
+     * thiếu.
+     */
+    const { rows } = await pool.query<{ bang: string }>(
+      `SELECT c.relname AS bang
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_proc  p ON p.oid = t.tgfoid
+        WHERE p.proname = 'touch_row' AND NOT t.tgisinternal
+          AND NOT EXISTS (SELECT 1 FROM information_schema.columns col
+                           WHERE col.table_name = c.relname
+                             AND col.column_name = 'version')
+        ORDER BY 1`,
+    );
+    assert.deepEqual(
+      rows.map((r) => r.bang),
+      [],
+      'Bảng gắn touch_row() nhưng thiếu cột version — mọi UPDATE lên bảng này sẽ lỗi 42703',
+    );
+  });
+});
+
+describe('🔒 PR-03 không đi vòng được bằng SQL', () => {
+  test('vai ứng dụng KHÔNG sửa được cột tiền của dòng báo giá', async () => {
+    /*
+     * PR-03 (chiết khấu vượt ngưỡng cần quản lý duyệt) là kiểm tra theo VAI,
+     * mà database không biết vai — nên nó chỉ enforce được ở tầng service.
+     *
+     * Đó không phải lý do để DB đứng ngoài. Việc DB làm được là ĐÓNG MỌI ĐƯỜNG
+     * KHÁC, để `assertDiscountWithinAuthority()` là lối vào duy nhất chứ không
+     * phải một trong nhiều lối.
+     *
+     * Danh sách dưới đây là các cột KHÔNG có đường code nào ghi sau khi dòng đã
+     * tạo. `status`, `reject_reason`, `approval_source` cố tình không có mặt —
+     * luồng khách duyệt cần chúng.
+     */
+    const COT_TIEN = [
+      'description', 'quantity', 'unit_price', 'discount_amount',
+      'tax_rate_percent', 'gross_amount', 'tax_amount', 'line_total', 'is_warranty',
+    ];
+    const { rows } = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.column_privileges
+        WHERE grantee = 'garageos_app' AND table_name = 'quotation_line'
+          AND privilege_type = 'UPDATE' AND column_name = ANY($1)
+        ORDER BY 1`,
+      [COT_TIEN],
+    );
+    assert.deepEqual(
+      rows.map((r) => r.column_name),
+      [],
+      'Cột tiền của dòng báo giá còn cấp UPDATE — một câu SQL ở bất kỳ đâu là đi vòng qua PR-03',
+    );
+  });
+});

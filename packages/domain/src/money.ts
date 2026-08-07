@@ -36,6 +36,27 @@ export interface LineTotals {
 }
 
 /**
+ * Giá trị dòng TRƯỚC chiết khấu và thuế.
+ *
+ * 🔒 Tách ra thành hàm riêng vì có chỗ THỨ HAI cần đúng con số này mà không
+ * cần cả dòng: kiểm PR-03 (chiết khấu vượt ngưỡng) phải biết mẫu số để tính
+ * phần trăm, nhưng chưa được phép ném lỗi INV-M-07 — lỗi đó là việc của ràng
+ * buộc DB, và ném ở đây sẽ biến một 422 sạch thành 500.
+ *
+ * Nếu nơi kia tự viết `Math.round(qty * price)` thì thành bản sao thứ ba của
+ * cùng một công thức (trigger `tinh_tien_dong()` là bản thứ nhất). Dự án này đã
+ * ghi rõ ở `0010_quotation.sql`: "hai công thức thì sớm muộn cũng lệch nhau".
+ *
+ * 🔒 `quantity` được ép về 2 chữ số thập phân TRƯỚC khi nhân, vì cột trong
+ * database là `numeric(12,2)`. Không ép thì TypeScript tính trên 1,005 còn
+ * database lưu 1,01 và tính trên đó — hai con số khác nhau cho cùng một dòng.
+ */
+export function calculateGross(quantity: number, unitPrice: number): Amount {
+  const luongLuu = Math.round(quantity * 100) / 100;
+  return assertAmount(Math.round(luongLuu * unitPrice), 'gross (quantity x unitPrice)');
+}
+
+/**
  * Tính tổng MỘT dòng.
  *
  * 🔒 INV-M-02: làm tròn ở TỪNG DÒNG, không ở tổng. Làm tròn ở tổng khiến
@@ -51,10 +72,8 @@ export function calculateLineTotal(input: LineInput): LineTotals {
 
   // GARAGEOS-003: kiểm tra KẾT QUẢ, không chỉ đầu vào. quantity là số thập
   // phân nên tích có thể vượt miền an toàn dù cả hai đầu vào đều hợp lệ.
-  const gross = assertAmount(
-    Math.round(input.quantity * input.unitPrice),
-    'gross (quantity x unitPrice)',
-  );
+  // (`calculateGross` giữ nguyên phép kiểm đó.)
+  const gross = calculateGross(input.quantity, input.unitPrice);
 
   // 🔒 INV-M-07: chiết khấu không vượt giá trị dòng
   if (discount > gross) {

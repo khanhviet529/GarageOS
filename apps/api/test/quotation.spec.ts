@@ -10,6 +10,9 @@ import assert from 'node:assert/strict';
 import { Pool } from 'pg';
 import { calculateLineTotal } from '@garageos/domain';
 
+/** Tenant A trong seed — dùng ở nhiều describe nên khai báo ở cấp file. */
+const TENANT_A_UUID = '11111111-1111-1111-1111-111111111111';
+
 const API = process.env.API_URL ?? 'http://localhost:3001';
 const ADMIN_URL =
   process.env.DATABASE_ADMIN_URL ??
@@ -19,7 +22,16 @@ let token = '';
 let branchId = '';
 let customerId = '';
 let pool: Pool;
-const uniq = Date.now().toString().slice(-6);
+/*
+ * Hậu tố biển số cho một lần chạy.
+ *
+ * Trước đây chỉ có `Date.now().slice(-6)` — sáu chữ số cuối của mili-giây quay
+ * vòng mỗi ~16,7 phút. Hai lần chạy test cách nhau đúng một vòng sinh RA CÙNG
+ * MỘT biển số, và test đỏ với thông báo "biển số đã có hồ sơ" chẳng liên quan
+ * gì tới thứ đang kiểm. Thêm pid để hai tiến trình khác nhau không bao giờ
+ * trùng, kể cả khi rơi đúng vòng.
+ */
+const uniq = `${Date.now().toString().slice(-6)}${process.pid.toString().slice(-3)}`;
 
 async function call(
   method: string,
@@ -38,14 +50,104 @@ async function call(
   return { status: res.status, body: text === '' ? null : JSON.parse(text) };
 }
 
-/** Tạo xe + đơn tiếp nhận + báo giá nháp, trả về id báo giá */
+/** Tiền tố tên cho mọi bảng giá do test dựng — dùng để nhận diện lúc dọn. */
+const TEN_BANG_GIA_TEST = 'TEST-BANGGIA';
+
+/*
+ * Mỗi bảng giá bị thu hồi nhận một khung giờ RIÊNG trong năm 1900.
+ *
+ * Không dùng chung một khung được: `no_overlapping_price_list` là exclusion
+ * constraint theo (phạm vi, khoảng thời gian), nên hai bảng giá cùng chi nhánh
+ * bị đẩy về cùng một khung sẽ đụng nhau ngay lúc dọn.
+ */
+let soThuTuThuHoi = 0;
+
+function khungThuHoi(): number {
+  soThuTuThuHoi += 1;
+  return soThuTuThuHoi;
+}
+
+/**
+ * Dọn một bảng giá do test dựng lên.
+ *
+ * Không dùng DELETE thẳng được nữa: migration 0022 thêm khoá ngoại
+ * `quotation.price_list_id`, nên bảng giá nào đã được một báo giá snapshot thì
+ * xoá sẽ lỗi 23503. Đó chính là điều khoá ngoại sinh ra để làm — bảng giá của
+ * một báo giá đã phát hành không được biến mất.
+ *
+ * Vậy nên dọn bằng cách ĐẨY RA KHỎI HIỆU LỰC, không phải xoá: kéo khoảng hiệu
+ * lực về năm 1900. Nó không còn được `resolveActivePriceList` chọn, không đụng
+ * `no_overlapping_price_list` với bảng giá của test sau, mà báo giá cũ vẫn giải
+ * thích được — đúng cách một xưởng thật đóng một kỳ giá.
+ */
+async function donBangGiaTest(priceListId: string): Promise<void> {
+  await pool.query('DELETE FROM price_list_item WHERE price_list_id = $1', [priceListId]);
+  const { rowCount } = await pool.query(
+    `DELETE FROM price_list WHERE id = $1
+       AND NOT EXISTS (SELECT 1 FROM quotation WHERE price_list_id = $1)`,
+    [priceListId],
+  );
+  if (rowCount === 0) {
+    await pool.query(
+      `UPDATE price_list
+          SET effective_from = timestamptz '1900-01-01' + ($2 || ' minutes')::interval,
+              effective_to   = timestamptz '1900-01-01' + ($2 || ' minutes')::interval
+                               + interval '1 minute'
+        WHERE id = $1`,
+      [priceListId, String(khungThuHoi())],
+    );
+  }
+}
+
+/**
+ * Thu hồi MỌI bảng giá do lần chạy trước để lại.
+ *
+ * Cần thiết vì migration 0022 làm cho bảng giá đã được báo giá snapshot thành
+ * không xoá được. Một lần chạy đỏ giữa chừng để lại bảng giá còn hiệu lực, và
+ * lần chạy sau đỏ ở INSERT với `no_overlapping_price_list` — ở một test KHÁC
+ * hẳn với test đã hỏng. Kiểu lỗi đó tốn hàng giờ để lần ra.
+ *
+ * Dọn ở `before()` chứ không chỉ ở `finally` của từng test: `finally` chỉ chạy
+ * khi tiến trình còn sống. Ctrl-C hay một lỗi kết nối là đủ để bỏ qua nó.
+ */
+async function thuHoiBangGiaConSot(): Promise<void> {
+  await pool.query(
+    `WITH sot AS (
+       SELECT id, row_number() OVER (ORDER BY created_at) AS n
+         FROM price_list
+        WHERE name LIKE $1 || '%'
+     )
+     UPDATE price_list pl
+        SET effective_from = timestamptz '1900-01-01' + ((1000 + sot.n) || ' minutes')::interval,
+            effective_to   = timestamptz '1900-01-01' + ((1000 + sot.n) || ' minutes')::interval
+                             + interval '1 minute'
+       FROM sot WHERE sot.id = pl.id`,
+    [TEN_BANG_GIA_TEST],
+  );
+}
+
+/**
+ * Tạo xe + đơn tiếp nhận + báo giá nháp, trả về id báo giá.
+ *
+ * `suffix` chỉ là NHÃN để đọc log — biển số còn kèm một số đếm tăng dần.
+ *
+ * Trước đây biển số là `77B-<uniq><suffix>`, tức là tính duy nhất phụ thuộc vào
+ * việc người viết test nhớ chữ cái nào đã dùng. Bảng chữ cái cạn dần theo từng
+ * đợt, và đợt này bốn test mới lấy trúng P/Q/R/S đã có người dùng. Triệu chứng
+ * là "biển số đã có hồ sơ" ở một test chẳng liên quan gì tới biển số.
+ *
+ * Số đếm bỏ hẳn cả lớp lỗi đó: thêm bao nhiêu test cũng không cần tra bảng.
+ */
+let quotationCounter = 0;
+
 async function newQuotation(
   powertrain: 'ICE' | 'HYBRID' | 'BEV',
   suffix: string,
 ): Promise<{ quotationId: string; orderId: string }> {
+  quotationCounter += 1;
   const v = await call('POST', '/api/v1/vehicles', {
     customerId,
-    plateNumber: `77B-${uniq}${suffix}`,
+    plateNumber: `77B-${uniq}${suffix}${quotationCounter}`,
     powertrain,
     ...(powertrain === 'ICE' ? {} : { batteryCapacityKwh: 42 }),
   });
@@ -111,6 +213,7 @@ async function partId(sku: string): Promise<string> {
 
 before(async () => {
   pool = new Pool({ connectionString: ADMIN_URL });
+  await thuHoiBangGiaConSot();
 
   const login = await call('POST', '/api/v1/auth/login', {
     phone: '0901000003',
@@ -492,6 +595,15 @@ describe('🔒 Phép tính tiền của database và của TypeScript phải kh�
     const { quotationId } = await newQuotation('ICE', 'T');
     const brake = await serviceItemId('ICE', 'SV-BRAKE-PAD');
 
+    /*
+     * Thuế suất KHÔNG còn gửi được từ client (0022 mục B) — nó tra từ
+     * `tenant.default_tax_rate_percent`. Nên để phủ nhiều thuế suất, test đổi
+     * cấu hình tenant giữa các ca thay vì đổi body request.
+     *
+     * Đây không phải chỗ nào cũng như nhau: chính vì thuế suất giờ đến từ một
+     * nguồn khác, test này bây giờ còn kiểm luôn cả đường dẫn đó. Nếu
+     * `priceLabor` quên đọc cột mới thì mọi ca đều ra 10% và ca 8%/5%/0% sẽ đỏ.
+     */
     const cases = [
       { quantity: 1, discountAmount: 0, taxRatePercent: 10 },
       { quantity: 1.5, discountAmount: 0, taxRatePercent: 10 },
@@ -502,13 +614,31 @@ describe('🔒 Phép tính tiền của database và của TypeScript phải kh�
       { quantity: 7.77, discountAmount: 99_999, taxRatePercent: 10 },
     ];
 
-    for (const c of cases) {
-      const r = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
-        lineType: 'LABOR',
-        serviceItemId: brake,
-        ...c,
-      });
-      assert.equal(r.status, 201, `${JSON.stringify(c)} -> ${JSON.stringify(r.body)}`);
+    const { rows: goc } = await pool.query<{ default_tax_rate_percent: number }>(
+      'SELECT default_tax_rate_percent FROM tenant WHERE id = $1',
+      [TENANT_A_UUID],
+    );
+    try {
+      for (const c of cases) {
+        await pool.query('UPDATE tenant SET default_tax_rate_percent = $2 WHERE id = $1', [
+          TENANT_A_UUID,
+          c.taxRatePercent,
+        ]);
+        const r = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+          lineType: 'LABOR',
+          serviceItemId: brake,
+          quantity: c.quantity,
+          discountAmount: c.discountAmount,
+        });
+        assert.equal(r.status, 201, `${JSON.stringify(c)} -> ${JSON.stringify(r.body)}`);
+      }
+    } finally {
+      // Trả lại cấu hình dù test đỏ: một thuế suất 0% sót lại sẽ làm đỏ những
+      // test chạy sau ở chỗ chẳng liên quan gì, và mất hàng giờ để lần ra.
+      await pool.query('UPDATE tenant SET default_tax_rate_percent = $2 WHERE id = $1', [
+        TENANT_A_UUID,
+        goc[0]!.default_tax_rate_percent,
+      ]);
     }
 
     const q = await call('GET', `/api/v1/quotations/${quotationId}`);
@@ -536,8 +666,195 @@ describe('🔒 Phép tính tiền của database và của TypeScript phải kh�
   });
 });
 
+describe('🔒 Hai khoản nợ về tiền của Phase 1 — migration 0022', () => {
+  test('bảng giá được SNAPSHOT: đổi kỳ giá giữa chừng không đổi giá của báo giá đang mở', async () => {
+    /*
+     * Đây là kịch bản mà bản trước làm sai, và không một test nào bắt được vì
+     * mọi test đều thêm hết các dòng trong vài mili-giây — không kịp có gì đổi
+     * ở giữa.
+     *
+     * Diễn lại đúng chuyện xảy ra ở xưởng:
+     *   1. Cố vấn mở báo giá, thêm dòng công     -> snapshot bảng giá Quý 3
+     *   2. Quản lý đóng Quý 3, mở Quý 4 (giá phụ tùng gấp đôi)
+     *   3. Cố vấn quay lại tab cũ, thêm dòng phụ tùng
+     *
+     * Đúng: giá phụ tùng vẫn là giá Quý 3, vì báo giá đã neo vào bảng giá đó.
+     * Sai (bản trước): giá Quý 4, và một tờ báo giá dùng hai bảng giá.
+     */
+    const { quotationId } = await newQuotation('ICE', 'P');
+    const oil = await serviceItemId('ICE', 'SV-OIL-ENGINE');
+    const oilPart = await partId('PT-OIL-5W30');
+
+    const labor = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR',
+      serviceItemId: oil,
+      quantity: 1,
+    });
+    assert.equal(labor.status, 201, JSON.stringify(labor.body));
+
+    // --- Quản lý đổi kỳ giá ngay giữa lúc cố vấn đang lập báo giá ------------
+    //
+    // Lấy đúng bảng giá mà `resolveActivePriceList` sẽ chọn cho chi nhánh này,
+    // và kỳ mới tạo ra phải CÙNG PHẠM VI. Đóng bảng giá riêng chi nhánh rồi mở
+    // một bảng toàn chuỗi sẽ đụng `no_overlapping_price_list` — và nếu không
+    // đụng thì cũng không thay được cái đang có hiệu lực.
+    const { rows: cu } = await pool.query<{ id: string; branch_id: string | null }>(
+      `SELECT id, branch_id FROM price_list
+        WHERE tenant_id = $1 AND effective_from <= now()
+          AND (effective_to IS NULL OR effective_to > now())
+          AND (branch_id IS NULL OR branch_id = $2)
+        ORDER BY (branch_id IS NULL) LIMIT 1`,
+      [TENANT_A_UUID, branchId],
+    );
+    const { rows: partRows } = await pool.query<{ id: string }>(
+      `SELECT id FROM part WHERE tenant_id = $1 AND sku = 'PT-OIL-5W30'`,
+      [TENANT_A_UUID],
+    );
+    let moiId = '';
+    try {
+      await pool.query(`UPDATE price_list SET effective_to = now() WHERE id = $1`, [cu[0]!.id]);
+      const { rows: moi } = await pool.query<{ id: string }>(
+        `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour, effective_from)
+         VALUES ($1, $2, '${TEN_BANG_GIA_TEST} ky gia moi', 500000, now())
+         RETURNING id`,
+        [TENANT_A_UUID, cu[0]!.branch_id],
+      );
+      moiId = moi[0]!.id;
+      await pool.query(
+        `INSERT INTO price_list_item (price_list_id, tenant_id, part_id, sell_price, tax_rate_percent)
+         VALUES ($1, $2, $3, 370000, 10)`,
+        [moiId, TENANT_A_UUID, partRows[0]!.id],
+      );
+
+      const part = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+        lineType: 'PART',
+        partId: oilPart,
+        parentLineId: labor.body.id,
+        quantity: 1,
+      });
+      assert.equal(part.status, 201, JSON.stringify(part.body));
+
+      const q = await call('GET', `/api/v1/quotations/${quotationId}`);
+      const partLine = q.body.lines.find((l: any) => l.lineType === 'PART');
+      assert.equal(
+        partLine.unitPrice,
+        185_000,
+        'giá phụ tùng nhảy sang kỳ giá mới -> một tờ báo giá dùng hai bảng giá',
+      );
+
+      // Và báo giá MỚI lập sau đó thì phải dùng kỳ giá mới — nếu không thì
+      // snapshot đã biến thành "đóng băng vĩnh viễn", cũng sai theo chiều kia.
+      const sau = await newQuotation('ICE', 'Q');
+      const laborSau = await call('POST', `/api/v1/quotations/${sau.quotationId}/lines`, {
+        lineType: 'LABOR',
+        serviceItemId: oil,
+        quantity: 1,
+      });
+      assert.equal(laborSau.status, 201, JSON.stringify(laborSau.body));
+      const qSau = await call('GET', `/api/v1/quotations/${sau.quotationId}`);
+      // 0,8h × 500.000 = 400.000
+      assert.equal(qSau.body.lines[0].unitPrice, 400_000, 'báo giá mới vẫn dùng giá cũ');
+    } finally {
+      if (moiId !== '') await donBangGiaTest(moiId);
+      await pool.query(`UPDATE price_list SET effective_to = NULL WHERE id = $1`, [cu[0]!.id]);
+    }
+  });
+
+  test('🔒 PR-03: cố vấn KHÔNG tự giảm giá vượt ngưỡng, quản lý thì được', async () => {
+    /*
+     * `tenant.discount_threshold_percent` có từ migration 0001 và tới trước
+     * 0022 chưa có dòng code nào đọc. Nghĩa là suốt Phase 1, một cố vấn giảm
+     * 100% giá trị dòng vẫn được chấp nhận — INV-M-07 chỉ chặn chiết khấu VƯỢT
+     * giá trị dòng, còn đúng bằng thì hợp lệ.
+     */
+    const { rows: t } = await pool.query<{ discount_threshold_percent: number }>(
+      'SELECT discount_threshold_percent FROM tenant WHERE id = $1',
+      [TENANT_A_UUID],
+    );
+    const nguong = Number(t[0]!.discount_threshold_percent);
+
+    const { quotationId } = await newQuotation('ICE', 'R');
+    const oil = await serviceItemId('ICE', 'SV-OIL-ENGINE');
+    const donGia = 200_000; // 0,8h × 250.000
+
+    // Trong ngưỡng -> cố vấn tự quyết được
+    const trong = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR',
+      serviceItemId: oil,
+      quantity: 1,
+      discountAmount: Math.floor((donGia * nguong) / 100),
+    });
+    assert.equal(trong.status, 201, `giảm đúng ngưỡng phải qua: ${JSON.stringify(trong.body)}`);
+
+    // Vượt ngưỡng -> 403, không phải 201
+    const vuot = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR',
+      serviceItemId: oil,
+      quantity: 1,
+      discountAmount: Math.floor((donGia * (nguong + 5)) / 100),
+    });
+    assert.equal(
+      vuot.status,
+      403,
+      `cố vấn tự giảm ${nguong + 5}% mà không cần ai duyệt: ${JSON.stringify(vuot.body)}`,
+    );
+
+    // Chốt chặn quan trọng nhất: giảm SẠCH giá trị dòng.
+    // INV-M-07 cho qua (không vượt giá trị dòng), nên nếu PR-03 không chạy thì
+    // đây là đường tặng không cả hạng mục cho khách.
+    const sach = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR',
+      serviceItemId: oil,
+      quantity: 1,
+      discountAmount: donGia,
+    });
+    assert.equal(sach.status, 403, 'cố vấn giảm 100% giá trị dòng mà không bị chặn');
+
+    // ĐỐI CHỨNG — cùng thao tác, vai quản lý chi nhánh: phải qua.
+    // Không có vế này thì test chỉ chứng minh "có gì đó trả 403", chưa chứng
+    // minh ngưỡng là ngưỡng chứ không phải một lệnh cấm.
+    const luu = token;
+    try {
+      const login = await call('POST', '/api/v1/auth/login', {
+        phone: '0901000002',
+        password: 'demo1234',
+      });
+      assert.equal(login.status, 201, 'seed thiếu tài khoản quản lý chi nhánh');
+      token = login.body.accessToken;
+
+      const ql = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+        lineType: 'LABOR',
+        serviceItemId: oil,
+        quantity: 1,
+        discountAmount: donGia,
+      });
+      assert.equal(ql.status, 201, `quản lý bị chặn oan: ${JSON.stringify(ql.body)}`);
+    } finally {
+      token = luu;
+    }
+  });
+
+  test('🔒 thuế suất KHÔNG nhận từ client', async () => {
+    const { quotationId } = await newQuotation('ICE', 'S');
+    const oil = await serviceItemId('ICE', 'SV-OIL-ENGINE');
+
+    // Gửi thuế suất 0% — trước 0022 thì đi thẳng vào chứng từ.
+    const r = await call('POST', `/api/v1/quotations/${quotationId}/lines`, {
+      lineType: 'LABOR',
+      serviceItemId: oil,
+      quantity: 1,
+      taxRatePercent: 0,
+    });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+
+    const q = await call('GET', `/api/v1/quotations/${quotationId}`);
+    assert.equal(q.body.lines[0].taxRatePercent, 10, 'client đặt được thuế suất');
+    assert.equal(q.body.lines[0].lineTotal, 220_000, 'thuế bị bỏ qua -> hoá đơn thiếu VAT');
+  });
+});
+
 describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => {
-  const TENANT_A = '11111111-1111-1111-1111-111111111111';
+  const TENANT_A = TENANT_A_UUID;
 
   test('🔒 Q-001: giá phụ tùng lấy từ bảng giá ĐANG hiệu lực, không lấy giá cũ rẻ hơn', async () => {
     // Dựng một bảng giá đã hết hạn với giá rẻ hơn hẳn. Nếu câu truy vấn chọn
@@ -549,7 +866,7 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
     const { rows: old } = await pool.query<{ id: string }>(
       `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour,
                                effective_from, effective_to)
-       VALUES ($1, $2, 'Bang gia cu da het han', 1000,
+       VALUES ($1, $2, '${TEN_BANG_GIA_TEST} cu da het han', 1000,
                now() - interval '2 year', now() - interval '1 year')
        RETURNING id`,
       [TENANT_A, br[0]!.id],
@@ -585,8 +902,7 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
         'lấy giá từ bảng giá đã hết hiệu lực -> báo giá gửi khách sai giá',
       );
     } finally {
-      await pool.query('DELETE FROM price_list_item WHERE price_list_id = $1', [old[0]!.id]);
-      await pool.query('DELETE FROM price_list WHERE id = $1', [old[0]!.id]);
+      await donBangGiaTest(old[0]!.id);
     }
   });
 
@@ -604,7 +920,7 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
 
     const { rows: pl } = await pool.query<{ id: string }>(
       `INSERT INTO price_list (tenant_id, branch_id, name, labor_rate_per_hour, effective_from)
-       VALUES ($1, $2, 'Bang gia chi nhanh hai', 500000, now() - interval '1 day')
+       VALUES ($1, $2, '${TEN_BANG_GIA_TEST} chi nhanh hai', 500000, now())
        RETURNING id`,
       [TENANT_A, otherBranch],
     );
@@ -651,7 +967,7 @@ describe('Phát hiện từ codex-review — giữ lại làm hồi quy', () => 
         'mượn bảng giá của chi nhánh khác -> báo giá sai giá công',
       );
     } finally {
-      await pool.query('DELETE FROM price_list WHERE id = $1', [pl[0]!.id]);
+      await donBangGiaTest(pl[0]!.id);
       token = saved;
     }
   });

@@ -54,6 +54,14 @@ async function publicCall<T>(path: string, body?: unknown): Promise<T> {
   return json as T;
 }
 
+/** Phụ tùng kho chưa giữ đủ chỗ — BC-04 mục 5.1 */
+interface ThieuHang {
+  sku: string;
+  partName: string;
+  canCo: number;
+  giuDuoc: number;
+}
+
 export default function TrackingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
 
@@ -64,6 +72,7 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
   const [otp, setOtp] = useState('');
   const [otpInfo, setOtpInfo] = useState<{ phoneMasked: string; devCode?: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [thieuHang, setThieuHang] = useState<ThieuHang[]>([]);
 
   async function load() {
     try {
@@ -116,11 +125,12 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
     setError(null);
     setBusy(true);
     try {
-      await publicCall(`${token}/respond`, {
+      const kq = (await publicCall(`${token}/respond`, {
         quotationId: view.quotation.id,
         otp,
         decisions: groups.map((g) => ({ lineId: g.lineId, approved: decisions[g.lineId] === true })),
-      });
+      })) as { thieuHang?: ThieuHang[] };
+      setThieuHang(kq.thieuHang ?? []);
       setStep('done');
       await load();
     } catch (err) {
@@ -355,8 +365,37 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
             >
               <strong>Đã ghi nhận phản hồi của bạn.</strong>
               <div style={{ marginTop: 6 }}>
-                Garage sẽ tiến hành các hạng mục bạn đã đồng ý. Bạn có thể mở lại trang
-                này bất cứ lúc nào để theo dõi tiến độ.
+                {thieuHang.length === 0
+                  ? 'Garage sẽ tiến hành các hạng mục bạn đã đồng ý. Bạn có thể mở lại trang này bất cứ lúc nào để theo dõi tiến độ.'
+                  : 'Garage đã nhận yêu cầu của bạn. Có phụ tùng cần đặt thêm — xem bên dưới.'}
+              </div>
+            </div>
+          )}
+
+          {/*
+            Thiếu hàng nói NGAY tại đây, không để khách phát hiện sau ba ngày
+            gọi hỏi vì sao xe chưa xong. Đây là tin xấu, và tin xấu nói sớm thì
+            còn là thông tin; nói muộn thì thành lời giải thích.
+
+            Dùng `.alert.warn` chứ không `.error`: không có gì hỏng cả, chỉ là
+            phải chờ. Và không hiện số tồn kho — đó là chuyện nội bộ.
+          */}
+          {step === 'done' && thieuHang.length > 0 && (
+            <div className="alert warn" style={{ marginTop: 12 }} role="status">
+              <strong>Cần đặt thêm phụ tùng</strong>
+              <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+                {thieuHang.map((t) => (
+                  <li key={t.sku}>
+                    {t.partName}
+                    {t.giuDuoc > 0
+                      ? ` — có sẵn ${t.giuDuoc}/${t.canCo}, phần còn lại cần đặt`
+                      : ' — chưa có sẵn, cần đặt hàng'}
+                  </li>
+                ))}
+              </ul>
+              <div style={{ marginTop: 6 }}>
+                Garage sẽ liên hệ báo thời gian dự kiến. Các hạng mục còn lại vẫn được
+                tiến hành bình thường.
               </div>
             </div>
           )}

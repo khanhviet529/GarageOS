@@ -36,6 +36,22 @@
   --c-hyb:  #8a5a00;
   --c-bev:  #17683b;
 
+  /* Trạng thái vô hiệu: MÀU RIÊNG, không phải `opacity`.
+     `opacity` kéo mọi thứ bên dưới xuống cùng lúc — kể cả viền và chữ vốn đã
+     nhạt — nên nút bị vô hiệu tụt dưới ngưỡng tương phản 4.5:1. Token này giữ
+     nút đọc được mà vẫn rõ là không bấm được. */
+  --c-disabled-bg:     #eef0f3;
+  --c-disabled-text:   #6b7583;
+  --c-disabled-border: #cdd3da;
+
+  /* 🔒 Thời lượng chuyển cảnh — skill ui-ux-pro-max mục "Animation timing":
+     150–300ms cho vi tương tác. Đổi trạng thái tức thì (0ms) là ANTI-PATTERN:
+     người dùng không chắc thao tác đã được ghi nhận nên bấm lại.
+
+     Đây KHÔNG mâu thuẫn với quyết định "không animation trang trí" của dự án —
+     phản hồi tương tác không phải trang trí. */
+  --thoi-luong: 150ms;
+
   --r-sm: 3px;
   --r-md: 5px;
 
@@ -98,6 +114,7 @@ body {
 
 input, select, textarea {
   font: inherit;
+  transition: border-color var(--thoi-luong) ease, background-color var(--thoi-luong) ease;
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--c-border-strong);
   border-radius: var(--r-sm);
@@ -129,8 +146,14 @@ button {
   background: var(--c-primary); color: #fff;
   cursor: pointer;
 }
+button { transition: background-color var(--thoi-luong) ease, border-color var(--thoi-luong) ease, color var(--thoi-luong) ease; }
 button:hover:not(:disabled) { background: var(--c-primary-hover); }
-button:disabled { opacity: .5; cursor: not-allowed; }
+button:disabled {
+  background: var(--c-disabled-bg);
+  color: var(--c-disabled-text);
+  border-color: var(--c-disabled-border);
+  cursor: not-allowed;
+}
 button.secondary { background: #fff; color: var(--c-text); border-color: var(--c-border-strong); }
 button.secondary:hover:not(:disabled) { background: var(--c-bg); }
 button.lg { min-height: 44px; font-size: var(--fs-lg); padding: 0 var(--sp-5); }
@@ -158,6 +181,7 @@ table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
 th, td { text-align: left; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--c-border); }
 th { font-weight: 600; color: var(--c-text-muted); background: var(--c-bg); font-size: var(--fs-xs);
      text-transform: uppercase; letter-spacing: .4px; }
+tbody tr { transition: background-color var(--thoi-luong) ease; }
 tbody tr:hover { background: var(--c-primary-soft); }
 td.mono { font-family: var(--font-mono); }
 
@@ -176,6 +200,7 @@ td.mono { font-family: var(--font-mono); }
   padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm);
   font-size: var(--fs-sm); font-weight: 600;
 }
+.app-header .nav a { transition: background-color var(--thoi-luong) ease, opacity var(--thoi-luong) ease; }
 .app-header .nav a:hover  { opacity: 1; background: rgba(255,255,255,.12); }
 .app-header .nav a.active { opacity: 1; background: rgba(255,255,255,.2); }
 
@@ -306,6 +331,8 @@ tr.rejected td { text-decoration: line-through; color: var(--c-text-muted); }
   background: #fff; color: var(--c-text);
   border: 1px solid var(--c-border-strong);
   min-height: 44px; min-width: 92px; font-size: var(--fs-md);
+  transition: background-color var(--thoi-luong) ease, border-color var(--thoi-luong) ease,
+              color var(--thoi-luong) ease;
 }
 .pick.on      { background: var(--c-success); border-color: var(--c-success); color: #fff; }
 .pick.off-btn { background: var(--c-text-muted); border-color: var(--c-text-muted); color: #fff; }
@@ -346,3 +373,111 @@ input.otp {
   z-index: 100; font-weight: 600;
 }
 .skip-link:focus { left: var(--sp-3); top: var(--sp-3); }
+
+/*
+ * 🔒 Tôn trọng lựa chọn của hệ điều hành.
+ *
+ * Người bị rối loạn tiền đình bật "giảm chuyển động" ở cấp hệ thống. Bỏ qua nó
+ * không phải là chuyện thẩm mỹ — với họ, chuyển động ngoài ý muốn gây chóng mặt
+ * và buồn nôn thật. Skill ui-ux-pro-max liệt kê "No reduced-motion" là
+ * anti-pattern ở mục Animation.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Icon đi kèm chữ: căn theo đường chân chữ, khoảng cách cố định */
+.co-icon { display: inline-flex; align-items: center; gap: 6px; }
+
+/* --- Kho (Phase 2.1) --- */
+
+/* Số lượng và tiền căn phải: mắt so sánh hàng nghìn theo cột, không theo chữ */
+td.phai, th.phai { text-align: right; }
+
+/* Dòng sổ có dấu âm là XUẤT kho. Màu KHÔNG phải kênh thông tin duy nhất —
+   dấu trừ đứng ngay đó, nên người mù màu vẫn phân biệt được. */
+td.am { color: var(--c-danger); }
+
+/* Nhãn "sắp hết" cạnh tên phụ tùng */
+.tag.canh-bao { background: var(--c-warning-soft); color: var(--c-warning); margin-left: var(--sp-2); }
+
+/* Ô chọn đi cùng nhãn nằm ngang — khác `.field` vốn xếp dọc */
+.hop-kiem {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-sm); align-self: flex-end;
+  /* Vùng bấm đủ lớn cho ngón tay — WCAG 2.2 mục 2.5.8 */
+  min-height: 32px;
+}
+.hop-kiem input { width: 18px; height: 18px; min-height: 18px; }
+
+/* --- Flex item phải được phép co lại --- */
+
+/*
+ * Mặc định của flexbox là `min-width: auto`, nghĩa là một flex item KHÔNG co
+ * nhỏ hơn nội dung của nó. Với `<select>` thì "nội dung" là option DÀI NHẤT —
+ * danh sách phụ tùng có "PT-BRAKE-PAD-F — Má phanh trước (bộ)", đủ để đẩy cả
+ * trang trượt ngang ở 375px trong khi `.row` vẫn ngoan ngoãn xuống dòng.
+ *
+ * Lỗi này không nhìn ra được từ code: `.row` CÓ `flex-wrap`, `.field` KHÔNG có
+ * chiều rộng cố định. Chỉ test điểm ngắt mới bắt được, và nó bắt ngay lần chạy
+ * đầu tiên sau khi màn kho được thêm.
+ */
+.row > .field { min-width: 0; }
+.field select, .field input { max-width: 100%; }
+
+/* --- Lịch xưởng (Phase 2.3) --- */
+
+.lich th[scope='row'] { text-align: left; background: var(--c-bg); font-weight: 600; }
+.lich td.o-lich { vertical-align: top; min-width: 120px; padding: var(--sp-1); }
+
+/*
+ * Một việc trên lịch. Viền trái mang màu trạng thái — KHÔNG dùng nền màu:
+ * chữ trên nền màu ở kích thước nhỏ này khó đạt 4.5:1, mà đây là màn hình điều
+ * phối nhìn cả ngày.
+ */
+.viec {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-2); border-radius: var(--r-sm);
+  background: var(--c-surface); border: 1px solid var(--c-border);
+  border-left: 3px solid var(--c-text-muted);
+  font-size: var(--fs-xs);
+}
+.viec .small-btn { padding: 2px 8px; font-size: var(--fs-xs); min-height: 28px; align-self: flex-start; }
+
+/* Màu KHÔNG phải kênh thông tin duy nhất: nhãn trạng thái nằm ngay trong ô */
+.viec.tt-scheduled   { border-left-color: var(--c-primary); }
+.viec.tt-in_progress { border-left-color: var(--c-warning); }
+.viec.tt-done        { border-left-color: var(--c-success); }
+.viec.tt-qc_passed   { border-left-color: var(--c-success); }
+.viec.tt-qc_failed   { border-left-color: var(--c-danger); }
+.viec.tt-paused      { border-left-color: var(--c-text-muted); }
+.viec.tt-cancelled   { border-left-color: var(--c-border); opacity: .6; }
+
+/*
+ * Vùng cuộn nhận được focus bàn phím (xem `BangCuon.tsx`) nên PHẢI có viền
+ * focus thấy được — nếu không, người dùng bàn phím Tab vào một vùng vô hình.
+ */
+.table-scroll:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+/* --- Hộp kiểm tra chất lượng (Phase 2.6) --- */
+
+.hop-qc {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-3); margin-top: var(--sp-2);
+  border: 1px solid var(--c-border); border-radius: var(--r-sm);
+  background: var(--c-surface);
+}
+.hop-qc fieldset { border: none; padding: 0; margin: 0; }
+.hop-qc legend { color: var(--c-text-muted); font-weight: 600; padding: 0 0 var(--sp-1); }
+.hop-qc textarea { width: 100%; font-family: inherit; font-size: var(--fs-sm); }
+/* Nhãn nguyên nhân xuống dòng được: hệ quả tiền bạc đi kèm nên dòng khá dài */
+.hop-qc .hop-kiem { align-items: flex-start; }
+.hop-qc .hop-kiem input { margin-top: 3px; }

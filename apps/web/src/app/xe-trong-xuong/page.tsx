@@ -16,7 +16,9 @@ import {
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
 import { ErrorState, Loading } from '@/components/ErrorState';
+import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
+import { BangCuon } from '@/components/BangCuon';
 
 export default function WorkshopPage() {
   const [orders, setOrders] = useState<RepairOrderListItem[] | null>(null);
@@ -73,7 +75,10 @@ export default function WorkshopPage() {
                   Cập nhật {capNhatLuc.toLocaleTimeString('vi-VN')}
                 </span>
               )}
-              <button className="secondary" onClick={taiLai}>Làm mới</button>
+              <button className="secondary co-icon" onClick={taiLai}>
+                <IconLamMoi />
+                Làm mới
+              </button>
               <Link href="/tiep-nhan"><button>Tiếp nhận xe mới</button></Link>
             </div>
           </div>
@@ -95,7 +100,7 @@ export default function WorkshopPage() {
           )}
 
           {orders !== null && orders.length > 0 && (
-            <div className="table-scroll" style={{ marginTop: 12 }}>
+            <BangCuon moTa="Danh sách xe đang trong xưởng" style={{ marginTop: 12 }}>
               <table>
                 <thead>
                   <tr>
@@ -126,7 +131,7 @@ export default function WorkshopPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </BangCuon>
           )}
         </div>
       </main>

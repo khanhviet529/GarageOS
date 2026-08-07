@@ -90,5 +90,25 @@ export const RespondQuotationResult = z.object({
   quotationStatus: z.string(),
   approvedAmount: z.number().int(),
   rejectedAmount: z.number().int(),
+  /**
+   * Những mã phụ tùng kho không giữ đủ chỗ — BC-04 mục 5.1.
+   *
+   * Trả về cho KHÁCH, không chỉ ghi log nội bộ: khách vừa đồng ý trả tiền cho
+   * một hạng mục mà xưởng chưa có hàng. Biết ngay lúc bấm duyệt khác hẳn với
+   * biết sau ba ngày gọi hỏi vì sao xe chưa xong.
+   *
+   * Không kèm số tồn kho: đó là thông tin nội bộ. Chỉ nói mã nào thiếu và
+   * thiếu bao nhiêu so với thứ khách vừa duyệt.
+   */
+  thieuHang: z
+    .array(
+      z.object({
+        sku: z.string(),
+        partName: z.string(),
+        canCo: z.number(),
+        giuDuoc: z.number(),
+      }),
+    )
+    .default([]),
 });
 export type RespondQuotationResult = z.infer<typeof RespondQuotationResult>;

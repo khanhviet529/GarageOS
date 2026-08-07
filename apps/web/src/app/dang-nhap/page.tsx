@@ -24,8 +24,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-      <form className="card stack" style={{ width: 380 }} onSubmit={submit}>
+    <main style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: 16 }}>
+      {/*
+        `width: 380` cứng làm cả trang trượt ngang ở màn 320-375px — và điện
+        thoại chính là thứ nhân viên dùng khi máy tính ở quầy đang bận.
+        `min()` giữ nguyên bề rộng mong muốn trên màn lớn.
+      */}
+      <form
+        className="card stack"
+        style={{ width: 'min(380px, 100%)' }}
+        onSubmit={submit}
+      >
         <div>
           <h2 style={{ marginBottom: 2 }}>GarageOS</h2>
           <p className="muted small">Quản lý xưởng dịch vụ ô tô</p>
@@ -71,6 +80,6 @@ export default function LoginPage() {
         </div>
         )}
       </form>
-    </div>
+    </main>
   );
 }
