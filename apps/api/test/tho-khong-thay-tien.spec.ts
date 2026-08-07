@@ -131,6 +131,8 @@ before(async () => {
     `/api/v1/repair-orders/${ro[0]!.id}/assignments`,
     `/api/v1/repair-orders/${ro[0]!.id}/supplements`,
     `/api/v1/catalog/vehicle/${ro[0]!.vehicle_id}`,
+    `/api/v1/vehicles/${ro[0]!.vehicle_id}/warranty`,
+    `/api/v1/repair-orders/${ro[0]!.id}/warranty-costs`,
     `/api/v1/assignments?date=${homNay}`,
     '/api/v1/assignments/pending-work',
     '/api/v1/assignments/quality',

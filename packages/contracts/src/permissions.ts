@@ -138,6 +138,21 @@ export const ACTION_ROLES = {
   'supplement:resolve': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 
   /**
+   * Bảo hành — BC-09.
+   *
+   * `warranty:read` rộng vì tra cứu bảo hành là việc thường ngày ở quầy: khách
+   * hỏi "xe tôi còn bảo hành không" trước cả khi quyết định có mang xe tới.
+   * Thợ cũng cần biết để không tháo nhầm một thứ đang còn bảo hành hãng.
+   *
+   * 🔒 `warranty:claim` HẸP: mở một đơn bảo hành nghĩa là garage tự nhận chi
+   * phí. Đó là quyết định tiền bạc, không phải thao tác ghi nhận.
+   */
+  'warranty:read': ['TECHNICIAN', 'SERVICE_ADVISOR', 'CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+  'warranty:claim': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
+  /** Ghi nhận đòi lại được từ nhà cung cấp — đụng tới tiền thu về */
+  'warranty:recover': ['BRANCH_MANAGER', 'OWNER'],
+
+  /**
    * Bấm giờ công — docs/02 ma trận, hàng "Bấm giờ công": thợ 🔶 "của mình",
    * quản lý 🔶 "sửa hộ, có log", chủ ✅. Cố vấn và thu ngân ❌.
    *
@@ -186,6 +201,9 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'assignment:qc': 'kiểm tra chất lượng',
   'supplement:report': 'báo phát sinh',
   'supplement:resolve': 'quyết định phát sinh bị từ chối',
+  'warranty:read': 'tra cứu bảo hành',
+  'warranty:claim': 'mở đơn bảo hành',
+  'warranty:recover': 'ghi nhận đòi lại từ nhà cung cấp',
   'timeLog:write': 'bấm giờ công',
   'timeLog:enterForOther': 'nhập hộ giờ công',
 };
