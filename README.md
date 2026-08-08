@@ -254,7 +254,7 @@ Mở http://localhost:3000, đăng nhập `0901000003` / `demo1234` (cố vấn 
 Trang đăng nhập liệt kê sẵn các tài khoản demo khác.
 
 ```bash
-pnpm test           # 368 test tích hợp trên Postgres THẬT — cần API đang chạy
+pnpm test           # 395 test tích hợp trên Postgres THẬT — cần API đang chạy
 pnpm e2e            # 69 kịch bản Playwright — cần cả API lẫn web
 ```
 
@@ -269,7 +269,7 @@ constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
 |---|---|---|
 | 1 | Tiếp nhận → danh mục → báo giá → khách duyệt từng phần → máy trạng thái | ✅ |
 | 2 | Kho, giữ chỗ, xuất kho · phân công khoang/thợ · giờ công · QC và làm lại · báo phát sinh | ✅ |
-| 3 | Hoá đơn, thanh toán, công nợ | ⏸️ cố ý bỏ qua ở bản này |
+| 3 | Hoá đơn từ công việc thực tế · thanh toán phân bổ theo dòng · công nợ · bảo hiểm | ✅ |
 | 4 | App thợ (Expo) · rà soát phân quyền · thu hẹp phạm vi SELF | ✅ |
 | 5 | Bảo hành · huỷ đơn và quyết toán · kiểm kê kho · xe bỏ quên | ✅ |
 | 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
@@ -278,18 +278,16 @@ constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
 
 | | |
 |---|---|
-| Test tích hợp (Postgres thật) | 368 |
+| Test tích hợp (Postgres thật) | 395 |
 | E2E Playwright | 69 |
-| Migration SQL viết tay | 41 |
+| Migration SQL viết tay | 48 |
 | Vòng codex-review | 6 · 17 phát hiện · 17 xác nhận |
 
-⏸️ **Phase 3 bỏ qua có chủ ý, không phải bỏ sót.** Hoá đơn và thanh toán là phần
-nghiệp vụ dễ đoán nhất của một hệ thống như thế này; những case khó — bảo hành
-hạn kép, huỷ đơn giữa chừng, kiểm kê kho, xe khách bỏ lại — nằm ở Phase 5. Chỗ
-nào cần hoá đơn, mã nguồn nói rõ nó đang dùng gì thay thế và vì sao (ví dụ:
-doanh thu trong báo cáo lấy từ **dòng báo giá đã duyệt**, và tên trường là
-`doanhThuDuKien` chứ không phải `doanhThu`). Lập luận đầy đủ, kèm những gì phải
-đánh đổi: [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md).
+💡 **Phase 3 làm SAU Phase 5–8, có chủ ý.** Những case khó của hệ thống này
+không nằm ở hoá đơn mà ở bảo hành hạn kép, huỷ đơn giữa chừng, kiểm kê kho và
+xe khách bỏ lại — nên chúng được làm trước. Quyết định đó, và ba chỗ phải nối
+lại khi Phase 3 xong, ghi ở [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md).
+Cả ba đã nối, và **không chỗ nào phải viết lại** — đó là điều ADR hứa.
 
 Chi tiết, nợ kỹ thuật đã biết và các bẫy hạ tầng đã gặp: [`STATUS.md`](STATUS.md).
 Lộ trình các phase sau: [`docs/15-roadmap.md`](docs/15-roadmap.md).

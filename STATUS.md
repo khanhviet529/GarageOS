@@ -1,7 +1,7 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-08 · Nhánh `feat/phase-8-ai` · **Phase 1, 2, 4, 5, 6, 7, 8 xong** ·
-> Phase 3 (hoá đơn) bỏ qua có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md)
+> Cập nhật: 2026-08-08 · Nhánh `feat/phase-3-tien` · **Phase 1–8 xong**
+> (Phase 3 làm sau cùng, có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md))
 
 ## Đang ở đâu
 
@@ -33,7 +33,7 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 4.4 | Báo phát sinh từ app | ✅ |
 | 4.5 | 🔒 Thợ không thấy tiền — **vá 3 lỗ hổng** | ✅ |
 | 4.3, 4.6 | Chụp ảnh (chờ lưu trữ đối tượng), build APK (chờ tài khoản Expo) | 🟡 |
-| 3 | Hoá đơn, thanh toán, công nợ | ⏸️ bỏ qua có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md) |
+| 3 | Hoá đơn từ công việc thực tế, thanh toán, công nợ, bảo hiểm, HĐĐT | ✅ |
 | 5.1–5.2 | Bảo hành hạn kép, chi phí bảo hành quy về đơn gốc (BC-09) | ✅ |
 | 5.3 | Huỷ đơn giữa chừng + quyết toán phần dở dang (BC-10) | ✅ |
 | 5.4 | Kiểm kê kho: snapshot, tính bù, hai người duyệt (BC-12) | ✅ |
@@ -46,9 +46,9 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 368 (domain 12, db 42, api 314) |
+| Test tự động | 395 (domain 12, db 42, api 341) |
 | E2E Playwright | 69 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 42 |
+| Migration | 48 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -110,6 +110,17 @@ pnpm e2e            # Playwright — cần cả API lẫn web đang chạy
 lỗi**: một phép tính hoàn toàn hợp lệ cho ra con số hoàn toàn vô nghĩa, và
 không có ngoại lệ nào được ném. Với báo cáo, "không lỗi" không có nghĩa là
 "đúng" — chỉ có việc đọc con số trên dữ liệu thật mới phát hiện được.
+
+## 🔒 Bẫy đã gặp ở Phase 3 — hoá đơn
+
+| Triệu chứng | Nguyên nhân |
+|---|---|
+| Hoá đơn điều chỉnh không ghi được dòng âm | `CHECK (unit_price >= 0)` đúng với hoá đơn thường, sai với hoá đơn điều chỉnh — mà điều chỉnh nằm ở mục "luồng phụ" của BC-07. Điều kiện thật phụ thuộc HOÁ ĐƠN CHA, nên phải là trigger: CHECK không nhìn được sang bảng khác (0047) |
+| Sửa xong vẫn đỏ, cùng một lỗi | `invoice_line_within_safe_range` cũng viết `BETWEEN 0`. **Một ràng buộc mang hai ý nghĩa là ràng buộc chỉ sửa được một nửa** — tên nó nói về ĐỘ LỚN nên không ai nghĩ tới khi gỡ điều kiện về DẤU (0048) |
+| `cannot change name of view column` | `CREATE OR REPLACE VIEW` chỉ cho thêm cột vào CUỐI. Đẩy cột mới xuống cuối thì lách được, nhưng thứ tự cột của một view báo cáo là thứ tự người đọc quét mắt — nên DROP rồi CREATE, và cấp lại quyền SELECT đã mất theo |
+| Thu tiền trùng trả về 500 thay vì thành công | Thiếu `SAVEPOINT` quanh INSERT đụng UNIQUE. Đúng cái bẫy đã ghi thành comment ở `repair-order.service.ts` từ Phase 1 — **dẫm lại lần thứ ba** |
+| Bài quét "cột tiền có chặn trên" đỏ vì hai view | `information_schema.columns` gồm cả VIEW, mà view không gắn CHECK được. Không lọc `relkind = 'r'` thì mỗi view báo cáo mới sẽ làm test đỏ với một yêu cầu không thực hiện nổi |
+| Mọi bài thanh toán đỏ với `OVERPAY` | Helper trong test phân bổ cả tổng hoá đơn vào `lines[0]` — dòng công trị giá 412.500. Không phải lỗi mã nguồn: chính INV-M-04 đang làm việc, không thu quá số phải thu CỦA TỪNG DÒNG |
 
 ## Nợ kỹ thuật đã biết
 
