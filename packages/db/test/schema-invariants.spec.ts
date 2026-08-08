@@ -66,8 +66,20 @@ describe('🔒 INV-M-01 — mọi cột tiền là số nguyên (bigint)', () =>
     // chính xác tới 2^53-1. Cột tiền không có CHECK chặn trên là cột có thể
     // chứa giá trị đọc ra sai mà không ai báo.
     const { rows } = await pool.query<{ table_name: string; column_name: string }>(
+      /*
+       * 🔒 Chỉ quét BẢNG THẬT, không quét view.
+       *
+       * `information_schema.columns` gồm cả view, và view thì KHÔNG gắn CHECK
+       * được — ràng buộc nằm ở bảng gốc mà nó đọc. Không lọc thì mỗi view báo
+       * cáo mới thêm sẽ làm test này đỏ với một yêu cầu không thực hiện được,
+       * và cách sửa duy nhất là bỏ view đi hoặc tắt test.
+       *
+       * Lộ ra ở Phase 3: `cong_no_hoa_don.total_amount` và
+       * `cong_no_khach.credit_limit_amount` — cả hai đọc từ cột đã có CHECK.
+       */
       `SELECT c.table_name, c.column_name
          FROM information_schema.columns c
+         JOIN pg_class cl ON cl.relname = c.table_name AND cl.relkind = 'r'
         WHERE c.table_schema = 'public'
           AND c.column_name IN ('labor_rate_per_hour', 'sell_price',
                                 'credit_limit_amount', 'unit_price', 'total_amount')

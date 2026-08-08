@@ -121,6 +121,30 @@ export class WarrantyService {
         [input.repairOrderId, actor.tenantId, ro.delivered_at.toISOString(), ro.odometer_out],
       );
 
+      /*
+       * Nối suất bảo hành với dòng HOÁ ĐƠN, nếu đơn đã có hoá đơn phát hành.
+       *
+       * 🔒 Cột `invoice_line_id` nullable CÓ CHỦ Ý — xem ADR-0008. Bàn giao xe
+       *    có thể xảy ra TRƯỚC khi phát hành hoá đơn (khách nợ, khách doanh
+       *    nghiệp trả theo kỳ), nên bắt buộc phải có hoá đơn mới sinh được bảo
+       *    hành là ràng buộc sai với thực tế.
+       *
+       * Chạy sau, không gộp vào câu trên: suất bảo hành phải sinh được kể cả
+       * khi chưa có hoá đơn, và một JOIN trong câu INSERT sẽ lặng lẽ bỏ qua
+       * đúng những dòng đó.
+       */
+      await tx.query(
+        `UPDATE warranty_coverage wc
+            SET invoice_line_id = l.id
+           FROM invoice_line l
+           JOIN invoice i ON i.id = l.invoice_id
+          WHERE l.source_quotation_line_id = wc.quotation_line_id
+            AND wc.repair_order_id = $1
+            AND wc.invoice_line_id IS NULL
+            AND i.status <> 'DRAFT'`,
+        [input.repairOrderId],
+      );
+
       return { daSinh: Number(rows[0]!.n) };
     });
   }

@@ -51,6 +51,8 @@ export class ReportsService {
         status: string;
         delivered_at: Date | null;
         doanh_thu_du_kien: string;
+        doanh_thu_thuc: string;
+        da_phat_hanh_hoa_don: boolean;
         gia_von_phu_tung: string;
         chi_phi_cong: string;
         chi_phi_rework: string;
@@ -59,6 +61,7 @@ export class ReportsService {
       }>(
         `SELECT p.repair_order_id, p.code, p.plate_number, p.powertrain::text AS powertrain,
                 p.status::text AS status, p.delivered_at, p.doanh_thu_du_kien,
+                p.doanh_thu_thuc, p.da_phat_hanh_hoa_don,
                 p.gia_von_phu_tung, p.chi_phi_cong, p.chi_phi_rework, p.chi_phi_bao_hanh,
                 p.la_don_bao_hanh
            FROM lai_lo_theo_don p
@@ -73,7 +76,18 @@ export class ReportsService {
       );
 
       const orders = rows.map((r) => {
-        const doanhThu = Math.round(Number(r.doanh_thu_du_kien));
+        /*
+         * 🔒 Đơn ĐÃ có hoá đơn phát hành -> doanh thu THẬT.
+         *    Đơn chưa có -> vẫn là dự kiến, từ dòng báo giá đã duyệt.
+         *
+         * Đây là chỗ ADR-0008 hẹn nối lại khi Phase 3 xong. Không gộp hai
+         * nguồn thành một cột duy nhất: một bảng trộn lẫn "khách đã đồng ý
+         * trả" với "đã phát hành hoá đơn" là một bảng không đối chiếu được
+         * với sổ thuế.
+         */
+        const doanhThu = r.da_phat_hanh_hoa_don
+          ? Math.round(Number(r.doanh_thu_thuc))
+          : Math.round(Number(r.doanh_thu_du_kien));
         const chiPhi =
           Math.round(Number(r.gia_von_phu_tung)) +
           Math.round(Number(r.chi_phi_cong)) +
