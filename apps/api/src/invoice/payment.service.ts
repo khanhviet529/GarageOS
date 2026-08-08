@@ -12,7 +12,7 @@ import {
   type ReversePaymentInput,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
-import { assertCan } from '../common/permissions';
+import { appendBranchScope, assertCan } from '../common/permissions';
 
 /**
  * Thu tiền và công nợ — BC-07 · BC-08 · BC-13.
@@ -54,14 +54,28 @@ export class PaymentService {
        * số doanh thu theo chi nhánh sẽ sai, và không ai phát hiện ra vì tổng
        * toàn chuỗi vẫn đúng.
        */
+      const params: unknown[] = [input.allocations.map((a) => a.invoiceLineId)];
+      const scope = appendBranchScope(actor, params, 'i');
       const { rows: hd } = await tx.query<{ branch_id: string; customer_id: string; status: string; code: string }>(
         `SELECT DISTINCT i.branch_id, i.customer_id, i.status::text AS status, i.code
            FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
-          WHERE l.id = ANY($1::uuid[])`,
+          WHERE l.id = ANY($1::uuid[]) ${scope}`,
+        params,
+      );
+      /*
+       * 🔒 Số dòng tìm thấy phải ĐỦ. Lọc theo chi nhánh làm những dòng ngoài
+       * phạm vi biến mất khỏi kết quả — nếu chỉ kiểm `length === 0` thì một
+       * khoản thu trộn dòng của hai chi nhánh sẽ đi qua với phần còn lại.
+       */
+      const { rows: dem } = await tx.query<{ n: string }>(
+        `SELECT count(*) AS n FROM invoice_line WHERE id = ANY($1::uuid[])`,
         [input.allocations.map((a) => a.invoiceLineId)],
       );
       if (hd.length === 0) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy dòng hoá đơn để phân bổ');
+      }
+      if (Number(dem[0]!.n) !== new Set(input.allocations.map((a) => a.invoiceLineId)).size) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Có dòng hoá đơn không tồn tại');
       }
       const chuaPhatHanh = hd.find((h) => h.status === 'DRAFT' || h.status === 'CANCELLED');
       if (chuaPhatHanh !== undefined) {
@@ -162,6 +176,7 @@ export class PaymentService {
     assertCan(actor, 'payment:record');
 
     return this.db.withTenant(actor, async (tx) => {
+      const paramsDao: unknown[] = [paymentId];
       const { rows } = await tx.query<{
         id: string;
         branch_id: string;
@@ -170,7 +185,10 @@ export class PaymentService {
         amount: string;
         method: string;
         reversal_of_payment_id: string | null;
-      }>(`SELECT * FROM payment WHERE id = $1`, [paymentId]);
+      }>(
+        `SELECT p.* FROM payment p WHERE p.id = $1 ${appendBranchScope(actor, paramsDao, 'p')}`,
+        paramsDao,
+      );
       const goc = rows[0];
       if (goc === undefined) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy khoản thu');
@@ -222,9 +240,12 @@ export class PaymentService {
   async listForCustomer(actor: ActorContext, customerId: string): Promise<Payment[]> {
     assertCan(actor, 'invoice:read');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [customerId];
+      const scope = appendBranchScope(actor, params, 'p');
       const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM payment WHERE customer_id = $1 ORDER BY paid_at DESC LIMIT 100`,
-        [customerId],
+        `SELECT p.id FROM payment p WHERE p.customer_id = $1 ${scope}
+          ORDER BY p.paid_at DESC LIMIT 100`,
+        params,
       );
       const ra: Payment[] = [];
       for (const r of rows) ra.push(await this.docThanhToan(tx, r.id));
@@ -243,6 +264,8 @@ export class PaymentService {
     assertCan(actor, 'invoice:read');
 
     return this.db.withTenant(actor, async (tx) => {
+      const paramsNo: unknown[] = [];
+      const scopeNo = appendBranchScope(actor, paramsNo, 'n');
       const { rows } = await tx.query<{
         customer_id: string;
         display_name: string;
@@ -261,19 +284,26 @@ export class PaymentService {
       }>(
         `SELECT k.customer_id, k.display_name, k.type::text AS type,
                 k.credit_limit_amount, k.payment_term_days, c.credit_on_hold,
-                k.tong_con_no, k.qua_han, k.qua_han_lau_nhat, k.so_hoa_don_chua_thu,
+                sum(n.con_no) AS tong_con_no,
+                COALESCE(sum(n.con_no) FILTER (WHERE n.so_ngay_qua_han > 0), 0) AS qua_han,
+                COALESCE(max(n.so_ngay_qua_han), 0) AS qua_han_lau_nhat,
+                count(n.invoice_id) AS so_hoa_don_chua_thu,
                 COALESCE(sum(n.con_no) FILTER (WHERE COALESCE(n.so_ngay_qua_han, 0) = 0), 0) AS trong_han,
                 COALESCE(sum(n.con_no) FILTER (WHERE n.so_ngay_qua_han BETWEEN 1 AND 30), 0) AS qh_1_30,
                 COALESCE(sum(n.con_no) FILTER (WHERE n.so_ngay_qua_han BETWEEN 31 AND 60), 0) AS qh_31_60,
                 COALESCE(sum(n.con_no) FILTER (WHERE n.so_ngay_qua_han > 60), 0) AS qh_tren_60
            FROM cong_no_khach k
            JOIN customer c ON c.id = k.customer_id
-           LEFT JOIN cong_no_hoa_don n ON n.customer_id = k.customer_id
+           -- 🔒 INNER JOIN, khong phai LEFT: cong no phai quy ve nhung hoa don
+           --    NGUOI DOC duoc phep thay. Voi LEFT JOIN, tong tinh san tren
+           --    toan tenant van lot ra du khong dong nao khop pham vi.
+           JOIN cong_no_hoa_don n ON n.customer_id = k.customer_id ${scopeNo}
           WHERE k.tong_con_no > 0
           GROUP BY k.customer_id, k.display_name, k.type, k.credit_limit_amount,
-                   k.payment_term_days, c.credit_on_hold, k.tong_con_no, k.qua_han,
-                   k.qua_han_lau_nhat, k.so_hoa_don_chua_thu
-          ORDER BY qh_tren_60 DESC, k.tong_con_no DESC`,
+                   k.payment_term_days, c.credit_on_hold
+         HAVING sum(n.con_no) > 0
+          ORDER BY qh_tren_60 DESC, sum(n.con_no) DESC`,
+        paramsNo,
       );
 
       return rows.map((r) => ({

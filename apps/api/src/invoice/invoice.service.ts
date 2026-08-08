@@ -135,7 +135,7 @@ export class InvoiceService {
       seq = await this.dungDongPhuTung(tx, actor, invoiceId, don.id, seq);
       await this.dungDongPhi(tx, actor, invoiceId, don.id, seq);
 
-      return this.doc(tx, invoiceId);
+      return this.doc(tx, actor, invoiceId);
     });
   }
 
@@ -363,13 +363,14 @@ export class InvoiceService {
     assertCan(actor, 'invoice:issue');
 
     return this.db.withTenant(actor, async (tx) => {
+      const phamVi: unknown[] = [invoiceId];
       const { rows } = await tx.query<DongHoaDon & { total_amount: string }>(
         `SELECT i.*, ro.code AS ro_code, c.display_name AS customer_name
            FROM invoice i
            JOIN repair_order ro ON ro.id = i.repair_order_id
            JOIN customer c ON c.id = i.customer_id
-          WHERE i.id = $1 FOR UPDATE OF i`,
-        [invoiceId],
+          WHERE i.id = $1 ${appendBranchScope(actor, phamVi, 'i')} FOR UPDATE OF i`,
+        phamVi,
       );
       const hd = rows[0];
       if (hd === undefined) {
@@ -466,7 +467,7 @@ export class InvoiceService {
        */
       await guiHoaDonDienTu(tx, actor.tenantId, invoiceId, this.eInvoice);
 
-      return this.doc(tx, invoiceId);
+      return this.doc(tx, actor, invoiceId);
     });
   }
 
@@ -483,9 +484,11 @@ export class InvoiceService {
   ): Promise<{ status: string; providerInvoiceNo: string | null; errorMessage: string | null }> {
     assertCan(actor, 'invoice:issue');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [invoiceId];
+      const scope = appendBranchScope(actor, params, 'i');
       const { rows } = await tx.query<{ status: string }>(
-        `SELECT status::text AS status FROM invoice WHERE id = $1`,
-        [invoiceId],
+        `SELECT i.status::text AS status FROM invoice i WHERE i.id = $1 ${scope}`,
+        params,
       );
       if (rows[0] === undefined) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy hoá đơn');
@@ -562,13 +565,14 @@ export class InvoiceService {
     assertCan(actor, 'invoice:adjust');
 
     return this.db.withTenant(actor, async (tx) => {
+      const phamVi: unknown[] = [invoiceId];
       const { rows } = await tx.query<DongHoaDon>(
         `SELECT i.*, ro.code AS ro_code, c.display_name AS customer_name
            FROM invoice i
            JOIN repair_order ro ON ro.id = i.repair_order_id
            JOIN customer c ON c.id = i.customer_id
-          WHERE i.id = $1 FOR UPDATE OF i`,
-        [invoiceId],
+          WHERE i.id = $1 ${appendBranchScope(actor, phamVi, 'i')} FOR UPDATE OF i`,
+        phamVi,
       );
       const goc = rows[0];
       if (goc === undefined) {
@@ -635,24 +639,26 @@ export class InvoiceService {
         invoiceId,
       ]);
 
-      return this.doc(tx, dcId);
+      return this.doc(tx, actor, dcId);
     });
   }
 
   async getById(actor: ActorContext, id: string): Promise<Invoice> {
     assertCan(actor, 'invoice:read');
-    return this.db.withTenant(actor, (tx) => this.doc(tx, id));
+    return this.db.withTenant(actor, (tx) => this.doc(tx, actor, id));
   }
 
   async forOrder(actor: ActorContext, orderId: string): Promise<Invoice[]> {
     assertCan(actor, 'invoice:read');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [orderId];
+      const scope = appendBranchScope(actor, params, 'i');
       const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM invoice WHERE repair_order_id = $1 ORDER BY created_at`,
-        [orderId],
+        `SELECT i.id FROM invoice i WHERE i.repair_order_id = $1 ${scope} ORDER BY i.created_at`,
+        params,
       );
       const ra: Invoice[] = [];
-      for (const r of rows) ra.push(await this.doc(tx, r.id));
+      for (const r of rows) ra.push(await this.doc(tx, actor, r.id));
       return ra;
     });
   }
@@ -757,14 +763,27 @@ export class InvoiceService {
     };
   }
 
-  private async doc(tx: PoolClient, id: string): Promise<Invoice> {
+  /**
+   * 🔒 MỌI đường đọc hoá đơn đi qua đây, và đây là chỗ áp phạm vi chi nhánh.
+   *
+   * Đặt ở một hàm dùng chung thay vì rải `appendBranchScope` ra từng phương
+   * thức: rải ra là cách chắc chắn để một hôm nào đó có một phương thức quên.
+   * Vòng review Phase 3 tìm ra đúng điều đó — `appendBranchScope` có mặt ở
+   * `build()` và VẮNG ở năm đường còn lại, nên thu ngân chi nhánh A đọc, phát
+   * hành và thu tiền được hoá đơn của chi nhánh B.
+   *
+   * RLS không cứu được: cùng tenant, khác chi nhánh.
+   */
+  private async doc(tx: PoolClient, actor: ActorContext, id: string): Promise<Invoice> {
+    const params: unknown[] = [id];
+    const scope = appendBranchScope(actor, params, 'i');
     const { rows } = await tx.query<DongHoaDon>(
       `SELECT i.*, ro.code AS ro_code, c.display_name AS customer_name
          FROM invoice i
          JOIN repair_order ro ON ro.id = i.repair_order_id
          JOIN customer c ON c.id = i.customer_id
-        WHERE i.id = $1`,
-      [id],
+        WHERE i.id = $1 ${scope}`,
+      params,
     );
     const hd = rows[0];
     if (hd === undefined) {

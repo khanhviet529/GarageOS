@@ -10,7 +10,7 @@ import {
   type UpdateClaimInput,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
-import { assertCan } from '../common/permissions';
+import { appendBranchScope, assertCan } from '../common/permissions';
 
 /**
  * Hồ sơ bồi thường bảo hiểm — BC-08.
@@ -50,6 +50,16 @@ export class InsuranceService {
     assertCan(actor, 'insurance:manage');
 
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [input.repairOrderId];
+      const scope = appendBranchScope(actor, params, 'ro');
+      const { rows: don } = await tx.query<{ id: string }>(
+        `SELECT ro.id FROM repair_order ro WHERE ro.id = $1 ${scope}`,
+        params,
+      );
+      if (don[0] === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Khong tim thay don');
+      }
+
       const { rows } = await tx.query<{ id: string }>(
         `INSERT INTO insurance_claim (tenant_id, repair_order_id, insurer_name, policy_number,
                                       deductible_amount, created_by_user_id)
@@ -63,7 +73,7 @@ export class InsuranceService {
           actor.userId,
         ],
       );
-      return this.doc(tx, rows[0]!.id);
+      return this.doc(tx, actor, rows[0]!.id);
     });
   }
 
@@ -82,10 +92,14 @@ export class InsuranceService {
     assertCan(actor, 'insurance:manage');
 
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [claimId];
+      const scope = appendBranchScope(actor, params, 'ro');
       const { rows } = await tx.query<{ status: string; approved_amount: string | null }>(
-        `SELECT status::text AS status, approved_amount FROM insurance_claim
-          WHERE id = $1 FOR UPDATE`,
-        [claimId],
+        `SELECT c.status::text AS status, c.approved_amount
+           FROM insurance_claim c
+           JOIN repair_order ro ON ro.id = c.repair_order_id
+          WHERE c.id = $1 ${scope} FOR UPDATE OF c`,
+        params,
       );
       const hs = rows[0];
       if (hs === undefined) {
@@ -136,7 +150,7 @@ export class InsuranceService {
         ],
       );
 
-      return this.doc(tx, claimId);
+      return this.doc(tx, actor, claimId);
     });
   }
 
@@ -155,21 +169,46 @@ export class InsuranceService {
     assertCan(actor, 'insurance:manage');
 
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [claimId, invoiceLineIds];
+      const scope = appendBranchScope(actor, params, 'ro');
+
       const { rowCount } = await tx.query(
         `UPDATE invoice_line l
             SET expected_payer_type = 'INSURER', insurance_claim_id = $1
            FROM invoice i
+           JOIN repair_order ro ON ro.id = i.repair_order_id
+           JOIN insurance_claim c ON c.id = $1
           WHERE i.id = l.invoice_id
             AND l.id = ANY($2::uuid[])
+            /*
+             * 🔒 Dòng hoá đơn phải thuộc ĐÚNG ĐƠN của hồ sơ bồi thường.
+             *
+             * Thiếu điều kiện này thì gắn được hạng mục của xe KHÁC vào hồ sơ,
+             * và bảng kê gửi công ty bảo hiểm liệt kê một chiếc xe không nằm
+             * trong vụ va chạm. Vòng review Phase 3 dựng đúng cảnh đó: hồ sơ của
+             * đơn A nhận dòng của đơn B, HTTP 201.
+             *
+             * Khoá ngoại không cứu được: nó chỉ bảo đảm hồ sơ tồn tại trong cùng
+             * tenant, không nói gì về việc hai bên có cùng một đơn sửa chữa hay
+             * không.
+             */
+            AND i.repair_order_id = c.repair_order_id
             -- 🔒 Chỉ sửa được khi hoá đơn còn NHÁP. Sau khi phát hành, trigger
             --    bất biến ở 0043 chặn — kiểm ở đây chỉ để báo lỗi dễ hiểu hơn.
-            AND i.status = 'DRAFT'`,
-        [claimId, invoiceLineIds],
+            AND i.status = 'DRAFT'
+            ${scope}`,
+        params,
       );
-      if (rowCount === 0) {
+      if (rowCount !== invoiceLineIds.length) {
+        /*
+         * So SỐ DÒNG, không so với 0: gắn năm dòng mà chỉ bốn dòng hợp lệ thì
+         * "có cập nhật được gì đó" là câu trả lời sai — người dùng cần biết lời
+         * gọi của họ KHÔNG làm đúng điều họ nghĩ.
+         */
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
-          'Không dòng nào được cập nhật — hoá đơn đã phát hành, hoặc id dòng không đúng.',
+          `Chỉ ${rowCount ?? 0}/${invoiceLineIds.length} dòng gắn được vào hồ sơ. ` +
+            'Dòng phải thuộc đúng đơn của hồ sơ, và hoá đơn phải còn ở trạng thái nháp.',
         );
       }
       return { soDong: rowCount ?? 0 };
@@ -179,11 +218,15 @@ export class InsuranceService {
   async forOrder(actor: ActorContext, orderId: string): Promise<InsuranceClaim | null> {
     assertCan(actor, 'insurance:manage');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [orderId];
+      const scope = appendBranchScope(actor, params, 'ro');
       const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM insurance_claim WHERE repair_order_id = $1`,
-        [orderId],
+        `SELECT c.id FROM insurance_claim c
+           JOIN repair_order ro ON ro.id = c.repair_order_id
+          WHERE c.repair_order_id = $1 ${scope}`,
+        params,
       );
-      return rows[0] === undefined ? null : this.doc(tx, rows[0].id);
+      return rows[0] === undefined ? null : this.doc(tx, actor, rows[0].id);
     });
   }
 
@@ -197,18 +240,28 @@ export class InsuranceService {
   async pending(actor: ActorContext): Promise<InsuranceClaim[]> {
     assertCan(actor, 'insurance:manage');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [];
+      const scope = appendBranchScope(actor, params, 'ro');
       const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM insurance_claim
-          WHERE status NOT IN ('SETTLED', 'REJECTED', 'CANCELLED')
-          ORDER BY created_at`,
+        `SELECT c.id FROM insurance_claim c
+           JOIN repair_order ro ON ro.id = c.repair_order_id
+          WHERE c.status NOT IN ('SETTLED', 'REJECTED', 'CANCELLED') ${scope}
+          ORDER BY c.created_at`,
+        params,
       );
       const ra: InsuranceClaim[] = [];
-      for (const r of rows) ra.push(await this.doc(tx, r.id));
+      for (const r of rows) ra.push(await this.doc(tx, actor, r.id));
       return ra;
     });
   }
 
-  private async doc(tx: PoolClient, id: string): Promise<InsuranceClaim> {
+  /** 🔒 Mọi đường đọc hồ sơ đi qua đây — cùng lập luận với InvoiceService.doc */
+  private async doc(
+    tx: PoolClient,
+    actor: ActorContext,
+    id: string,
+  ): Promise<InsuranceClaim> {
+    const paramsDoc: unknown[] = [id];
     const { rows } = await tx.query<{
       id: string;
       repair_order_id: string;
@@ -226,8 +279,8 @@ export class InsuranceService {
       `SELECT c.*, ro.code AS ro_code
          FROM insurance_claim c
          JOIN repair_order ro ON ro.id = c.repair_order_id
-        WHERE c.id = $1`,
-      [id],
+        WHERE c.id = $1 ${appendBranchScope(actor, paramsDoc, 'ro')}`,
+      paramsDoc,
     );
     const c = rows[0];
     if (c === undefined) {
