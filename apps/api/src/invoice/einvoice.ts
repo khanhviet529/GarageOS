@@ -71,26 +71,21 @@ export function chonEInvoiceProvider(): EInvoiceProvider {
 }
 
 /**
- * Gửi một hoá đơn đã phát hành sang nhà cung cấp, và ghi lại kết quả.
+ * Đọc dữ liệu hoá đơn để dựng yêu cầu gửi nhà cung cấp.
  *
- * 🔒 Hàm này KHÔNG ném ngoại lệ khi nhà cung cấp lỗi. Nó ghi `FAILED` kèm thông
- *    báo và trả về — người gọi (luồng phát hành) không được phép hỏng vì nó.
+ * 🔒 Tách khỏi lời gọi mạng CÓ CHỦ Ý — xem `guiHoaDonDienTu` bên dưới.
  */
-export async function guiHoaDonDienTu(
+export async function docYeuCauHoaDonDienTu(
   tx: PoolClient,
-  tenantId: string,
   invoiceId: string,
-  provider: EInvoiceProvider,
-): Promise<{ status: string; providerInvoiceNo: string | null; errorMessage: string | null }> {
+): Promise<EInvoiceRequest | null> {
   const { rows: hd } = await tx.query<{
     code: string;
     customer_snapshot: unknown;
     total_amount: string;
   }>(`SELECT code, customer_snapshot, total_amount FROM invoice WHERE id = $1`, [invoiceId]);
   const inv = hd[0];
-  if (inv === undefined) {
-    return { status: 'FAILED', providerInvoiceNo: null, errorMessage: 'Không tìm thấy hoá đơn' };
-  }
+  if (inv === undefined) return null;
 
   const { rows: lines } = await tx.query<{
     description: string;
@@ -103,7 +98,7 @@ export async function guiHoaDonDienTu(
     [invoiceId],
   );
 
-  const req: EInvoiceRequest = {
+  return {
     invoiceCode: inv.code,
     customerSnapshot: inv.customer_snapshot,
     totalAmount: Number(inv.total_amount),
@@ -114,18 +109,48 @@ export async function guiHoaDonDienTu(
       lineTotal: Number(l.line_total),
     })),
   };
+}
 
-  let kq: EInvoiceResult;
+/**
+ * Gọi nhà cung cấp. KHÔNG chạm database, KHÔNG ném ngoại lệ.
+ *
+ * 🔒 Đây là hàm DUY NHẤT làm việc với mạng, và nó cố ý không nhận `tx`.
+ *
+ * Bản đầu gói cả ba việc (đọc DB → gọi mạng → ghi DB) trong một giao dịch. Với
+ * adapter giả lập thì không thấy gì; với nhà cung cấp thật thì một lần treo 30
+ * giây là một giao dịch giữ khoá trên `invoice` suốt 30 giây đó — và mọi thu
+ * ngân khác đứng chờ.
+ *
+ * 💡 Comment cũ nói "không để lỗi bên thứ ba chặn việc bàn giao xe". Đúng với
+ *    LỖI, sai với TREO. Một lời gọi thất bại nhanh thì vô hại; một lời gọi
+ *    không trả lời mới là thứ làm nghẽn hệ thống, và nó không đi qua nhánh
+ *    catch nào cả.
+ */
+export async function goiNhaCungCap(
+  provider: EInvoiceProvider,
+  req: EInvoiceRequest,
+): Promise<EInvoiceResult> {
   try {
-    kq = await provider.phatHanh(req);
+    return await provider.phatHanh(req);
   } catch (e) {
-    // Nhà cung cấp treo, timeout, DNS hỏng — mọi thứ đều thành một dòng FAILED
-    kq = {
+    // Treo, timeout, DNS hỏng — mọi thứ đều thành một dòng FAILED
+    return {
       ok: false,
       errorMessage: e instanceof Error ? e.message.slice(0, 500) : 'Không gọi được nhà cung cấp',
       raw: null,
     };
   }
+}
+
+/** Ghi kết quả trả về của nhà cung cấp — giao dịch NGẮN, không có mạng bên trong */
+export async function ghiKetQuaHoaDonDienTu(
+  tx: PoolClient,
+  tenantId: string,
+  invoiceId: string,
+  providerName: string,
+  req: EInvoiceRequest,
+  kq: EInvoiceResult,
+): Promise<{ status: string; providerInvoiceNo: string | null; errorMessage: string | null }> {
 
   /*
    * UPSERT: gửi lại lần hai không tạo bản ghi thứ hai. `attempt_count` tăng dần
@@ -149,7 +174,7 @@ export async function guiHoaDonDienTu(
     [
       tenantId,
       invoiceId,
-      provider.name,
+      providerName,
       kq.ok ? 'ISSUED' : 'FAILED',
       JSON.stringify(req),
       JSON.stringify(kq.raw),
