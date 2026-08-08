@@ -46,9 +46,9 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 451 (domain 12, db 42, api 397) |
+| Test tự động | 469 (domain 12, db 42, api 415) |
 | E2E Playwright | 69 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 48 |
+| Migration | 49 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
 
@@ -121,6 +121,47 @@ không có ngoại lệ nào được ném. Với báo cáo, "không lỗi" khô
 | Thu tiền trùng trả về 500 thay vì thành công | Thiếu `SAVEPOINT` quanh INSERT đụng UNIQUE. Đúng cái bẫy đã ghi thành comment ở `repair-order.service.ts` từ Phase 1 — **dẫm lại lần thứ ba** |
 | Bài quét "cột tiền có chặn trên" đỏ vì hai view | `information_schema.columns` gồm cả VIEW, mà view không gắn CHECK được. Không lọc `relkind = 'r'` thì mỗi view báo cáo mới sẽ làm test đỏ với một yêu cầu không thực hiện nổi |
 | Mọi bài thanh toán đỏ với `OVERPAY` | Helper trong test phân bổ cả tổng hoá đơn vào `lines[0]` — dòng công trị giá 412.500. Không phải lỗi mã nguồn: chính INV-M-04 đang làm việc, không thu quá số phải thu CỦA TỪNG DÒNG |
+
+## Vòng tự review sau Phase 3 — chín phát hiện, tám cùng một lỗi
+
+Codex chưa dùng lại được, nên vòng này tự review, có bằng chứng chạy được cho
+từng phát hiện.
+
+| # | Phase | Vấn đề | Mức |
+|---|---|---|---|
+| F-1 | 3 | Không có phạm vi chi nhánh ở **toàn bộ** tầng hoá đơn — đọc, phát hành, thu tiền, công nợ | 🔴 |
+| F-6 | 3 | Gắn được dòng hoá đơn của **đơn khác** vào hồ sơ bồi thường | 🔴 |
+| P-1 | 5.4 | Thủ kho chi nhánh này mở được phiếu kiểm kê kho chi nhánh kia | 🔴 |
+| P-2 | 6 | Báo cáo tồn kho hiện cả kho — và **giá vốn** — của chi nhánh khác | 🟠 |
+| P-3 | 8 | Tool AI trả về dữ liệu mọi chi nhánh | 🟠 |
+| F-3 | 3 | Quyết toán huỷ đơn còn `DRAFT` vẫn thành tiền trên hoá đơn | 🟠 |
+| F-4 | 3 | Gọi nhà cung cấp HĐĐT **bên trong** giao dịch phát hành | 🟠 |
+| F-5 | 3 | Hoá đơn tổng 0đ kẹt `ISSUED` vĩnh viễn | 🟡 |
+| F-2 | 3 | Phân bổ ngược dấu chỉ chặn ở API, không chặn ở database | 🟡 |
+
+💡 **Năm trong chín là cùng MỘT lỗi**, lặp qua bốn phase: quên phạm vi chi
+nhánh. Không phải năm lỗi độc lập — là một thói quen sai lặp năm lần.
+
+RLS che mất nó: nó cô lập theo **tenant**, mà hai chi nhánh cùng một garage nằm
+trong cùng tenant. Nên mọi thứ *trông như* đã được bảo vệ.
+
+⚠️ **P-3 là loại nguy hiểm riêng của tầng tool.** Mọi endpoint siết đúng, rồi
+trợ lý AI — thứ thêm vào sau cùng — lặng lẽ mở lại tất cả. Phase 8 tuyên bố
+"phân quyền enforce trong tool", nhưng chỉ enforce VAI, không enforce CHI
+NHÁNH. Quy tắc đã ghi vào đầu `tools.ts`: **tool không bao giờ trả về nhiều hơn
+endpoint tương đương.**
+
+### Hai bằng chứng đến từ chính bộ test
+
+1. Vá xong P-1 thì `kiem-ke.spec.ts` đỏ cả 10 bài — fixture của nó lấy kho bằng
+   `ORDER BY code LIMIT 1`, trúng chi nhánh khác. Suốt Phase 5.4 nó xanh **vì**
+   chưa có phạm vi. Một bài test đỏ vì một lỗ hổng vừa được bịt là bằng chứng
+   tốt nhất rằng lỗ hổng ấy có thật.
+
+2. Bài kiểm F-4 bản đầu dùng regex tìm `goiNhaCungCap` trong vòng 4000 ký tự
+   sau `withTenant(` — và ĐỎ trên mã nguồn đã đúng. Regex không phân biệt được
+   "nằm trong lời gọi" với "nằm sau lời gọi". **Một bài kiểm nói sai về điều nó
+   đo còn tệ hơn không có bài kiểm**, vì nó bắt người ta sửa mã đang đúng.
 
 ## Hàng rào quét toàn bộ — bốn cái, và vì sao chúng đáng giá
 
