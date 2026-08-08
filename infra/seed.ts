@@ -691,6 +691,480 @@ async function main(): Promise<void> {
     );
   }
 
+  /*
+   * ════════════════════════════════════════════════════════════════════════
+   * Phase 3 — hoá đơn, thanh toán, công nợ, bảo hiểm
+   *
+   * 🔒 `docs/14-testing-strategy.md` mục 6: seed phải đủ để MỌI màn hình có nội
+   *    dung và MỌI báo cáo có số liệu. Trước khối này, màn hoá đơn và báo cáo
+   *    công nợ mở ra trống trơn — phần đã làm xong trông như chưa làm.
+   *
+   * Ba cảnh, mỗi cảnh minh hoạ một điều KHÁC NHAU:
+   *
+   *   1. Khách lẻ, đã thu đủ         -> vòng đời hoá đơn đóng lại bình thường
+   *   2. Công ty vận tải, nợ QUÁ HẠN -> báo cáo công nợ theo tuổi nợ có số liệu
+   *   3. Xe va chạm có bảo hiểm      -> phân bổ hai nguồn tới TỪNG DÒNG (BC-08)
+   *
+   * 💡 Cảnh 3 là cảnh đáng có nhất: nó là thứ duy nhất chứng minh bằng dữ liệu
+   *    rằng `payment_allocation` trỏ tới DÒNG chứ không tới hoá đơn — điều mà
+   *    một hoá đơn thu một lần không nói ra được.
+   *
+   * Ba đơn ở đây tự dựng lấy chứ không mượn đơn demo phía trên: đơn đó đang
+   * IN_PROGRESS và còn là chỗ dựa của nhiều bộ E2E khác. Kéo nó sang DELIVERED
+   * để có chỗ gắn hoá đơn sẽ làm đỏ những bài chẳng liên quan gì.
+   * ════════════════════════════════════════════════════════════════════════
+   */
+  console.log('Tạo hoá đơn, thanh toán và hồ sơ bảo hiểm...');
+
+  const { rows: thuNgan } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000006'`,
+    [TENANT_A],
+  );
+  const { rows: coVan } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000003'`,
+    [TENANT_A],
+  );
+  const { rows: chiNhanhChinh } = await db.query<{ id: string }>(
+    `SELECT id FROM branch WHERE tenant_id = $1 AND code = 'HN01'`,
+    [TENANT_A],
+  );
+  const nguoiThu = thuNgan[0]!.id;
+  const nguoiTao = coVan[0]!.id;
+  const chiNhanhHD = chiNhanhChinh[0]!.id;
+
+  /** Một đơn đã bàn giao — chỗ hợp lệ duy nhất để gắn hoá đơn */
+  async function donDaGiao(opts: {
+    ma: string;
+    customerId: string;
+    vehicleId: string;
+    than: string;
+    kmVao: number;
+    kmRa: number;
+    giaoTruoc: number;
+  }): Promise<string> {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO repair_order (tenant_id, branch_id, code, customer_id, vehicle_id,
+                                 customer_complaint, odometer_in, odometer_out,
+                                 customer_access_token, created_by_user_id,
+                                 status, received_at, delivered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'DELIVERED',
+               now() - make_interval(days => $11::int) - interval '2 day',
+               now() - make_interval(days => $11::int))
+       RETURNING id`,
+      [
+        TENANT_A,
+        chiNhanhHD,
+        opts.ma,
+        opts.customerId,
+        opts.vehicleId,
+        opts.than,
+        opts.kmVao,
+        opts.kmRa,
+        // 🔒 ro_token_long_enough: token tra cứu công khai tối thiểu 32 ký tự
+        `demo-${opts.ma.toLowerCase()}-token-tra-cuu-cong-khai`,
+        nguoiTao,
+        opts.giaoTruoc,
+      ],
+    );
+    return rows[0]!.id;
+  }
+
+  /** Dựng một hoá đơn đã phát hành, trả về id hoá đơn và id các dòng */
+  async function hoaDonDemo(opts: {
+    orderId: string;
+    customerId: string;
+    ma: string;
+    dong: {
+      moTa: string;
+      gia: number;
+      payer?: 'CUSTOMER' | 'INSURER';
+      claimId?: string;
+    }[];
+    phatHanhTruoc: number;
+    hanNgay: number;
+  }): Promise<{ id: string; dong: string[] }> {
+    const { rows: hd } = await db.query<{ id: string }>(
+      `INSERT INTO invoice (tenant_id, branch_id, repair_order_id, customer_id, code,
+                            created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [TENANT_A, chiNhanhHD, opts.orderId, opts.customerId, opts.ma, nguoiThu],
+    );
+    const dong: string[] = [];
+    for (const [i, d] of opts.dong.entries()) {
+      const { rows } = await db.query<{ id: string }>(
+        `INSERT INTO invoice_line (tenant_id, invoice_id, seq, line_type, description,
+                                   quantity, unit_price, tax_rate_percent,
+                                   expected_payer_type, insurance_claim_id)
+         VALUES ($1,$2,$3,'PART',$4,1,$5,0,$6,$7) RETURNING id`,
+        [
+          TENANT_A,
+          hd[0]!.id,
+          i + 1,
+          d.moTa,
+          d.gia,
+          d.payer ?? 'CUSTOMER',
+          // 🔒 Gắn hồ sơ bồi thường NGAY lúc tạo dòng: sau ISSUED thì
+          //    `chan_sua_dong_hoa_don_da_phat_hanh` chặn cả UPDATE
+          d.claimId ?? null,
+        ],
+      );
+      dong.push(rows[0]!.id);
+    }
+    /*
+     * 🔒 INV-M-03: sau ISSUED thì không thêm bớt sửa dòng — nên phát hành SAU
+     *    khi đã nhập đủ dòng. Ảnh chụp thông tin khách là bắt buộc
+     *    (`invoice_issued_needs_snapshot`): hoá đơn phải đọc được y như lúc
+     *    phát hành, kể cả khi khách đổi tên hay mã số thuế về sau.
+     */
+    await db.query(
+      `UPDATE invoice i
+          SET status = 'ISSUED',
+              issued_at = now() - make_interval(days => $2::int),
+              due_date  = now() - make_interval(days => $2::int)
+                          + make_interval(days => $3::int),
+              customer_snapshot = jsonb_build_object(
+                'displayName', c.display_name,
+                'phone', c.phone,
+                'address', c.address,
+                'taxCode', c.tax_code)
+         FROM customer c
+        WHERE i.id = $1 AND c.id = i.customer_id`,
+      [hd[0]!.id, opts.phatHanhTruoc, opts.hanNgay],
+    );
+    return { id: hd[0]!.id, dong };
+  }
+
+  /** Thu tiền và phân bổ tới từng dòng — đúng đường mà PaymentService đi */
+  async function thuTien(opts: {
+    customerId: string;
+    payerType: 'CUSTOMER' | 'INSURER';
+    payerName?: string;
+    method: 'CASH' | 'TRANSFER';
+    khoa: string;
+    truocNgay: number;
+    phanBo: { dong: string; tien: number }[];
+  }): Promise<void> {
+    const tong = opts.phanBo.reduce((t, x) => t + x.tien, 0);
+    const { rows: pm } = await db.query<{ id: string }>(
+      `INSERT INTO payment (tenant_id, branch_id, customer_id, payer_type, payer_name,
+                            amount, method, paid_at, idempotency_key, received_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, now() - make_interval(days => $8::int), $9,$10)
+       RETURNING id`,
+      [
+        TENANT_A,
+        chiNhanhHD,
+        opts.customerId,
+        opts.payerType,
+        opts.payerName ?? null,
+        tong,
+        opts.method,
+        opts.truocNgay,
+        opts.khoa,
+        nguoiThu,
+      ],
+    );
+    for (const x of opts.phanBo) {
+      await db.query(
+        `INSERT INTO payment_allocation (tenant_id, payment_id, invoice_line_id, amount)
+         VALUES ($1,$2,$3,$4)`,
+        [TENANT_A, pm[0]!.id, x.dong, x.tien],
+      );
+    }
+  }
+
+  // ── Cảnh 1 — khách lẻ, bảo dưỡng thường, đã thu đủ ─────────────────────────
+  const { rows: khachLe } = await db.query<{ id: string }>(
+    `INSERT INTO customer (tenant_id, type, display_name, phone, address)
+     VALUES ($1,'INDIVIDUAL','Lý Thu Hà','0913222444',
+             '18 ngõ 42 Thái Hà, Đống Đa, Hà Nội') RETURNING id`,
+    [TENANT_A],
+  );
+  const { rows: xeKhachLe } = await db.query<{ id: string }>(
+    `INSERT INTO vehicle (tenant_id, customer_id, plate_number, make_name, model_name,
+                          model_year, powertrain, last_odometer)
+     VALUES ($1,$2,'30F55521','Honda','City',2020,'ICE',61000) RETURNING id`,
+    [TENANT_A, khachLe[0]!.id],
+  );
+  const donLe = await donDaGiao({
+    ma: 'RO-DEMO-0050',
+    customerId: khachLe[0]!.id,
+    vehicleId: xeKhachLe[0]!.id,
+    than: 'Đến kỳ thay dầu, xin kiểm tra thêm phanh trước',
+    kmVao: 61000,
+    kmRa: 61012,
+    giaoTruoc: 4,
+  });
+  const hdLe = await hoaDonDemo({
+    orderId: donLe,
+    customerId: khachLe[0]!.id,
+    ma: 'INV-DEMO-0050',
+    phatHanhTruoc: 4,
+    hanNgay: 0,
+    dong: [
+      { moTa: 'Công thay dầu động cơ và lọc dầu', gia: 480_000 },
+      { moTa: 'Dầu động cơ 5W-30 (4 lít)', gia: 740_000 },
+    ],
+  });
+  await thuTien({
+    customerId: khachLe[0]!.id,
+    payerType: 'CUSTOMER',
+    method: 'CASH',
+    khoa: 'seed-demo-0050',
+    truocNgay: 4,
+    phanBo: [
+      { dong: hdLe.dong[0]!, tien: 480_000 },
+      { dong: hdLe.dong[1]!, tien: 740_000 },
+    ],
+  });
+
+  /*
+   * ── Cảnh 2 — công ty vận tải, nợ quá hạn ─────────────────────────────────
+   *
+   * Phát hành 45 ngày trước, hạn thanh toán 30 ngày -> quá hạn 15 ngày. Báo cáo
+   * công nợ chia theo tuổi nợ, và một bảng chỉ toàn "trong hạn" không cho thấy
+   * nó làm được gì.
+   */
+  const { rows: congTy } = await db.query<{ id: string }>(
+    `INSERT INTO customer (tenant_id, type, display_name, phone, tax_code, address,
+                           credit_limit_amount, payment_term_days,
+                           billing_contact_name, billing_email)
+     VALUES ($1,'COMPANY','Công ty TNHH Vận tải Đông Đô','02438220100','0102938475',
+             'Số 5 Phạm Hùng, Nam Từ Liêm, Hà Nội', 80000000, 30,
+             'Chị Hương - Kế toán trưởng','ketoan@vantaidongdo.example')
+     RETURNING id`,
+    [TENANT_A],
+  );
+  const { rows: xeCongTy } = await db.query<{ id: string }>(
+    `INSERT INTO vehicle (tenant_id, customer_id, plate_number, make_name, model_name,
+                          model_year, powertrain, last_odometer)
+     VALUES ($1,$2,'29H12345','Hyundai','Solati',2021,'ICE',142000) RETURNING id`,
+    [TENANT_A, congTy[0]!.id],
+  );
+  const donCongTy = await donDaGiao({
+    ma: 'RO-DEMO-0100',
+    customerId: congTy[0]!.id,
+    vehicleId: xeCongTy[0]!.id,
+    than: 'Xe chạy tuyến dài, đến kỳ bảo dưỡng 140.000km',
+    kmVao: 142000,
+    kmRa: 142050,
+    giaoTruoc: 45,
+  });
+  const hdNo = await hoaDonDemo({
+    orderId: donCongTy,
+    customerId: congTy[0]!.id,
+    ma: 'INV-DEMO-0100',
+    phatHanhTruoc: 45,
+    hanNgay: 30,
+    dong: [
+      { moTa: 'Bảo dưỡng cấp 140.000km', gia: 2_400_000 },
+      { moTa: 'Bộ lọc gió, lọc dầu, lọc nhiên liệu', gia: 1_850_000 },
+      { moTa: 'Dầu hộp số', gia: 1_250_000 },
+    ],
+  });
+  // Trả trước một phần -> hoá đơn PARTIALLY_PAID, phần còn lại đã quá hạn
+  await thuTien({
+    customerId: congTy[0]!.id,
+    payerType: 'CUSTOMER',
+    payerName: 'Công ty TNHH Vận tải Đông Đô',
+    method: 'TRANSFER',
+    khoa: 'seed-demo-0100',
+    truocNgay: 20,
+    phanBo: [{ dong: hdNo.dong[0]!, tien: 2_400_000 }],
+  });
+
+  /*
+   * ── Cảnh 3 — xe va chạm, bảo hiểm trả một phần ───────────────────────────
+   *
+   * Đúng ví dụ BC-08: bảo hiểm duyệt 5.200.000 (đèn đủ, sơn thiếu 500.000 là
+   * mức khấu trừ), khách trả 500.000 đó CỘNG hai hạng mục ngoài phạm vi bồi
+   * thường. Mức khấu trừ nằm GIỮA một dòng, nên không có cách nào ghi đúng cảnh
+   * này nếu phân bổ chỉ tới mức hoá đơn.
+   */
+  const { rows: khachVaCham } = await db.query<{ id: string }>(
+    `INSERT INTO customer (tenant_id, type, display_name, phone, address)
+     VALUES ($1,'INDIVIDUAL','Trịnh Văn Hoà','0912345699',
+             '77 Trần Duy Hưng, Cầu Giấy, Hà Nội') RETURNING id`,
+    [TENANT_A],
+  );
+  const { rows: xeVaCham } = await db.query<{ id: string }>(
+    `INSERT INTO vehicle (tenant_id, customer_id, plate_number, make_name, model_name,
+                          model_year, powertrain, last_odometer)
+     VALUES ($1,$2,'30G88888','Mazda','CX-5',2022,'ICE',38000) RETURNING id`,
+    [TENANT_A, khachVaCham[0]!.id],
+  );
+  const donVaCham = await donDaGiao({
+    ma: 'RO-DEMO-0200',
+    customerId: khachVaCham[0]!.id,
+    vehicleId: xeVaCham[0]!.id,
+    than: 'Va chạm phía trước: vỡ đèn pha trái, xước cản trước',
+    kmVao: 38000,
+    kmRa: 38020,
+    giaoTruoc: 10,
+  });
+  const { rows: hoSo } = await db.query<{ id: string }>(
+    `INSERT INTO insurance_claim (tenant_id, repair_order_id, insurer_name, policy_number,
+                                  claim_number, deductible_amount, approved_amount,
+                                  status, submitted_at, surveyed_at, approved_at,
+                                  created_by_user_id)
+     VALUES ($1,$2,'Bảo hiểm PVI','PVI-VC-2026-004471','BT-2026-11902',500000,5200000,
+             'PARTIALLY_APPROVED', now() - interval '20 day', now() - interval '18 day',
+             now() - interval '14 day', $3)
+     RETURNING id`,
+    [TENANT_A, donVaCham, nguoiTao],
+  );
+  const hdBh = await hoaDonDemo({
+    orderId: donVaCham,
+    customerId: khachVaCham[0]!.id,
+    ma: 'INV-DEMO-0200',
+    phatHanhTruoc: 10,
+    hanNgay: 0,
+    dong: [
+      {
+        moTa: 'Cụm đèn pha trái (chính hãng)',
+        gia: 3_200_000,
+        payer: 'INSURER',
+        claimId: hoSo[0]!.id,
+      },
+      { moTa: 'Sơn lại cản trước', gia: 2_500_000, payer: 'INSURER', claimId: hoSo[0]!.id },
+      { moTa: 'Dầu động cơ 5W-30 (4 lít)', gia: 850_000 },
+      { moTa: 'Vệ sinh hệ thống điều hoà', gia: 400_000 },
+    ],
+  });
+  await thuTien({
+    customerId: khachVaCham[0]!.id,
+    payerType: 'INSURER',
+    payerName: 'Bảo hiểm PVI',
+    method: 'TRANSFER',
+    khoa: 'seed-demo-0200-bh',
+    truocNgay: 6,
+    phanBo: [
+      { dong: hdBh.dong[0]!, tien: 3_200_000 },
+      // 🔒 Chỉ 2.000.000 cho dòng sơn: 500.000 còn lại là MỨC KHẤU TRỪ khách chịu
+      { dong: hdBh.dong[1]!, tien: 2_000_000 },
+    ],
+  });
+  await thuTien({
+    customerId: khachVaCham[0]!.id,
+    payerType: 'CUSTOMER',
+    method: 'CASH',
+    khoa: 'seed-demo-0200-kh',
+    truocNgay: 10,
+    phanBo: [
+      { dong: hdBh.dong[1]!, tien: 500_000 },
+      { dong: hdBh.dong[2]!, tien: 850_000 },
+      { dong: hdBh.dong[3]!, tien: 400_000 },
+    ],
+  });
+
+  /*
+   * ── Cảnh 4 — hoá đơn NHÁP lệch quá ngưỡng ────────────────────────────────
+   *
+   * Ba cảnh trên đều đã phát hành, nên màn hoá đơn chỉ hiện phần chỉ-đọc. Bảng
+   * đối chiếu báo giá ↔ thực tế, cảnh báo vượt ngưỡng và nút phát hành khoá
+   * theo lý do chỉ tồn tại ở trạng thái NHÁP — không có cảnh này thì phần giao
+   * diện đáng kiểm nhất của BC-07 không có cách nào mở ra để nhìn.
+   *
+   * Báo giá 3.000.000, thực tế 3.600.000 -> +20%, vượt ngưỡng 5% của tenant.
+   * Ba dòng cố ý phủ ba lý do khác nhau mà bảng đối chiếu biết nói:
+   *   · đã báo giá, làm đúng      -> không lệch
+   *   · đã báo giá, thực tế khác  -> "Thực tế khác báo giá"
+   *   · không có trong báo giá    -> "Phát sinh sau báo giá"
+   */
+  const { rows: khachLech } = await db.query<{ id: string }>(
+    `INSERT INTO customer (tenant_id, type, display_name, phone, address)
+     VALUES ($1,'INDIVIDUAL','Bùi Quang Nam','0987654321',
+             '256 Nguyễn Trãi, Thanh Xuân, Hà Nội') RETURNING id`,
+    [TENANT_A],
+  );
+  const { rows: xeLech } = await db.query<{ id: string }>(
+    `INSERT INTO vehicle (tenant_id, customer_id, plate_number, make_name, model_name,
+                          model_year, powertrain, last_odometer)
+     VALUES ($1,$2,'30K77712','Ford','Ranger',2019,'ICE',96000) RETURNING id`,
+    [TENANT_A, khachLech[0]!.id],
+  );
+  const { rows: donLech } = await db.query<{ id: string }>(
+    `INSERT INTO repair_order (tenant_id, branch_id, code, customer_id, vehicle_id,
+                               customer_complaint, odometer_in, customer_access_token,
+                               created_by_user_id, status, received_at)
+     VALUES ($1,$2,'RO-DEMO-0300',$3,$4,
+             'Rò dầu hộp số, xe rung khi tăng tốc', 96000,
+             'demo-ro-demo-0300-token-tra-cuu-cong-khai', $5,
+             'AWAITING_PAYMENT', now() - interval '1 day')
+     RETURNING id`,
+    [TENANT_A, chiNhanhHD, khachLech[0]!.id, xeLech[0]!.id, nguoiTao],
+  );
+  const { rows: bgLech } = await db.query<{ id: string }>(
+    `INSERT INTO quotation (tenant_id, repair_order_id, seq, labor_rate_per_hour,
+                            price_list_id, created_by_user_id, status, sent_at,
+                            responded_at, approval_channel, valid_until)
+     SELECT $1, $2, 1, pl.labor_rate_per_hour, pl.id, $3, 'DRAFT',
+            NULL, NULL, NULL, now() + interval '6 day'
+       FROM price_list pl
+      WHERE pl.tenant_id = $1 AND pl.branch_id IS NULL
+        AND pl.effective_from <= now()
+        AND (pl.effective_to IS NULL OR pl.effective_to > now())
+      LIMIT 1
+     RETURNING id`,
+    [TENANT_A, donLech[0]!.id, nguoiTao],
+  );
+  /*
+   * 🔒 `qline_ref_matches_type`: dòng LABOR phải trỏ tới một hạng mục dịch vụ,
+   *    dòng PART phải trỏ tới một phụ tùng. Không có "dòng tự do" — mọi thứ
+   *    tính tiền đều phải truy được về danh mục.
+   */
+  const { rows: hangMuc } = await db.query<{ id: string }>(
+    `SELECT id FROM service_item WHERE tenant_id = $1 ORDER BY code LIMIT 2`,
+    [TENANT_A],
+  );
+  const dongBaoGia: string[] = [];
+  for (const [i, d] of [
+    { moTa: 'Công tháo lắp và thay gioăng hộp số', gia: 1_800_000 },
+    { moTa: 'Công thay dầu hộp số ATF', gia: 1_200_000 },
+  ].entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO quotation_line (tenant_id, quotation_id, seq, line_type, service_item_id,
+                                   description, quantity, unit_price, tax_rate_percent, status)
+       VALUES ($1,$2,$3,'LABOR',$4,$5,1,$6,0,'APPROVED') RETURNING id`,
+      [TENANT_A, bgLech[0]!.id, i + 1, hangMuc[i]!.id, d.moTa, d.gia],
+    );
+    dongBaoGia.push(rows[0]!.id);
+  }
+  /*
+   * 🔒 INV-Q-05: gửi khách rồi thì không thêm bớt dòng nữa. Nên báo giá phải
+   *    nằm ở DRAFT lúc nhập dòng, và chỉ chốt sau — đúng thứ tự mà đơn demo
+   *    phía trên đã dùng.
+   */
+  await db.query(
+    `UPDATE quotation SET status = 'APPROVED', sent_at = now() - interval '1 day',
+                          responded_at = now() - interval '1 day',
+                          approval_channel = 'IN_PERSON'
+      WHERE id = $1`,
+    [bgLech[0]!.id],
+  );
+
+  const { rows: hdNhap } = await db.query<{ id: string }>(
+    `INSERT INTO invoice (tenant_id, branch_id, repair_order_id, customer_id, code,
+                          created_by_user_id)
+     VALUES ($1,$2,$3,$4,'INV-DEMO-0300',$5) RETURNING id`,
+    [TENANT_A, chiNhanhHD, donLech[0]!.id, khachLech[0]!.id, nguoiThu],
+  );
+  for (const [i, d] of [
+    // Đúng như báo giá
+    { moTa: 'Công tháo lắp và thay gioăng hộp số', gia: 1_800_000, nguon: dongBaoGia[0] },
+    // Nhiều hơn báo giá: mở ra mới thấy phải thay cả bộ lọc
+    { moTa: 'Công thay dầu hộp số ATF', gia: 1_400_000, nguon: dongBaoGia[1] },
+    // Không có trong báo giá
+    { moTa: 'Công thay bộ lọc dầu hộp số (phát sinh)', gia: 400_000, nguon: null },
+  ].entries()) {
+    await db.query(
+      `INSERT INTO invoice_line (tenant_id, invoice_id, seq, line_type, description,
+                                 quantity, unit_price, tax_rate_percent,
+                                 source_quotation_line_id)
+       VALUES ($1,$2,$3,'LABOR',$4,1,$5,0,$6)`,
+      [TENANT_A, hdNhap[0]!.id, i + 1, d.moTa, d.gia, d.nguon ?? null],
+    );
+  }
+
   await db.query('COMMIT');
 
   console.log('');

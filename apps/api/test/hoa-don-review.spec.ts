@@ -464,7 +464,9 @@ describe('🔒 F-4 — gọi nhà cung cấp hoá đơn điện tử NGOÀI giao
      * Quy tắc: hàm gọi nhà cung cấp (`goiNhaCungCap`) KHÔNG nhận `tx`.
      */
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('../src/invoice/einvoice.ts', import.meta.url), 'utf8');
+    const { join } = await import('node:path');
+    // `process.cwd()` là `apps/api` khi chạy test — cùng cách các bài khác dùng
+    const src = readFileSync(join(process.cwd(), 'src/invoice/einvoice.ts'), 'utf8');
 
     const chuKy = (ten: string): string => {
       const m = new RegExp(`export async function ${ten}\\(([\\s\\S]{0,300}?)\\):`).exec(src);

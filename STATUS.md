@@ -46,8 +46,8 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 469 (domain 12, db 42, api 415) |
-| E2E Playwright | 69 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Test tự động | 479 (domain 12, db 42, api 425) |
+| E2E Playwright | 73 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
 | Migration | 49 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
 | Phát hiện đã xử lý | 17 + ~50 |
@@ -121,8 +121,11 @@ không có ngoại lệ nào được ném. Với báo cáo, "không lỗi" khô
 | Thu tiền trùng trả về 500 thay vì thành công | Thiếu `SAVEPOINT` quanh INSERT đụng UNIQUE. Đúng cái bẫy đã ghi thành comment ở `repair-order.service.ts` từ Phase 1 — **dẫm lại lần thứ ba** |
 | Bài quét "cột tiền có chặn trên" đỏ vì hai view | `information_schema.columns` gồm cả VIEW, mà view không gắn CHECK được. Không lọc `relkind = 'r'` thì mỗi view báo cáo mới sẽ làm test đỏ với một yêu cầu không thực hiện nổi |
 | Mọi bài thanh toán đỏ với `OVERPAY` | Helper trong test phân bổ cả tổng hoá đơn vào `lines[0]` — dòng công trị giá 412.500. Không phải lỗi mã nguồn: chính INV-M-04 đang làm việc, không thu quá số phải thu CỦA TỪNG DÒNG |
+| `qline_ref_matches_type` khi seed dòng báo giá | Dòng `LABOR` phải trỏ tới `service_item`, dòng `PART` phải trỏ tới `part`. Không có "dòng tự do" — mọi thứ tính tiền đều truy được về danh mục |
+| `INV-Q-05` khi seed báo giá | Báo giá phải ở `DRAFT` lúc nhập dòng rồi mới chốt sang `APPROVED`. Chèn thẳng `APPROVED` là chèn dòng vào một tờ đã gửi khách |
+| `INVOICE_IMMUTABLE` khi seed hoá đơn bảo hiểm | Gắn `insurance_claim_id` bằng `UPDATE` sau khi phát hành thì trúng INV-M-03. Phải gắn ngay lúc `INSERT` dòng |
 
-## Vòng tự review sau Phase 3 — chín phát hiện, tám cùng một lỗi
+## Vòng tự review sau Phase 3 — mười phát hiện, sáu cùng một lỗi
 
 Codex chưa dùng lại được, nên vòng này tự review, có bằng chứng chạy được cho
 từng phát hiện.
@@ -138,9 +141,13 @@ từng phát hiện.
 | F-4 | 3 | Gọi nhà cung cấp HĐĐT **bên trong** giao dịch phát hành | 🟠 |
 | F-5 | 3 | Hoá đơn tổng 0đ kẹt `ISSUED` vĩnh viễn | 🟡 |
 | F-2 | 3 | Phân bổ ngược dấu chỉ chặn ở API, không chặn ở database | 🟡 |
+| F-7 | 2.5 | Đọc được lịch sử liên hệ khách của đơn ở chi nhánh khác | 🟠 |
+| F-8 | 3 | Thợ mở đơn ra vẫn thấy nút "Lập hoá đơn" — bấm vào ăn 403 | 🟡 |
 
-💡 **Năm trong chín là cùng MỘT lỗi**, lặp qua bốn phase: quên phạm vi chi
-nhánh. Không phải năm lỗi độc lập — là một thói quen sai lặp năm lần.
+💡 **Sáu trong mười là cùng MỘT lỗi**, lặp qua năm phase: quên phạm vi chi
+nhánh. Không phải sáu lỗi độc lập — là một thói quen sai lặp sáu lần. F-7 là cái
+thứ sáu, và nó không do người tìm ra: hàng rào quét dựng để chống năm cái đầu
+tìm thấy nó ngay lượt chạy đầu tiên.
 
 RLS che mất nó: nó cô lập theo **tenant**, mà hai chi nhánh cùng một garage nằm
 trong cùng tenant. Nên mọi thứ *trông như* đã được bảo vệ.
@@ -163,9 +170,9 @@ endpoint tương đương.**
    "nằm trong lời gọi" với "nằm sau lời gọi". **Một bài kiểm nói sai về điều nó
    đo còn tệ hơn không có bài kiểm**, vì nó bắt người ta sửa mã đang đúng.
 
-## Hàng rào quét toàn bộ — bốn cái, và vì sao chúng đáng giá
+## Hàng rào quét toàn bộ — năm cái, và vì sao chúng đáng giá
 
-Bốn bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
+Năm bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
 NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ sót:
 
 | Hàng rào | Đối chiếu với | Đã bắt được |
@@ -174,15 +181,23 @@ NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ 
 | `tho-khong-thay-tien.spec.ts` | Mọi route `@Get` trong mã nguồn | Ba endpoint rò giá bán và đơn giá giờ công cho thợ |
 | `privileges.spec.ts` | `information_schema.role_table_grants` | Bốn bảng `GRANT UPDATE` không kèm cột, mỗi vòng review một bảng khác |
 | `schema-invariants.spec.ts` | `information_schema.columns` | Cột tiền không phải `bigint`, cột tiền thiếu chặn trên |
+| `quet-pham-vi-chi-nhanh.spec.ts` | Mọi route có ghi trong controller | F-7: lịch sử liên hệ khách của đơn chi nhánh khác trả 200 |
 
 💡 Điểm chung: **không cái nào có danh sách viết tay**. Danh sách viết tay chỉ
 bảo vệ được những gì người viết đã nghĩ ra — và bốn vòng review liên tiếp đã
 chứng minh điều đó bằng bốn lỗi cùng loại ở bốn bảng khác nhau.
 
+⚠️ Bản đầu của hàng rào phạm vi chi nhánh **đã có** danh sách viết tay, dưới dạng
+nhãn kiểu "phụ tùng", "xe" — và báo động giả ngay hai cái, vì hai thứ đó cô lập
+theo tenant chứ không theo chi nhánh. Bản dùng được quét theo **id thực thể**:
+tạo dữ liệu ở chi nhánh kia, rồi thử gọi mọi route bằng tài khoản chi nhánh này.
+Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng câu trả lời.
+
 ## Nợ kỹ thuật đã biết
 
 | Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
+| Ba bài test bấm giờ không chạy lại được nếu chưa seed lại | Chúng mở một đoạn giờ ở `now() − 90 phút` cho **người thợ của seed**, nên chạm `no_timelog_overlap` với đoạn giờ mà lượt trước (hoặc bộ E2E) để lại. CI seed một lần rồi chạy một lần nên vẫn xanh; chạy tay hai lượt liên tiếp thì đỏ ba bài — `pnpm db:seed` trước là xong. Sửa đúng là mỗi bài tự dựng thợ của mình |
 | Token đăng nhập để trong `localStorage` | Phase 1 là bản chạy được để review. Cookie HttpOnly + refresh token là việc của Phase 6 |
 | Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
 | Chưa có test kiến trúc chặn `withTenantId` / `queryWithoutTenant` dùng sai chỗ | Hai hàm này mở đường đi ngoài ngữ cảnh tenant. Hiện chỉ `PublicTrackingService` gọi, nhưng không có gì bắt buộc điều đó |
