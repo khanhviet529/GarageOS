@@ -173,6 +173,39 @@ export const ACTION_ROLES = {
    * làm, kèm nhật ký bắt buộc.
    */
   'timeLog:enterForOther': ['BRANCH_MANAGER', 'OWNER'],
+
+  /*
+   * Hoá đơn và tiền — Phase 3.
+   *
+   * 🔒 Bốn quyền chứ không một, và ranh giới giữa chúng là ranh giới TRÁCH
+   * NHIỆM chứ không phải mức độ khó:
+   *
+   *  · `invoice:read`   — thấy số tiền. Thợ không có, mọi vai còn lại có.
+   *  · `invoice:write`  — dựng bản nháp từ công việc thực tế. Sai thì sửa được.
+   *  · `invoice:issue`  — PHÁT HÀNH. Sau bước này hoá đơn bất biến (INV-M-03)
+   *    và đã khai với cơ quan thuế. Đây là việc của thu ngân, không phải của
+   *    người vừa lập bản nháp.
+   *  · `invoice:adjust` — lập hoá đơn điều chỉnh. Chỉ quản lý: nó là lời thừa
+   *    nhận rằng một chứng từ đã phát hành có sai sót.
+   */
+  'invoice:read': ['SERVICE_ADVISOR', 'CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+  'invoice:write': ['SERVICE_ADVISOR', 'CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+  'invoice:issue': ['CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+  'invoice:adjust': ['BRANCH_MANAGER', 'OWNER'],
+
+  /** Thu tiền — việc của thu ngân, docs/02 ma trận hàng "Thanh toán" */
+  'payment:record': ['CASHIER', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Cho nợ vượt hạn mức — BC-13 mục 4.1.
+   *
+   * Chặn cứng là quá cứng (đội xe đang gấp, chặn là mất khách); cho tự do là
+   * nợ chồng chất không kiểm soát. Phương án đã chọn: cảnh báo + cần duyệt.
+   */
+  'credit:approveOverLimit': ['BRANCH_MANAGER', 'OWNER'],
+
+  /** Hồ sơ bồi thường bảo hiểm — BC-08, việc của cố vấn dịch vụ */
+  'insurance:manage': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -206,4 +239,11 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'warranty:recover': 'ghi nhận đòi lại từ nhà cung cấp',
   'timeLog:write': 'bấm giờ công',
   'timeLog:enterForOther': 'nhập hộ giờ công',
+  'invoice:read': 'xem hoá đơn',
+  'invoice:write': 'lập hoá đơn nháp',
+  'invoice:issue': 'phát hành hoá đơn',
+  'invoice:adjust': 'lập hoá đơn điều chỉnh',
+  'payment:record': 'thu tiền',
+  'credit:approveOverLimit': 'duyệt cho nợ vượt hạn mức',
+  'insurance:manage': 'quản lý hồ sơ bồi thường bảo hiểm',
 };

@@ -378,6 +378,92 @@ export interface OnTimeReport {
   daLoaiTru: string[];
 }
 
+/* ── Hoá đơn và tiền — Phase 3 ─────────────────────────────────────────── */
+
+export interface InvoiceLineItem {
+  id: string;
+  seq: number;
+  lineType: 'LABOR' | 'PART' | 'FEE';
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  taxRatePercent: number;
+  grossAmount: number;
+  taxAmount: number;
+  lineTotal: number;
+  isWarranty: boolean;
+  expectedPayerType: 'CUSTOMER' | 'INSURER' | 'WARRANTY';
+  sourceQuotationLineId: string | null;
+  daThu: number;
+}
+
+export interface ReconciliationRow {
+  description: string;
+  baoGia: number;
+  thucTe: number;
+  chenhLech: number;
+  lyDo: string;
+}
+
+export interface InvoiceView {
+  id: string;
+  code: string;
+  repairOrderId: string;
+  repairOrderCode: string;
+  customerId: string;
+  customerName: string;
+  status: 'DRAFT' | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'ADJUSTED' | 'CANCELLED';
+  subtotalAmount: number;
+  discountAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+  daThu: number;
+  conNo: number;
+  issuedAt: string | null;
+  dueDate: string | null;
+  varianceReason: string | null;
+  adjustmentOfInvoiceId: string | null;
+  adjustmentReason: string | null;
+  lines: InvoiceLineItem[];
+  reconciliation: {
+    rows: ReconciliationRow[];
+    tongBaoGia: number;
+    tongThucTe: number;
+    chenhLech: number;
+    chenhLechPhanTram: number;
+    nguongPhanTram: number;
+    vuotNguong: boolean;
+  };
+}
+
+export interface CustomerDebtRow {
+  customerId: string;
+  displayName: string;
+  type: string;
+  creditLimitAmount: number;
+  paymentTermDays: number;
+  tongConNo: number;
+  quaHan: number;
+  quaHanLauNhat: number;
+  soHoaDonChuaThu: number;
+  trongHan: number;
+  quaHan1_30: number;
+  quaHan31_60: number;
+  quaHanTren60: number;
+  conHanMuc: number;
+  creditOnHold: boolean;
+}
+
+export const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Nháp',
+  ISSUED: 'Đã phát hành',
+  PARTIALLY_PAID: 'Đã thu một phần',
+  PAID: 'Đã thu đủ',
+  ADJUSTED: 'Đã điều chỉnh',
+  CANCELLED: 'Đã huỷ',
+};
+
 export const api = {
   login: (phone: string, password: string) =>
     call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
@@ -438,6 +524,15 @@ export const api = {
     call<TechnicianProductivity[]>('GET', '/api/v1/reports/productivity'),
   reportStock: () => call<StockReportLine[]>('GET', '/api/v1/reports/stock'),
   reportOnTime: () => call<OnTimeReport>('GET', '/api/v1/reports/on-time'),
+
+  invoicesForOrder: (orderId: string) =>
+    call<InvoiceView[]>('GET', `/api/v1/repair-orders/${orderId}/invoices`),
+  buildInvoice: (repairOrderId: string) =>
+    call<InvoiceView>('POST', '/api/v1/invoices', { repairOrderId }),
+  issueInvoice: (id: string, input: unknown) =>
+    call<InvoiceView>('POST', `/api/v1/invoices/${id}/issue`, input),
+  recordPayment: (input: unknown) => call<unknown>('POST', '/api/v1/payments', input),
+  debtReport: () => call<CustomerDebtRow[]>('GET', '/api/v1/reports/debt'),
 
   listBays: () => call<Bay[]>('GET', '/api/v1/bays'),
   listPendingWork: () => call<PendingWorkItem[]>('GET', '/api/v1/assignments/pending-work'),

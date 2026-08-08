@@ -11,11 +11,12 @@ import { WarrantyModule } from './warranty/warranty.module';
 import { CancellationModule } from './cancellation/cancellation.module';
 import { ReportsModule } from './reports/reports.module';
 import { AiModule } from './ai/ai.module';
+import { InvoiceModule } from './invoice/invoice.module';
 import { PublicTrackingModule } from './public/public-tracking.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
-  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, AiModule, PublicTrackingModule],
+  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, AiModule, InvoiceModule, PublicTrackingModule],
   controllers: [HealthController],
 })
 export class AppModule {}

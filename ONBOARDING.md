@@ -203,14 +203,14 @@ async reserve(tenantId: string, input: ReserveInput)      // ❌ SAI
 | 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
 | 7 | Sơ đồ kiến trúc · ADR-0008 · số liệu README thật · ảnh tự sinh | ✅ trừ 2 việc chờ bạn |
 | 8 | Tool có phân quyền · guardrail · trần chi phí · nhật ký lời gọi | ✅ phần không cần khoá API |
+| 3 | Hoá đơn từ công việc thực tế · thanh toán · công nợ · bảo hiểm · HĐĐT | ✅ **6/6 lát cắt** |
 
-**Con số:** 368 test · 69 kịch bản E2E · 42 migration · 8 ADR
+**Con số:** 395 test · 69 kịch bản E2E · 48 migration · 8 ADR
 
-⏸️ **Phase 3 (tiền) bỏ qua CÓ CHỦ Ý.** Đây là quyết định, không phải bỏ sót —
-lập luận đầy đủ kèm những gì phải đánh đổi ở
-[ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md). Đọc nó **trước khi** bắt
-tay vào Phase 3, đặc biệt là mục "phương án đã cân nhắc": phương án "làm bảng
-`invoice` tối giản cho có" đã bị loại, và loại vì một lý do cụ thể.
+💡 **Phase 3 làm SAU Phase 5–8**, có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md)
+giải thích vì sao và liệt kê ba chỗ phải nối lại. Cả ba đã nối, và không chỗ nào
+phải viết lại. Đọc ADR đó nếu bạn muốn hiểu vì sao `warranty_coverage` gắn vào
+`quotation_line` chứ không vào `invoice_line`.
 
 ### Còn phải làm
 
@@ -243,29 +243,6 @@ video demo 90 giây. Kịch bản quay đề xuất nằm ở
 💡 Khi có khoá: viết một lớp cài `LlmProvider` ở `apps/api/src/ai/provider.ts`
 (~50 dòng). **Không chỗ nào khác phải sửa** — không chỗ nào khác biết nhà cung
 cấp là ai. Đó là mục đích của adapter, cùng khuôn với hoá đơn điện tử (ADR-0005).
-
-#### D. Phase 3 — tiền (6 lát cắt), khi nào quyết định làm
-
-| Lát cắt | Nội dung | Khó |
-|---|---|---|
-| 3.1 | Hoá đơn từ công việc **thực tế** + bảng đối chiếu với báo giá | ⭐⭐⭐ |
-| 3.2 | 🔒 Bất biến sau phát hành + hoá đơn điều chỉnh | ⭐⭐⭐⭐ |
-| 3.3 | Thanh toán + phân bổ tới từng dòng | ⭐⭐⭐ |
-| 3.4 | Bảo hiểm chi trả một phần | ⭐⭐⭐⭐ |
-| 3.5 | Công nợ khách doanh nghiệp | ⭐⭐⭐ |
-| 3.6 | Adapter hoá đơn điện tử (**bản giả lập** — không tích hợp thật) | ⭐⭐ |
-
-🔒 Ba chỗ phải nối lại khi làm xong, đã ghi sẵn trong mã nguồn:
-
-| Nối gì | Ở đâu |
-|---|---|
-| Thêm `invoice_line_id` **nullable** vào `warranty_coverage` — KHÔNG chuyển cột | migration 0033 |
-| Dựng hoá đơn **từ** `cancellation_settlement` sau khi khách chốt | migration 0034 |
-| Báo cáo doanh thu đổi nguồn từ dòng báo giá sang `invoice_line` | `reports.service.ts` |
-
-Bất biến phải xanh: `INV-M-*` ([05-invariants.md](docs/05-invariants.md))
-
----
 
 ### E. Nợ kỹ thuật — làm xen kẽ, không đợi hết phase
 

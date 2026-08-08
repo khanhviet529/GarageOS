@@ -18,6 +18,7 @@ import {
 import { AppHeader } from '@/components/AppHeader';
 import { CatalogSection } from '@/components/CatalogSection';
 import { StatusActions } from '@/components/StatusActions';
+import { HopHoaDon } from '@/components/HopHoaDon';
 import { formatPlate } from '@garageos/domain';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -231,6 +232,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 nên khi trang có, mọi đơn cũ đều dùng được ngay.
               </div>
             </div>
+
+            {/*
+              Hoá đơn đặt CUỐI trang, sau báo giá và giờ công.
+              Thứ tự này theo đúng thứ tự công việc thật: xe xong việc rồi mới
+              lập hoá đơn, và bảng đối chiếu bên trong chỉ có nghĩa khi người
+              đọc vừa nhìn qua báo giá ở phía trên.
+            */}
+            <HopHoaDon repairOrderId={id} />
 
             <div className="row">
               <Link href="/xe-trong-xuong"><button className="secondary">Về danh sách xe</button></Link>

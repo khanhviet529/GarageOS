@@ -330,9 +330,18 @@ describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn 
     // trigger chặn xoá sau khi đã gửi khách.
     // `quotation_line`: xoá dòng khỏi BẢN NHÁP là thao tác nghiệp vụ thật.
     // `user_branch`: gỡ quyền truy cập một chi nhánh — không phải dữ liệu nghiệp vụ.
+    /*
+     * `invoice_line`: xoá dòng khỏi hoá đơn NHÁP là thao tác nghiệp vụ thật —
+     * dựng lại bản nháp từ công việc thực tế xoá sạch dòng cũ rồi ghi lại
+     * (BC-07). Sau khi phát hành, `trg_invoice_line_bat_bien` chặn cả DELETE,
+     * nên quyền này không mở đường sửa chứng từ đã phát hành.
+     *
+     * Cùng lập luận với `quotation_line`, và điều kiện an toàn cũng cùng dạng:
+     * quyền rộng ở tầng GRANT, hẹp lại bằng trigger theo trạng thái.
+     */
     assert.deepEqual(
       rows.map((r) => r.table_name),
-      ['quotation_line', 'user_branch'],
+      ['invoice_line', 'quotation_line', 'user_branch'],
       'Có bảng được cấp DELETE ngoài dự kiến — dữ liệu nghiệp vụ chỉ xoá mềm',
     );
   });

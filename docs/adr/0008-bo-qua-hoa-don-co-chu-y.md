@@ -1,6 +1,22 @@
 # ADR-0008 — Bỏ qua tầng hoá đơn/thanh toán ở bản này, có chủ ý
 
-**Trạng thái:** ✅ Chấp nhận · **Ngày:** 2026-08-08
+**Trạng thái:** ✅ Chấp nhận · **Ngày:** 2026-08-08 ·
+**Đã hoàn tất:** 2026-08-08 — Phase 3 làm xong ngay sau Phase 8
+
+> 📌 **Cập nhật sau khi thực hiện.** Ba chỗ "phải nối lại" ở mục *Hệ quả* đều đã
+> nối, và **không chỗ nào phải viết lại** — đúng như ADR dự đoán:
+>
+> | Nối gì | Kết quả |
+> |---|---|
+> | `warranty_coverage` thêm `invoice_line_id` nullable | Thêm cột, backfill một câu UPDATE, KHÔNG chuyển cột (migration 0046) |
+> | Quyết toán huỷ đơn thành dòng hoá đơn | `InvoiceService.dungDongPhi` đọc thẳng `cancellation_settlement_line` |
+> | Báo cáo đổi nguồn doanh thu | Thêm cột `doanh_thu_thuc` cạnh `doanh_thu_du_kien` — **không thay thế**, vì hai con số trả lời hai câu hỏi khác nhau |
+>
+> Điểm ADR đoán SAI, và đoán sai theo hướng tốt: mục *Hệ quả tích cực* nói việc
+> gắn bảo hành vào `quotation_line` "hoá ra đúng hơn tài liệu". Lúc viết đó là
+> một phỏng đoán. Khi làm Phase 3 mới thấy nó đúng vì một lý do cụ thể hơn: hoá
+> đơn của khách doanh nghiệp phát hành theo kỳ, có thể **sau** khi xe đã bàn
+> giao vài tuần — và bảo hành phải chạy từ lúc bàn giao.
 
 ## Bối cảnh
 

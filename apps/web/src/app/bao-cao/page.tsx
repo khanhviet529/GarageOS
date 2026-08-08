@@ -8,6 +8,7 @@ import {
   ApiCallError,
   formatMoney,
   type OnTimeReport,
+  type CustomerDebtRow,
   type ProfitReport,
   type StockReportLine,
   type TechnicianProductivity,
@@ -65,6 +66,7 @@ export default function TrangBaoCao() {
   const [tho, setTho] = useState<TechnicianProductivity[] | null>(null);
   const [kho, setKho] = useState<StockReportLine[] | null>(null);
   const [hen, setHen] = useState<OnTimeReport | null>(null);
+  const [no, setNo] = useState<CustomerDebtRow[] | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
 
   useEffect(() => {
@@ -79,6 +81,7 @@ export default function TrangBaoCao() {
     api.reportWaitTime().then(setCho).catch(() => setCho(null));
     api.reportProductivity().then(setTho).catch(() => setTho(null));
     api.reportStock().then(setKho).catch(() => setKho(null));
+    api.debtReport().then(setNo).catch(() => setNo(null));
     api
       .reportOnTime()
       .then(setHen)
@@ -287,6 +290,61 @@ export default function TrangBaoCao() {
               </div>
             </div>
             <DaLoaiTru items={hen.daLoaiTru} />
+          </section>
+        )}
+
+        {/* ── Công nợ theo tuổi nợ — R-F-03 ───────────────────────────────── */}
+        {no !== null && no.length > 0 && (
+          <section className="card">
+            <h3>Công nợ theo tuổi nợ</h3>
+            <p className="muted">
+              Công nợ là <strong>giá trị suy ra</strong> từ hoá đơn và thanh toán, không phải một
+              cột lưu sẵn — cột lưu sẵn lệch ngay khi có một đường ghi quên cập nhật.
+            </p>
+            <BangCuon moTa="Công nợ từng khách chia theo tuổi nợ">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Khách</th>
+                    <th className="phai">Trong hạn</th>
+                    <th className="phai">Quá 1–30 ngày</th>
+                    <th className="phai">Quá 31–60</th>
+                    <th className="phai">Quá 60+</th>
+                    <th className="phai">Tổng nợ</th>
+                    <th className="phai">Còn hạn mức</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {no.map((d) => (
+                    <tr key={d.customerId}>
+                      <td>
+                        {d.displayName}
+                        {d.creditOnHold && <span className="tag von-chet"> tạm dừng cho nợ</span>}
+                      </td>
+                      <td className="phai">{formatMoney(d.trongHan)}</td>
+                      <td className="phai">{formatMoney(d.quaHan1_30)}</td>
+                      <td className="phai">{formatMoney(d.quaHan31_60)}</td>
+                      {/*
+                        Nợ quá 60 ngày tô đỏ: đây là nhóm mà BC-13 mục 4.3 đề
+                        xuất tạm dừng cho nợ, và người đọc phải thấy nó trước
+                        khi thấy tổng.
+                      */}
+                      <td className={`phai ${d.quaHanTren60 > 0 ? 'am' : ''}`}>
+                        {formatMoney(d.quaHanTren60)}
+                      </td>
+                      <td className="phai">{formatMoney(d.tongConNo)}</td>
+                      <td className="phai">
+                        {d.creditLimitAmount === 0 ? (
+                          <ChuaCo vi="Khách phải trả ngay, không có hạn mức" />
+                        ) : (
+                          formatMoney(d.conHanMuc)
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </BangCuon>
           </section>
         )}
 

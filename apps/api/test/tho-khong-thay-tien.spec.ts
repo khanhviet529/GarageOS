@@ -124,6 +124,9 @@ before(async () => {
 
   // Phiếu kiểm kê: lấy một phiếu bất kỳ nếu có, để route chi tiết cũng được quét
   const { rows: kk } = await pool.query<{ id: string }>(`SELECT id FROM stock_take LIMIT 1`);
+  const { rows: kh } = await pool.query<{ id: string }>(
+    `SELECT customer_id AS id FROM repair_order WHERE code = 'RO-DEMO-0001'`,
+  );
 
   duongDan = [
     '/api/v1/auth/me',
@@ -148,6 +151,11 @@ before(async () => {
     '/api/v1/reports/stock-variance',
     '/api/v1/reports/on-time',
     '/api/v1/ai/usage',
+    `/api/v1/repair-orders/${ro[0]!.id}/invoices`,
+    `/api/v1/repair-orders/${ro[0]!.id}/insurance-claim`,
+    '/api/v1/reports/debt',
+    '/api/v1/insurance-claims',
+    `/api/v1/customers/${kh[0]!.id}/payments`,
     `/api/v1/assignments?date=${homNay}`,
     '/api/v1/assignments/pending-work',
     '/api/v1/assignments/quality',
