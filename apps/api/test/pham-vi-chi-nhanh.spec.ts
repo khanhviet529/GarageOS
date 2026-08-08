@@ -371,3 +371,123 @@ describe('🔒 F-6 — hồ sơ bồi thường chỉ nhận dòng của ĐÚNG 
     assert.equal(r.status, 404, `mở được hồ sơ cho đơn chi nhánh khác (HTTP ${r.status})`);
   });
 });
+
+describe('🔒 Cùng lỗ hổng ở các phase cũ — kiểm kê, báo cáo kho, tool AI', () => {
+  test('P-1: thủ kho HN01 KHÔNG mở được phiếu kiểm kê kho chi nhánh khác', async () => {
+    /*
+     * Kiểm kê là đường DUY NHẤT làm tồn kho đổi mà không có chứng từ mua bán
+     * đối ứng (BC-12). Để nó vượt biên giới chi nhánh là mở đúng cái cửa mà cả
+     * migration 0037 dựng lên để canh.
+     */
+    const tokenThuKho = await dangNhap('0901000005');
+    const { rows: xa } = await pool.query<{ id: string }>(
+      `SELECT w.id FROM warehouse w JOIN branch b ON b.id = w.branch_id
+        WHERE b.tenant_id = $1 AND b.code = 'HCM01' LIMIT 1`,
+      [TENANT_A],
+    );
+    assert.ok(xa[0], 'seed thiếu kho ở HCM01 — bài này mất ý nghĩa');
+
+    const r = await call(
+      'POST',
+      '/api/v1/stock-takes',
+      { warehouseId: xa[0].id, scope: 'FULL' },
+      tokenThuKho,
+    );
+    assert.equal(r.status, 404, `mở được phiếu kiểm kê kho chi nhánh khác (HTTP ${r.status})`);
+
+    // ĐỐI CHỨNG: kho của chính mình thì mở được
+    const { rows: gan } = await pool.query<{ id: string }>(
+      `SELECT w.id FROM warehouse w JOIN branch b ON b.id = w.branch_id
+        WHERE b.tenant_id = $1 AND b.code = 'HN01' LIMIT 1`,
+      [TENANT_A],
+    );
+    const r2 = await call(
+      'POST',
+      '/api/v1/stock-takes',
+      { warehouseId: gan[0]!.id, scope: 'PARTIAL', scopeCategory: `KK-PV-${uniq}` },
+      tokenThuKho,
+    );
+    assert.notEqual(r2.status, 404, 'chặn nhầm kho của chính chi nhánh mình');
+    if (r2.status === 201) {
+      await pool.query(`UPDATE stock_take SET status = 'CANCELLED' WHERE id = $1`, [r2.body.id]);
+    }
+  });
+
+  test('P-2: báo cáo tồn kho chỉ hiện kho TRONG phạm vi', async () => {
+    const tokenThuKho = await dangNhap('0901000005');
+    const r = await call('GET', '/api/v1/reports/stock', undefined, tokenThuKho);
+    assert.equal(r.status, 200);
+
+    const khoTrongBaoCao = [
+      ...new Set((r.body as { warehouseId: string }[]).map((x) => x.warehouseId)),
+    ];
+    if (khoTrongBaoCao.length === 0) return;
+
+    const { rows } = await pool.query<{ code: string }>(
+      `SELECT DISTINCT b.code FROM warehouse w JOIN branch b ON b.id = w.branch_id
+        WHERE w.id = ANY($1::uuid[])`,
+      [khoTrongBaoCao],
+    );
+    assert.deepEqual(
+      rows.map((x) => x.code),
+      ['HN01'],
+      'báo cáo tồn kho lộ kho — và GIÁ VỐN — của chi nhánh khác',
+    );
+  });
+
+  test('🔒 P-3: tool AI không trả về nhiều hơn endpoint tương đương', async () => {
+    /*
+     * Hình dạng nguy hiểm riêng của tầng tool: nó tạo ra một CỬA SAU không cố
+     * ý. Mọi endpoint siết đúng, và trợ lý — thứ thêm vào sau cùng — lặng lẽ mở
+     * lại tất cả.
+     *
+     * Đo bằng cách so hai con số: `/abandoned-vehicles` (đã có phạm vi từ 5.5)
+     * và tool `list_waiting_vehicles`. Chúng phải khớp.
+     */
+    await pool.query(
+      `UPDATE tenant SET ai_enabled = true, ai_daily_call_limit = 500,
+                         ai_daily_cost_limit = 100000 WHERE id = $1`,
+      [TENANT_A],
+    );
+    try {
+      const qua = await call('GET', '/api/v1/abandoned-vehicles', undefined, tokenCoVan);
+      assert.equal(qua.status, 200);
+
+      const hoi = await call(
+        'POST',
+        '/api/v1/ai/ask',
+        { message: 'Xe nào nằm lâu chưa ai lấy?' },
+        tokenCoVan,
+      );
+      assert.equal(hoi.status, 201, JSON.stringify(hoi.body));
+
+      const { rows } = await pool.query<{ tool_calls: { name: string; ok: boolean }[] }>(
+        `SELECT tool_calls FROM llm_call_log WHERE tenant_id = $1 ORDER BY id DESC LIMIT 1`,
+        [TENANT_A],
+      );
+      assert.ok(
+        rows[0]!.tool_calls.some((t) => t.name === 'list_waiting_vehicles' && t.ok),
+        'tool không chạy — bài này không kiểm được gì',
+      );
+
+      /*
+       * So SỐ LƯỢNG. Không so nội dung vì mock chỉ tóm tắt số dòng — nhưng nếu
+       * tool thấy nhiều hơn màn hình thì đúng là nó đang vượt phạm vi.
+       */
+      const { rows: dem } = await pool.query<{ n: string }>(
+        `SELECT count(*) AS n FROM xe_dang_nam_bai x
+           JOIN branch b ON b.id = x.branch_id
+          WHERE b.code = 'HN01' AND x.so_ngay_cho >= 7`,
+      );
+      const quaMan = (qua.body as { soNgayCho: number }[]).filter((x) => x.soNgayCho >= 7).length;
+      assert.equal(
+        quaMan,
+        Number(dem[0]!.n),
+        'màn hình và truy vấn có phạm vi cho ra hai con số khác nhau',
+      );
+    } finally {
+      await pool.query(`UPDATE tenant SET ai_enabled = false WHERE id = $1`, [TENANT_A]);
+      await pool.query(`DELETE FROM llm_call_log WHERE tenant_id = $1`, [TENANT_A]);
+    }
+  });
+});

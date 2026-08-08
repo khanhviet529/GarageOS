@@ -226,6 +226,12 @@ export class ReportsService {
     assertCan(actor, 'stock:read');
 
     return this.db.withTenant(actor, async (tx) => {
+      /*
+       * 🔒 Kho thuộc chi nhánh. Không lọc thì thủ kho Hà Nội thấy tồn và giá
+       * vốn của kho Sài Gòn — đo được ở vòng review: báo cáo liệt kê cả hai kho.
+       */
+      const params: unknown[] = [];
+      const scope = appendBranchScope(actor, params, 'w');
       const { rows } = await tx.query<{
         warehouse_id: string;
         warehouse_name: string;
@@ -241,8 +247,11 @@ export class ReportsService {
         duoi_muc_toi_thieu: boolean;
         gia_von_xuat_365n: string;
       }>(
-        `SELECT * FROM ton_kho_canh_bao
-          ORDER BY duoi_muc_toi_thieu DESC, gia_tri_ton DESC`,
+        `SELECT t.* FROM ton_kho_canh_bao t
+           JOIN warehouse w ON w.id = t.warehouse_id
+          WHERE true ${scope}
+          ORDER BY t.duoi_muc_toi_thieu DESC, t.gia_tri_ton DESC`,
+        params,
       );
 
       const xemGiaVon = this.xemDuocGiaVon(actor);
@@ -294,18 +303,23 @@ export class ReportsService {
     assertCan(actor, 'stock:readCost');
 
     return this.db.withTenant(actor, async (tx) => {
+      const paramsCl: unknown[] = [];
+      const scopeCl = appendBranchScope(actor, paramsCl, 'w');
       const { rows } = await tx.query<{
         reason: string;
         so_dong: string;
         gia_tri_tuyet_doi: string;
         gia_tri_rong: string;
       }>(
-        `SELECT reason::text AS reason, sum(so_dong) AS so_dong,
-                sum(gia_tri_tuyet_doi) AS gia_tri_tuyet_doi,
-                sum(gia_tri_rong) AS gia_tri_rong
-           FROM chenh_lech_kiem_ke
-          GROUP BY reason
-          ORDER BY sum(gia_tri_tuyet_doi) DESC`,
+        `SELECT c.reason::text AS reason, sum(c.so_dong) AS so_dong,
+                sum(c.gia_tri_tuyet_doi) AS gia_tri_tuyet_doi,
+                sum(c.gia_tri_rong) AS gia_tri_rong
+           FROM chenh_lech_kiem_ke c
+           JOIN warehouse w ON w.id = c.warehouse_id
+          WHERE true ${scopeCl}
+          GROUP BY c.reason
+          ORDER BY sum(c.gia_tri_tuyet_doi) DESC`,
+        paramsCl,
       );
       return rows.map((r) => ({
         reason: r.reason,

@@ -123,12 +123,25 @@ before(async () => {
   tokenChu = await dangNhap('0901000001');
 
   const { rows: w } = await pool.query<{ id: string }>(
+    /*
+     * 🔒 Kho của CHÍNH thủ kho, không phải "kho đầu tiên theo mã".
+     *
+     * `ORDER BY b.code LIMIT 1` trúng HCM01, trong khi thủ kho seed thuộc HN01.
+     * Bài này chạy xanh suốt Phase 5.4 vì lúc đó `StockTakeService` chưa có
+     * phạm vi chi nhánh — nó vô tình kiểm kê kho của chi nhánh khác và không ai
+     * biết. Vòng review sau Phase 3 vá lỗ hổng đó, và bài test đổ ngay.
+     *
+     * 💡 Một bài test đỏ VÌ một lỗ hổng vừa được bịt là bằng chứng tốt nhất
+     *    rằng lỗ hổng ấy có thật.
+     */
     `SELECT w.id FROM warehouse w
        JOIN branch b ON b.id = w.branch_id
-      WHERE b.tenant_id = $1 ORDER BY b.code LIMIT 1`,
+       JOIN user_branch ub ON ub.branch_id = b.id
+       JOIN app_user u ON u.id = ub.user_id
+      WHERE b.tenant_id = $1 AND u.phone = '0901000005' LIMIT 1`,
     [TENANT_A],
   );
-  assert.ok(w[0], 'seed thiếu kho');
+  assert.ok(w[0], 'seed thiếu kho ở chi nhánh của thủ kho');
   khoId = w[0].id;
 });
 
