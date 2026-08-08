@@ -205,7 +205,7 @@ async reserve(tenantId: string, input: ReserveInput)      // ❌ SAI
 | 8 | Tool có phân quyền · guardrail · trần chi phí · nhật ký lời gọi | ✅ phần không cần khoá API |
 | 3 | Hoá đơn từ công việc thực tế · thanh toán · công nợ · bảo hiểm · HĐĐT | ✅ **6/6 lát cắt** |
 
-**Con số:** 395 test · 69 kịch bản E2E · 48 migration · 8 ADR
+**Con số:** 451 test · 69 kịch bản E2E · 48 migration · 8 ADR
 
 💡 **Phase 3 làm SAU Phase 5–8**, có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md)
 giải thích vì sao và liệt kê ba chỗ phải nối lại. Cả ba đã nối, và không chỗ nào
