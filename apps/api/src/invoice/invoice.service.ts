@@ -17,7 +17,13 @@ import {
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { appendBranchScope, assertCan } from '../common/permissions';
-import { chonEInvoiceProvider, guiHoaDonDienTu, type EInvoiceProvider } from './einvoice';
+import {
+  chonEInvoiceProvider,
+  docYeuCauHoaDonDienTu,
+  ghiKetQuaHoaDonDienTu,
+  goiNhaCungCap,
+  type EInvoiceProvider,
+} from './einvoice';
 
 /**
  * Hoá đơn — BC-07.
@@ -135,7 +141,7 @@ export class InvoiceService {
       seq = await this.dungDongPhuTung(tx, actor, invoiceId, don.id, seq);
       await this.dungDongPhi(tx, actor, invoiceId, don.id, seq);
 
-      return this.doc(tx, invoiceId);
+      return this.doc(tx, actor, invoiceId);
     });
   }
 
@@ -329,11 +335,22 @@ export class InvoiceService {
       }
     }
 
+    /*
+     * 🔒 CHỈ bảng quyết toán đã CHỐT — BC-10 mục 3: "khách phải xác nhận bảng
+     *    quyết toán trước khi lập hoá đơn".
+     *
+     * Bản đầu lấy cả `DRAFT`, tức là đưa lên hoá đơn những khoản khách CHƯA
+     * đồng ý. Đó là đúng thứ mà cả `trg_settlement_line_khoa` được dựng lên để
+     * ngăn: con số khách đồng ý và con số hệ thống đòi phải là một.
+     *
+     * `WAIVED` không có ở đây vì miễn nghĩa là không thu — không phải một dòng
+     * 0đ, mà là không có dòng.
+     */
     const { rows: qt } = await tx.query<{ description: string; amount: string }>(
       `SELECT l.description, l.amount
          FROM cancellation_settlement_line l
          JOIN cancellation_settlement s ON s.id = l.settlement_id
-        WHERE s.repair_order_id = $1 AND s.status IN ('CONFIRMED', 'DRAFT')
+        WHERE s.repair_order_id = $1 AND s.status = 'CONFIRMED'
         ORDER BY l.seq`,
       [orderId],
     );
@@ -362,14 +379,15 @@ export class InvoiceService {
   async issue(actor: ActorContext, invoiceId: string, input: IssueInvoiceInput): Promise<Invoice> {
     assertCan(actor, 'invoice:issue');
 
-    return this.db.withTenant(actor, async (tx) => {
+    const ketQua = await this.db.withTenant(actor, async (tx) => {
+      const phamVi: unknown[] = [invoiceId];
       const { rows } = await tx.query<DongHoaDon & { total_amount: string }>(
         `SELECT i.*, ro.code AS ro_code, c.display_name AS customer_name
            FROM invoice i
            JOIN repair_order ro ON ro.id = i.repair_order_id
            JOIN customer c ON c.id = i.customer_id
-          WHERE i.id = $1 FOR UPDATE OF i`,
-        [invoiceId],
+          WHERE i.id = $1 ${appendBranchScope(actor, phamVi, 'i')} FOR UPDATE OF i`,
+        phamVi,
       );
       const hd = rows[0];
       if (hd === undefined) {
@@ -422,14 +440,48 @@ export class InvoiceService {
         );
       }
 
+      /*
+       * 🔒 Không phát hành khi bảng quyết toán còn treo.
+       *
+       * Lọc dòng DRAFT ra khỏi hoá đơn (ở `dungDongPhi`) mới giải quyết một
+       * nửa: hoá đơn sẽ THIẾU một khoản khách thật sự nợ, và không ai biết.
+       * Chặn ở đây là nửa còn lại — nói thẳng ra rằng còn một bước chưa xong.
+       */
+      const { rows: qtTreo } = await tx.query<{ status: string }>(
+        `SELECT status FROM cancellation_settlement
+          WHERE repair_order_id = $1 AND status NOT IN ('CONFIRMED', 'WAIVED')`,
+        [hd.repair_order_id],
+      );
+      if (qtTreo[0] !== undefined) {
+        throw new BusinessError(
+          ErrorCode.INVALID_STATE_TRANSITION,
+          `Bảng quyết toán huỷ đơn đang ở trạng thái ${qtTreo[0].status} — khách chưa xác nhận. ` +
+            'Chốt bảng quyết toán trước khi phát hành hoá đơn (BC-10).',
+        );
+      }
+
       let dueDate: Date | null = null;
       if (input.ghiCongNo) {
         dueDate = await this.kiemTraHanMuc(tx, actor, hd, khach);
       }
 
+      /*
+       * 🔒 Hoá đơn tổng 0đ chốt thẳng `PAID`, không phải `ISSUED`.
+       *
+       * Trigger `cap_nhat_trang_thai_hoa_don` chỉ chạy khi có phân bổ thanh
+       * toán — mà không ai thu 0đ được. Để `ISSUED` thì nó nằm mãi trong báo
+       * cáo công nợ với số nợ bằng 0, và danh sách "hoá đơn chưa thu" dài thêm
+       * một dòng không bao giờ xử lý được.
+       *
+       * Xảy ra thật với đơn toàn hạng mục bảo hành: mọi dòng 0đ (INV-M-06),
+       * tổng 0đ, và chứng từ vẫn phải phát hành để khách có giấy.
+       */
+      const daThuDu = Number(hd.total_amount) === 0;
+
       await tx.query(
         `UPDATE invoice
-            SET status = 'ISSUED',
+            SET status = CASE WHEN $5::boolean THEN 'PAID'::invoice_status
+                              ELSE 'ISSUED'::invoice_status END,
                 issued_at = now(),
                 due_date = $2,
                 variance_reason = $3,
@@ -453,21 +505,47 @@ export class InvoiceService {
             address: khach.address,
             phone: khach.phone,
           }),
+          daThuDu,
         ],
       );
 
-      /*
-       * 🔒 Gửi hoá đơn điện tử SAU KHI đã phát hành nội bộ, và KHÔNG để nó chặn.
-       *
-       * BC-07 mục 6.3: nhà cung cấp treo thì hoá đơn nội bộ vẫn `ISSUED`. Khách
-       * đang đứng ở quầy với chìa khoá trong tay và không quan tâm máy chủ của
-       * ai đang hỏng. `guiHoaDonDienTu` cố ý không ném ngoại lệ — thất bại ghi
-       * thành một dòng `FAILED` để job thử lại sau.
-       */
-      await guiHoaDonDienTu(tx, actor.tenantId, invoiceId, this.eInvoice);
-
-      return this.doc(tx, invoiceId);
+      return this.doc(tx, actor, invoiceId);
     });
+
+    /*
+     * 🔒 Gửi hoá đơn điện tử SAU KHI giao dịch đã COMMIT — ngoài `withTenant`.
+     *
+     * BC-07 mục 6.3: nhà cung cấp treo thì hoá đơn nội bộ vẫn `ISSUED`. Khách
+     * đang đứng ở quầy với chìa khoá trong tay và không quan tâm máy chủ của ai
+     * đang hỏng.
+     *
+     * Nhưng "không ném ngoại lệ" chưa đủ. Bản đầu gọi nhà cung cấp BÊN TRONG
+     * giao dịch phát hành: một lần treo 30 giây là một giao dịch giữ khoá trên
+     * `invoice` suốt 30 giây, và mọi thu ngân khác đứng chờ. Lỗi thì đi qua
+     * nhánh catch; TREO thì không đi qua đâu cả.
+     *
+     * Ba bước, ba phạm vi rõ ràng: đọc (giao dịch ngắn) → gọi mạng (không có
+     * giao dịch nào mở) → ghi kết quả (giao dịch ngắn).
+     */
+    await this.guiHoaDonDienTuNgoaiGiaoDich(actor, invoiceId);
+    return ketQua;
+  }
+
+  /** Ba bước tách bạch: đọc → gọi mạng → ghi. Không bước nào vừa giữ khoá vừa chờ mạng. */
+  private async guiHoaDonDienTuNgoaiGiaoDich(
+    actor: ActorContext,
+    invoiceId: string,
+  ): Promise<{ status: string; providerInvoiceNo: string | null; errorMessage: string | null }> {
+    const req = await this.db.withTenant(actor, (tx) => docYeuCauHoaDonDienTu(tx, invoiceId));
+    if (req === null) {
+      return { status: 'FAILED', providerInvoiceNo: null, errorMessage: 'Không tìm thấy hoá đơn' };
+    }
+
+    const kq = await goiNhaCungCap(this.eInvoice, req);
+
+    return this.db.withTenant(actor, (tx) =>
+      ghiKetQuaHoaDonDienTu(tx, actor.tenantId, invoiceId, this.eInvoice.name, req, kq),
+    );
   }
 
   /**
@@ -482,10 +560,12 @@ export class InvoiceService {
     invoiceId: string,
   ): Promise<{ status: string; providerInvoiceNo: string | null; errorMessage: string | null }> {
     assertCan(actor, 'invoice:issue');
-    return this.db.withTenant(actor, async (tx) => {
+    await this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [invoiceId];
+      const scope = appendBranchScope(actor, params, 'i');
       const { rows } = await tx.query<{ status: string }>(
-        `SELECT status::text AS status FROM invoice WHERE id = $1`,
-        [invoiceId],
+        `SELECT i.status::text AS status FROM invoice i WHERE i.id = $1 ${scope}`,
+        params,
       );
       if (rows[0] === undefined) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy hoá đơn');
@@ -496,8 +576,10 @@ export class InvoiceService {
           'Hoá đơn chưa phát hành — chưa có gì để gửi.',
         );
       }
-      return guiHoaDonDienTu(tx, actor.tenantId, invoiceId, this.eInvoice);
+      return true;
     });
+
+    return this.guiHoaDonDienTuNgoaiGiaoDich(actor, invoiceId);
   }
 
   /**
@@ -562,13 +644,14 @@ export class InvoiceService {
     assertCan(actor, 'invoice:adjust');
 
     return this.db.withTenant(actor, async (tx) => {
+      const phamVi: unknown[] = [invoiceId];
       const { rows } = await tx.query<DongHoaDon>(
         `SELECT i.*, ro.code AS ro_code, c.display_name AS customer_name
            FROM invoice i
            JOIN repair_order ro ON ro.id = i.repair_order_id
            JOIN customer c ON c.id = i.customer_id
-          WHERE i.id = $1 FOR UPDATE OF i`,
-        [invoiceId],
+          WHERE i.id = $1 ${appendBranchScope(actor, phamVi, 'i')} FOR UPDATE OF i`,
+        phamVi,
       );
       const goc = rows[0];
       if (goc === undefined) {
@@ -635,24 +718,26 @@ export class InvoiceService {
         invoiceId,
       ]);
 
-      return this.doc(tx, dcId);
+      return this.doc(tx, actor, dcId);
     });
   }
 
   async getById(actor: ActorContext, id: string): Promise<Invoice> {
     assertCan(actor, 'invoice:read');
-    return this.db.withTenant(actor, (tx) => this.doc(tx, id));
+    return this.db.withTenant(actor, (tx) => this.doc(tx, actor, id));
   }
 
   async forOrder(actor: ActorContext, orderId: string): Promise<Invoice[]> {
     assertCan(actor, 'invoice:read');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [orderId];
+      const scope = appendBranchScope(actor, params, 'i');
       const { rows } = await tx.query<{ id: string }>(
-        `SELECT id FROM invoice WHERE repair_order_id = $1 ORDER BY created_at`,
-        [orderId],
+        `SELECT i.id FROM invoice i WHERE i.repair_order_id = $1 ${scope} ORDER BY i.created_at`,
+        params,
       );
       const ra: Invoice[] = [];
-      for (const r of rows) ra.push(await this.doc(tx, r.id));
+      for (const r of rows) ra.push(await this.doc(tx, actor, r.id));
       return ra;
     });
   }
@@ -757,14 +842,27 @@ export class InvoiceService {
     };
   }
 
-  private async doc(tx: PoolClient, id: string): Promise<Invoice> {
+  /**
+   * 🔒 MỌI đường đọc hoá đơn đi qua đây, và đây là chỗ áp phạm vi chi nhánh.
+   *
+   * Đặt ở một hàm dùng chung thay vì rải `appendBranchScope` ra từng phương
+   * thức: rải ra là cách chắc chắn để một hôm nào đó có một phương thức quên.
+   * Vòng review Phase 3 tìm ra đúng điều đó — `appendBranchScope` có mặt ở
+   * `build()` và VẮNG ở năm đường còn lại, nên thu ngân chi nhánh A đọc, phát
+   * hành và thu tiền được hoá đơn của chi nhánh B.
+   *
+   * RLS không cứu được: cùng tenant, khác chi nhánh.
+   */
+  private async doc(tx: PoolClient, actor: ActorContext, id: string): Promise<Invoice> {
+    const params: unknown[] = [id];
+    const scope = appendBranchScope(actor, params, 'i');
     const { rows } = await tx.query<DongHoaDon>(
       `SELECT i.*, ro.code AS ro_code, c.display_name AS customer_name
          FROM invoice i
          JOIN repair_order ro ON ro.id = i.repair_order_id
          JOIN customer c ON c.id = i.customer_id
-        WHERE i.id = $1`,
-      [id],
+        WHERE i.id = $1 ${scope}`,
+      params,
     );
     const hd = rows[0];
     if (hd === undefined) {

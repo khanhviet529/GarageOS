@@ -488,7 +488,22 @@ export class PublicTrackingService {
        * với một báo giá thường thì nó không làm gì. Không cần một cờ ở đầu vào
        * để phân biệt — cờ đó sẽ là thứ đầu tiên bị quên.
        */
-      await onSupplementQuotationResponded(tx, scope.repairOrderId, approvedAmount > 0);
+      /*
+       * 🔒 Cờ duyệt xét theo SỐ DÒNG được duyệt, không theo SỐ TIỀN.
+       *
+       * Bản trước truyền `approvedAmount > 0`. Hai thứ đó trùng nhau trong hầu
+       * hết trường hợp, nhưng không phải mọi trường hợp: một báo giá bổ sung
+       * chỉ gồm hạng mục BẢO HÀNH có `line_total = 0` theo đúng thiết kế
+       * (`warranty_line_is_free`). Khách bấm duyệt, tổng tiền duyệt vẫn bằng 0,
+       * và phát sinh bị đánh dấu TỪ CHỐI — những việc đang chờ nó nằm im mãi
+       * mãi, chiếc xe nằm bãi, không ai được báo gì.
+       *
+       * 💡 "Khách có đồng ý không" và "khách phải trả bao nhiêu" là hai câu hỏi
+       *    khác nhau. Dùng câu trả lời của câu này để trả lời câu kia chỉ đúng
+       *    khi không có thứ gì miễn phí — mà bảo hành thì đúng là miễn phí.
+       */
+      const soDongDuyet = laborByStatus.get('APPROVED') ?? 0;
+      await onSupplementQuotationResponded(tx, scope.repairOrderId, soDongDuyet > 0);
 
       /*
        * Đơn chuyển tiếp. Ba nhánh, không phải hai:

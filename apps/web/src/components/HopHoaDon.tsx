@@ -33,6 +33,7 @@ export function HopHoaDon({
   onThayDoi?: () => void;
 }) {
   const [ds, setDs] = useState<InvoiceView[] | null>(null);
+  const [khongDuocXem, setKhongDuocXem] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
   const [lyDo, setLyDo] = useState('');
   const [ghiCongNo, setGhiCongNo] = useState(false);
@@ -46,9 +47,17 @@ export function HopHoaDon({
         setLoi(null);
       })
       .catch((e: unknown) => {
-        // 403 là bình thường với vai không xem được tiền — không phải lỗi
-        if (e instanceof ApiCallError && e.api.code === 'FORBIDDEN') setDs([]);
-        else setLoi(e instanceof ApiCallError ? e.api.message : 'Không tải được hoá đơn');
+        /*
+         * 403 là bình thường với vai không xem được tiền — không phải lỗi. Nhưng
+         * "không được xem" KHÁC "chưa có hoá đơn nào", và bản trước gộp cả hai
+         * vào `setDs([])`: người thợ mở đơn ra thấy nguyên nút "Lập hoá đơn từ
+         * công việc thực tế", bấm vào thì ăn 403. Mời người dùng bấm một thứ
+         * chắc chắn hỏng là cách tệ nhất để nói với họ rằng họ không có quyền.
+         */
+        if (e instanceof ApiCallError && e.api.code === 'FORBIDDEN') {
+          setKhongDuocXem(true);
+          setDs([]);
+        } else setLoi(e instanceof ApiCallError ? e.api.message : 'Không tải được hoá đơn');
       });
   }, [repairOrderId]);
 
@@ -86,7 +95,8 @@ export function HopHoaDon({
     }
   }
 
-  if (ds === null) return null;
+  // Không có quyền xem tiền thì không vẽ gì cả — kể cả cái tiêu đề "Hoá đơn"
+  if (ds === null || khongDuocXem) return null;
 
   const nhap = ds.find((h) => h.status === 'DRAFT');
   const daPhatHanh = ds.filter((h) => h.status !== 'DRAFT');

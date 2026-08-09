@@ -14,7 +14,7 @@ import {
   type VarianceReason,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
-import { assertCan } from '../common/permissions';
+import { appendBranchScope, assertCan } from '../common/permissions';
 
 /**
  * Kiểm kê kho — BC-12.
@@ -61,6 +61,27 @@ export class StockTakeService {
     assertCan(actor, 'stock:receive');
 
     return this.db.withTenant(actor, async (tx) => {
+      /*
+       * 🔒 Kho phải thuộc chi nhánh của người mở phiếu.
+       *
+       * Kho gắn với chi nhánh, nhưng `stock_take` chỉ giữ `warehouse_id` — nên
+       * không có câu này thì thủ kho Hà Nội mở được phiếu kiểm kê cho kho Sài
+       * Gòn, đếm nó, và (nếu đủ vai) duyệt luôn. Đo được ở vòng review: HTTP 201.
+       *
+       * Kiểm kê là đường DUY NHẤT làm tồn kho đổi mà không có chứng từ mua bán
+       * đối ứng — để nó vượt biên giới chi nhánh là mở đúng cái cửa mà cả
+       * migration 0037 dựng lên để canh.
+       */
+      const paramsKho: unknown[] = [input.warehouseId];
+      const scopeKho = appendBranchScope(actor, paramsKho, 'w');
+      const { rows: kho } = await tx.query<{ id: string }>(
+        `SELECT w.id FROM warehouse w WHERE w.id = $1 ${scopeKho}`,
+        paramsKho,
+      );
+      if (kho[0] === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy kho trong phạm vi của bạn');
+      }
+
       const { rows: dang } = await tx.query<{ code: string }>(
         `SELECT code FROM stock_take
           WHERE warehouse_id = $1 AND status IN ('DRAFT','COUNTING','PENDING_APPROVAL')
@@ -85,20 +106,42 @@ export class StockTakeService {
       );
       const code = `ST-${new Date().getFullYear()}-${String(n[0]!.n).padStart(4, '0')}`;
 
-      const { rows: st } = await tx.query<{ id: string }>(
-        `INSERT INTO stock_take (tenant_id, warehouse_id, code, scope, scope_category,
-                                 status, snapshot_at, started_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,'COUNTING', now(), $6) RETURNING id`,
-        [
-          actor.tenantId,
-          input.warehouseId,
-          code,
-          input.scope,
-          input.scopeCategory ?? null,
-          actor.userId,
-        ],
-      );
-      const id = st[0]!.id;
+      /*
+       * 🔒 SAVEPOINT quanh INSERT, vì sau nó còn nhiều truy vấn nữa.
+       *
+       * Câu kiểm ở trên chỉ lo phần THÔNG BÁO ĐẸP cho trường hợp thường gặp.
+       * Chặn THẬT nằm ở `uniq_stock_take_dang_mo` (0050): giữa SELECT và INSERT
+       * có một khe hở, và hai request song song đi lọt qua nó — đã kiểm chứng
+       * bằng `test/codex-vong-2.spec.ts`, hai phiếu cùng mở trên một kho.
+       */
+      await tx.query('SAVEPOINT tao_phieu');
+      let id: string;
+      try {
+        const { rows: st } = await tx.query<{ id: string }>(
+          `INSERT INTO stock_take (tenant_id, warehouse_id, code, scope, scope_category,
+                                   status, snapshot_at, started_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,'COUNTING', now(), $6) RETURNING id`,
+          [
+            actor.tenantId,
+            input.warehouseId,
+            code,
+            input.scope,
+            input.scopeCategory ?? null,
+            actor.userId,
+          ],
+        );
+        id = st[0]!.id;
+      } catch (e) {
+        await tx.query('ROLLBACK TO SAVEPOINT tao_phieu');
+        const err = e as { code?: string; constraint?: string };
+        if (err.code === '23505' && err.constraint === 'uniq_stock_take_dang_mo') {
+          throw new BusinessError(
+            ErrorCode.INVALID_STATE_TRANSITION,
+            'Kho này vừa có người mở phiếu kiểm kê. Tải lại để xem phiếu đang mở.',
+          );
+        }
+        throw e;
+      }
 
       /*
        * 🔒 Sinh dòng cho MỌI mã hàng đang có số dư, kể cả số dư 0.
@@ -131,6 +174,8 @@ export class StockTakeService {
   async list(actor: ActorContext): Promise<Omit<StockTake, 'lines'>[]> {
     assertCan(actor, 'stock:read');
     return this.db.withTenant(actor, async (tx) => {
+      const paramsList: unknown[] = [];
+      const scopeList = appendBranchScope(actor, paramsList, 'w');
       const { rows } = await tx.query<{
         id: string;
         code: string;
@@ -152,7 +197,9 @@ export class StockTakeService {
            FROM stock_take s
            JOIN warehouse w ON w.id = s.warehouse_id
            JOIN tenant t ON t.id = s.tenant_id
+          WHERE true ${scopeList}
           ORDER BY s.created_at DESC LIMIT 100`,
+        paramsList,
       );
       return rows.map((r) => ({
         id: r.id,
@@ -189,7 +236,7 @@ export class StockTakeService {
     assertCan(actor, 'stock:receive');
 
     return this.db.withTenant(actor, async (tx) => {
-      const phieu = await this.docPhieu(tx, stockTakeId, true);
+      const phieu = await this.docPhieu(tx, actor, stockTakeId, true);
       if (phieu.status !== 'COUNTING') {
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
@@ -234,7 +281,7 @@ export class StockTakeService {
   async submit(actor: ActorContext, stockTakeId: string): Promise<StockTake> {
     assertCan(actor, 'stock:receive');
     return this.db.withTenant(actor, async (tx) => {
-      const phieu = await this.docPhieu(tx, stockTakeId, true);
+      const phieu = await this.docPhieu(tx, actor, stockTakeId, true);
       if (phieu.status !== 'COUNTING') {
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
@@ -277,7 +324,7 @@ export class StockTakeService {
     assertCan(actor, 'stock:adjust');
 
     return this.db.withTenant(actor, async (tx) => {
-      const phieu = await this.docPhieu(tx, stockTakeId, true);
+      const phieu = await this.docPhieu(tx, actor, stockTakeId, true);
       if (phieu.status !== 'PENDING_APPROVAL') {
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
@@ -405,7 +452,7 @@ export class StockTakeService {
   async cancel(actor: ActorContext, stockTakeId: string, note: string): Promise<StockTake> {
     assertCan(actor, 'stock:adjust');
     return this.db.withTenant(actor, async (tx) => {
-      const phieu = await this.docPhieu(tx, stockTakeId, true);
+      const phieu = await this.docPhieu(tx, actor, stockTakeId, true);
       if (phieu.status === 'APPROVED' || phieu.status === 'CANCELLED') {
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
@@ -423,12 +470,28 @@ export class StockTakeService {
 
   // ───────────────────────────────────────────────────────────────────────────
 
-  private async docPhieu(tx: PoolClient, id: string, khoa = false): Promise<DongPhieu> {
+  /**
+   * 🔒 Mọi đường đọc/ghi phiếu kiểm kê đi qua đây, và đây là chỗ áp phạm vi.
+   *
+   * Gom vào một hàm thay vì rải ra năm phương thức — cùng lập luận với
+   * `InvoiceService.doc`, và cùng lý do: rải ra thì lần sau có một phương thức
+   * quên.
+   */
+  private async docPhieu(
+    tx: PoolClient,
+    actor: ActorContext,
+    id: string,
+    khoa = false,
+  ): Promise<DongPhieu> {
+    const params: unknown[] = [id];
+    const scope = appendBranchScope(actor, params, 'w');
     const { rows } = await tx.query<DongPhieu>(
-      `SELECT id, status::text AS status, warehouse_id, snapshot_at,
-              started_by_user_id, version
-         FROM stock_take WHERE id = $1 ${khoa ? 'FOR UPDATE' : ''}`,
-      [id],
+      `SELECT s.id, s.status::text AS status, s.warehouse_id, s.snapshot_at,
+              s.started_by_user_id, s.version
+         FROM stock_take s
+         JOIN warehouse w ON w.id = s.warehouse_id
+        WHERE s.id = $1 ${scope} ${khoa ? 'FOR UPDATE OF s' : ''}`,
+      params,
     );
     const p = rows[0];
     if (p === undefined) {
@@ -469,6 +532,8 @@ export class StockTakeService {
   }
 
   private async doc(tx: PoolClient, actor: ActorContext, id: string): Promise<StockTake> {
+    const paramsDoc: unknown[] = [id];
+    const scopeDoc = appendBranchScope(actor, paramsDoc, 'w');
     const { rows } = await tx.query<{
       id: string;
       code: string;
@@ -490,8 +555,8 @@ export class StockTakeService {
          FROM stock_take s
          JOIN warehouse w ON w.id = s.warehouse_id
          JOIN tenant t ON t.id = s.tenant_id
-        WHERE s.id = $1`,
-      [id],
+        WHERE s.id = $1 ${scopeDoc}`,
+      paramsDoc,
     );
     const s = rows[0];
     if (s === undefined) {

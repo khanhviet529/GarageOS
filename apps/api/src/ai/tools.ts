@@ -7,6 +7,7 @@ import {
   type PermissionAction,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { appendBranchScope } from '../common/permissions';
 
 /**
  * Tầng công cụ cho AI agent — Phase 8.1 / 8.2.
@@ -34,6 +35,17 @@ import { BusinessError } from '../common/errors';
  *  3. Tool ĐỌC và tool GHI tách bằng cờ `ghi`. Mặc định agent chỉ được gọi tool
  *     đọc; muốn gọi tool ghi thì người dùng phải bật rõ ràng. Một câu hỏi vô
  *     hại hiểu nhầm thành lệnh tạo lịch hẹn là chuyện có thật với mọi agent.
+ *
+ *  4. Mỗi tool áp PHẠM VI CHI NHÁNH y như endpoint tương ứng.
+ *
+ *     Bản đầu chỉ enforce VAI và bỏ quên chi nhánh — nên một cố vấn Hà Nội hỏi
+ *     trợ lý "xe nào nằm lâu chưa ai lấy" nhận về cả xe của Sài Gòn, trong khi
+ *     đúng câu hỏi đó qua màn hình `/abandoned-vehicles` thì không.
+ *
+ *     💡 Đây là hình dạng nguy hiểm riêng của tầng tool: nó tạo ra một CỬA SAU
+ *        không cố ý. Mọi endpoint đều siết đúng, và trợ lý — thứ được thêm vào
+ *        sau cùng — lặng lẽ mở lại tất cả. Quy tắc: tool KHÔNG BAO GIỜ trả về
+ *        nhiều hơn endpoint tương đương.
  * ─────────────────────────────────────────────────────────────────────────
  */
 
@@ -70,6 +82,8 @@ const lookupVehicleHistory: ToolDef = {
   }),
   quyen: 'repairOrder:create',
   handler: async (ctx, input) => {
+    const params: unknown[] = [input.plateNumber, input.limit];
+    const scope = appendBranchScope(ctx.actor, params, 'ro');
     const { rows } = await ctx.tx.query(
       `SELECT ro.code, ro.status::text AS status, ro.delivered_at, ro.odometer_out,
               v.plate_number,
@@ -79,10 +93,10 @@ const lookupVehicleHistory: ToolDef = {
                 WHERE q.repair_order_id = ro.id AND ql.status = 'APPROVED') AS hang_muc
          FROM repair_order ro
          JOIN vehicle v ON v.id = ro.vehicle_id
-        WHERE v.plate_number = normalize_plate($1)
+        WHERE v.plate_number = normalize_plate($1) ${scope}
         ORDER BY ro.created_at DESC
         LIMIT $2`,
-      [input.plateNumber, input.limit],
+      params,
     );
     return rows;
   },
@@ -111,6 +125,9 @@ const findAvailableSlots: ToolDef = {
      * đang có xe 30A-123.45" là câu trả lời người điều phối không kiểm chứng
      * được. Trả dữ liệu thô, để mô hình diễn giải và trích dẫn được.
      */
+    const params: unknown[] = [input.date];
+    // `bay.branch_id` — khoang thuộc chi nhánh, cùng cách lọc như màn lịch xưởng
+    const scope = appendBranchScope(ctx.actor, params, 'b');
     const { rows } = await ctx.tx.query(
       `SELECT b.id AS bay_id, b.code AS bay_code, b.name AS bay_name,
               COALESCE(json_agg(
@@ -126,10 +143,10 @@ const findAvailableSlots: ToolDef = {
           AND wa.status <> 'CANCELLED'
           AND wa.planned_start::date = $1::date
          LEFT JOIN repair_order ro ON ro.id = wa.repair_order_id
-        WHERE b.is_active
+        WHERE b.is_active ${scope}
         GROUP BY b.id, b.code, b.name
         ORDER BY b.code`,
-      [input.date],
+      params,
     );
     return { date: input.date, durationHours: input.durationHours, bays: rows };
   },
@@ -152,6 +169,8 @@ const checkWarranty: ToolDef = {
   }),
   quyen: 'warranty:read',
   handler: async (ctx, input) => {
+    const params: unknown[] = [input.plateNumber, input.currentOdometer ?? null];
+    const scope = appendBranchScope(ctx.actor, params, 'ro');
     const { rows } = await ctx.tx.query(
       `SELECT ql.description, wc.coverage_type::text AS loai,
               wc.expires_at, wc.expires_at_odometer, wc.start_odometer,
@@ -164,9 +183,9 @@ const checkWarranty: ToolDef = {
          JOIN repair_order ro ON ro.id = wc.repair_order_id
          JOIN vehicle v ON v.id = ro.vehicle_id
         WHERE v.plate_number = normalize_plate($1)
-          AND wc.claimed_by_repair_order_id IS NULL
+          AND wc.claimed_by_repair_order_id IS NULL ${scope}
         ORDER BY wc.expires_at DESC`,
-      [input.plateNumber, input.currentOdometer ?? null],
+      params,
     );
     return rows;
   },
@@ -186,18 +205,21 @@ const checkPartAvailability: ToolDef = {
   }),
   quyen: 'stock:read',
   handler: async (ctx, input) => {
+    const params: unknown[] = [input.search];
+    const scope = appendBranchScope(ctx.actor, params, 'w');
     const { rows } = await ctx.tx.query(
       `SELECT p.sku, p.name, p.unit,
-              b.on_hand, b.reserved, b.on_hand - b.reserved AS available,
+              sb.on_hand, sb.reserved, sb.on_hand - sb.reserved AS available,
               p.min_stock_level, w.name AS kho
-         FROM stock_balance b
-         JOIN part p ON p.id = b.part_id
-         JOIN warehouse w ON w.id = b.warehouse_id
+         FROM stock_balance sb
+         JOIN part p ON p.id = sb.part_id
+         JOIN warehouse w ON w.id = sb.warehouse_id
         WHERE p.is_active
           AND (p.sku ILIKE '%' || $1 || '%' OR p.name ILIKE '%' || $1 || '%')
-        ORDER BY (b.on_hand - b.reserved) DESC
+          ${scope}
+        ORDER BY (sb.on_hand - sb.reserved) DESC
         LIMIT 20`,
-      [input.search],
+      params,
     );
     /*
      * 🔒 `avg_cost` KHÔNG có trong câu SELECT, và đó không phải chuyện tình cờ.
@@ -225,14 +247,16 @@ const listWaitingVehicles: ToolDef = {
   }),
   quyen: 'repairOrder:create',
   handler: async (ctx, input) => {
+    const params: unknown[] = [input.minDays];
+    const scope = appendBranchScope(ctx.actor, params, 'x');
     const { rows } = await ctx.tx.query(
-      `SELECT code, plate_number, customer_name, so_ngay_cho, abandonment_status,
-              so_lan_lien_he, legal_hold
-         FROM xe_dang_nam_bai
-        WHERE so_ngay_cho >= $1
-        ORDER BY so_ngay_cho DESC
+      `SELECT x.code, x.plate_number, x.customer_name, x.so_ngay_cho,
+              x.abandonment_status, x.so_lan_lien_he, x.legal_hold
+         FROM xe_dang_nam_bai x
+        WHERE x.so_ngay_cho >= $1 ${scope}
+        ORDER BY x.so_ngay_cho DESC
         LIMIT 50`,
-      [input.minDays],
+      params,
     );
     return rows;
   },

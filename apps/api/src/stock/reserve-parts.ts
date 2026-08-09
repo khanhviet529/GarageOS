@@ -209,10 +209,26 @@ export async function releaseReservationsForOrder(
   repairOrderId: string,
   reason: string,
 ): Promise<number> {
+  /*
+   * 🔒 Khoá theo thứ tự `part_id` tăng dần — bảng "Khoá và đồng thời" ở
+   *    `CLAUDE.md`, áp cho MỌI đường ghi chạm kho.
+   *
+   * Bản trước là một `UPDATE … WHERE repair_order_id = $1` trần, nên PostgreSQL
+   * khoá các dòng theo thứ tự mà kế hoạch truy vấn chọn ra — thường là thứ tự
+   * vật lý, và không có gì bảo đảm nó giống thứ tự của đường xuất kho. Hai đơn
+   * cùng chạm hai mã hàng, mỗi đơn khoá một thứ tự, là đủ điều kiện deadlock.
+   *
+   * Trigger trên `stock_reservation` còn cập nhật `stock_balance.reserved`, nên
+   * thứ tự khoá ở đây kéo theo cả thứ tự khoá số dư. `ORDER BY part_id … FOR
+   * UPDATE` trong truy vấn con làm thứ tự đó thành tất định.
+   */
   const { rowCount } = await tx.query(
     `UPDATE stock_reservation
         SET status = 'RELEASED', released_reason = $2
-      WHERE repair_order_id = $1 AND status = 'ACTIVE'`,
+      WHERE id IN (SELECT id FROM stock_reservation
+                    WHERE repair_order_id = $1 AND status = 'ACTIVE'
+                    ORDER BY part_id
+                      FOR UPDATE)`,
     [repairOrderId, reason],
   );
   return rowCount ?? 0;

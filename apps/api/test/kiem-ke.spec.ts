@@ -123,12 +123,25 @@ before(async () => {
   tokenChu = await dangNhap('0901000001');
 
   const { rows: w } = await pool.query<{ id: string }>(
+    /*
+     * 🔒 Kho của CHÍNH thủ kho, không phải "kho đầu tiên theo mã".
+     *
+     * `ORDER BY b.code LIMIT 1` trúng HCM01, trong khi thủ kho seed thuộc HN01.
+     * Bài này chạy xanh suốt Phase 5.4 vì lúc đó `StockTakeService` chưa có
+     * phạm vi chi nhánh — nó vô tình kiểm kê kho của chi nhánh khác và không ai
+     * biết. Vòng review sau Phase 3 vá lỗ hổng đó, và bài test đổ ngay.
+     *
+     * 💡 Một bài test đỏ VÌ một lỗ hổng vừa được bịt là bằng chứng tốt nhất
+     *    rằng lỗ hổng ấy có thật.
+     */
     `SELECT w.id FROM warehouse w
        JOIN branch b ON b.id = w.branch_id
-      WHERE b.tenant_id = $1 ORDER BY b.code LIMIT 1`,
+       JOIN user_branch ub ON ub.branch_id = b.id
+       JOIN app_user u ON u.id = ub.user_id
+      WHERE b.tenant_id = $1 AND u.phone = '0901000005' LIMIT 1`,
     [TENANT_A],
   );
-  assert.ok(w[0], 'seed thiếu kho');
+  assert.ok(w[0], 'seed thiếu kho ở chi nhánh của thủ kho');
   khoId = w[0].id;
 });
 
@@ -142,20 +155,32 @@ after(async () => {
    * kết nối quản trị — và đó là điều đúng. Dọn dẹp trong test cũng phải đi qua
    * cùng một cửa, không có lối tắt riêng.
    */
-  await pool.query(
-    // Về COUNTING chứ không PENDING_APPROVAL: chuyển sang PENDING_APPROVAL sẽ
-    // kích `kiem_tra_kiem_ke_du_ly_do` và phiếu nào còn dòng chưa đếm sẽ chặn.
-    `UPDATE stock_take SET status = 'COUNTING'
-      WHERE id IN (SELECT DISTINCT l.stock_take_id FROM stock_take_line l
-                     JOIN part p ON p.id = l.part_id WHERE p.sku LIKE $1)`,
+  /*
+   * 🔒 MỘT phiếu một lượt, không mở khoá cả loạt.
+   *
+   * `uniq_stock_take_dang_mo` (0050) chỉ cho mỗi kho một phiếu đang mở. Bản
+   * trước `UPDATE ... WHERE id IN (...)` kéo tất cả phiếu của bộ test này về
+   * COUNTING cùng lúc — mà chúng dùng chung một kho, nên câu dọn dẹp đụng ngay
+   * ràng buộc vừa thêm.
+   *
+   * Đây là dấu hiệu tốt, không phải phiền toái: dọn dẹp trong test đi qua đúng
+   * cửa mà mã nguồn thật đi qua, nên nó cũng gặp đúng ràng buộc.
+   */
+  const { rows: phieu } = await pool.query<{ id: string }>(
+    `SELECT DISTINCT l.stock_take_id AS id FROM stock_take_line l
+       JOIN part p ON p.id = l.part_id WHERE p.sku LIKE $1`,
     [`PT-KK-${uniq}%`],
   );
+  for (const p of phieu) {
+    // Về COUNTING chứ không PENDING_APPROVAL: chuyển sang PENDING_APPROVAL sẽ
+    // kích `kiem_tra_kiem_ke_du_ly_do` và phiếu nào còn dòng chưa đếm sẽ chặn.
+    await pool.query(`UPDATE stock_take SET status = 'COUNTING' WHERE id = $1`, [p.id]);
+    await pool.query(`DELETE FROM stock_take_line WHERE stock_take_id = $1`, [p.id]);
+    await pool.query(`UPDATE stock_take SET status = 'CANCELLED' WHERE id = $1`, [p.id]);
+  }
   await pool.query(
     `DELETE FROM stock_take_line WHERE part_id IN (SELECT id FROM part WHERE sku LIKE $1)`,
     [`PT-KK-${uniq}%`],
-  );
-  await pool.query(
-    `UPDATE stock_take SET status = 'CANCELLED' WHERE status = 'COUNTING'`,
   );
   await pool.end();
 });

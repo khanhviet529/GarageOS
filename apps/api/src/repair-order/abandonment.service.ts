@@ -107,7 +107,7 @@ export class AbandonmentService {
 
   async contacts(actor: ActorContext, orderId: string): Promise<ContactAttempt[]> {
     assertCan(actor, 'repairOrder:create');
-    return this.db.withTenant(actor, (tx) => this.docLienHe(tx, orderId));
+    return this.db.withTenant(actor, (tx) => this.docLienHe(tx, actor, orderId));
   }
 
   /**
@@ -118,8 +118,14 @@ export class AbandonmentService {
    * và màn hình hiện thiếu đúng dòng người dùng vừa tạo. Test bắt được ngay:
    * ghi hai lần, đọc ra một.
    */
-  private async docLienHe(tx: PoolClient, orderId: string): Promise<ContactAttempt[]> {
+  private async docLienHe(
+    tx: PoolClient,
+    actor: ActorContext,
+    orderId: string,
+  ): Promise<ContactAttempt[]> {
     {
+      const params: unknown[] = [orderId];
+      const scope = appendBranchScope(actor, params, 'ro');
       const { rows } = await tx.query<{
         id: string;
         attempted_at: Date;
@@ -133,9 +139,10 @@ export class AbandonmentService {
                 a.outcome::text AS outcome, a.promised_pickup_at, a.note
            FROM customer_contact_attempt a
            JOIN app_user u ON u.id = a.attempted_by_user_id
-          WHERE a.repair_order_id = $1
+           JOIN repair_order ro ON ro.id = a.repair_order_id
+          WHERE a.repair_order_id = $1 ${scope}
           ORDER BY a.attempted_at DESC`,
-        [orderId],
+        params,
       );
       return rows.map((r) => ({
         id: r.id,
@@ -165,7 +172,7 @@ export class AbandonmentService {
     assertCan(actor, 'repairOrder:create');
 
     return this.db.withTenant(actor, async (tx) => {
-      const don = await this.docDon(tx, orderId);
+      const don = await this.docDon(tx, actor, orderId);
       if (don.status !== 'AWAITING_DELIVERY') {
         throw new BusinessError(
           ErrorCode.INVALID_STATE_TRANSITION,
@@ -194,7 +201,7 @@ export class AbandonmentService {
       ]);
 
       await this.capNhatLeoThang(tx, actor, orderId);
-      return this.docLienHe(tx, orderId);
+      return this.docLienHe(tx, actor, orderId);
     });
   }
 
@@ -229,11 +236,15 @@ export class AbandonmentService {
   async markNotified(actor: ActorContext, orderId: string): Promise<StorageFee | null> {
     assertCan(actor, 'repairOrder:create');
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [orderId];
+      const scope = appendBranchScope(actor, params, 'ro');
       await tx.query(
-        `UPDATE storage_fee SET thong_bao_luc = COALESCE(thong_bao_luc, now()),
-                                version = version + 1
-          WHERE repair_order_id = $1`,
-        [orderId],
+        `UPDATE storage_fee f
+            SET thong_bao_luc = COALESCE(f.thong_bao_luc, now()),
+                version = f.version + 1
+           FROM repair_order ro
+          WHERE ro.id = f.repair_order_id AND f.repair_order_id = $1 ${scope}`,
+        params,
       );
       return this.docPhi(tx, orderId, actor);
     });
@@ -258,12 +269,15 @@ export class AbandonmentService {
     }
 
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [orderId, input.amount, actor.userId, input.reason];
+      const scope = appendBranchScope(actor, params, 'ro');
       const { rowCount } = await tx.query(
-        `UPDATE storage_fee
+        `UPDATE storage_fee f
             SET waived_amount = $2, waived_by_user_id = $3, waived_reason = $4,
-                version = version + 1
-          WHERE repair_order_id = $1`,
-        [orderId, input.amount, actor.userId, input.reason],
+                version = f.version + 1
+           FROM repair_order ro
+          WHERE ro.id = f.repair_order_id AND f.repair_order_id = $1 ${scope}`,
+        params,
       );
       if (rowCount === 0) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Đơn này chưa có khoản phí lưu bãi nào');
@@ -291,11 +305,13 @@ export class AbandonmentService {
     }
 
     return this.db.withTenant(actor, async (tx) => {
+      const params: unknown[] = [orderId, input.legalHold, input.reason];
+      const scope = appendBranchScope(actor, params, 'repair_order');
       const { rowCount } = await tx.query(
         `UPDATE repair_order
             SET legal_hold = $2, legal_hold_reason = $3, version = version + 1
-          WHERE id = $1`,
-        [orderId, input.legalHold, input.reason],
+          WHERE id = $1 ${scope}`,
+        params,
       );
       if (rowCount === 0) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy đơn');
@@ -306,13 +322,28 @@ export class AbandonmentService {
 
   // ───────────────────────────────────────────────────────────────────────────
 
+  /**
+   * 🔒 Mọi đường đọc/ghi của module này đi qua đây, và đây là chỗ áp phạm vi.
+   *
+   * Bản đầu có `appendBranchScope` ở đúng MỘT chỗ — `list()` — và vắng ở tám
+   * đường còn lại. Bài quét sau Phase 3 bắt được:
+   *
+   *     /repair-orders/:id/contacts → 200, nhật ký liên hệ của chi nhánh khác
+   *
+   * Nhật ký liên hệ là BẰNG CHỨNG PHÁP LÝ (BC-15). Đọc được nhật ký của một
+   * chiếc xe không thuộc chi nhánh mình là đọc hồ sơ khiếu nại của người khác.
+   */
   private async docDon(
     tx: PoolClient,
+    actor: ActorContext,
     orderId: string,
   ): Promise<{ status: string; ready_for_delivery_at: Date | null }> {
+    const params: unknown[] = [orderId];
+    const scope = appendBranchScope(actor, params, 'ro');
     const { rows } = await tx.query<{ status: string; ready_for_delivery_at: Date | null }>(
-      `SELECT status::text AS status, ready_for_delivery_at FROM repair_order WHERE id = $1`,
-      [orderId],
+      `SELECT ro.status::text AS status, ro.ready_for_delivery_at
+         FROM repair_order ro WHERE ro.id = $1 ${scope}`,
+      params,
     );
     const d = rows[0];
     if (d === undefined) {
@@ -333,7 +364,7 @@ export class AbandonmentService {
     actor: ActorContext,
     orderId: string,
   ): Promise<void> {
-    const don = await this.docDon(tx, orderId);
+    const don = await this.docDon(tx, actor, orderId);
     if (don.status !== 'AWAITING_DELIVERY' || don.ready_for_delivery_at === null) return;
 
     const { rows: cs } = await tx.query<DongChinhSach>(
@@ -431,6 +462,8 @@ export class AbandonmentService {
     orderId: string,
     actor: ActorContext,
   ): Promise<StorageFee | null> {
+    const paramsPhi: unknown[] = [orderId];
+    const scopePhi = appendBranchScope(actor, paramsPhi, 'ro');
     const { rows } = await tx.query<{
       id: string;
       repair_order_id: string;
@@ -444,7 +477,12 @@ export class AbandonmentService {
       waived_amount: string;
       waived_reason: string | null;
       thong_bao_luc: Date | null;
-    }>(`SELECT * FROM storage_fee WHERE repair_order_id = $1`, [orderId]);
+    }>(
+      `SELECT f.* FROM storage_fee f
+         JOIN repair_order ro ON ro.id = f.repair_order_id
+        WHERE f.repair_order_id = $1 ${scopePhi}`,
+      paramsPhi,
+    );
     const f = rows[0];
     if (f === undefined) return null;
 

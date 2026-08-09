@@ -46,11 +46,11 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 451 (domain 12, db 42, api 397) |
-| E2E Playwright | 69 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 48 |
-| Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
-| Phát hiện đã xử lý | 17 + ~50 |
+| Test tự động | 487 (domain 12, db 42, api 433) |
+| E2E Playwright | 73 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 51 |
+| Vòng review đã chạy | 9 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
+| Phát hiện đã xử lý | 24 + ~50 |
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -121,10 +121,125 @@ không có ngoại lệ nào được ném. Với báo cáo, "không lỗi" khô
 | Thu tiền trùng trả về 500 thay vì thành công | Thiếu `SAVEPOINT` quanh INSERT đụng UNIQUE. Đúng cái bẫy đã ghi thành comment ở `repair-order.service.ts` từ Phase 1 — **dẫm lại lần thứ ba** |
 | Bài quét "cột tiền có chặn trên" đỏ vì hai view | `information_schema.columns` gồm cả VIEW, mà view không gắn CHECK được. Không lọc `relkind = 'r'` thì mỗi view báo cáo mới sẽ làm test đỏ với một yêu cầu không thực hiện nổi |
 | Mọi bài thanh toán đỏ với `OVERPAY` | Helper trong test phân bổ cả tổng hoá đơn vào `lines[0]` — dòng công trị giá 412.500. Không phải lỗi mã nguồn: chính INV-M-04 đang làm việc, không thu quá số phải thu CỦA TỪNG DÒNG |
+| `qline_ref_matches_type` khi seed dòng báo giá | Dòng `LABOR` phải trỏ tới `service_item`, dòng `PART` phải trỏ tới `part`. Không có "dòng tự do" — mọi thứ tính tiền đều truy được về danh mục |
+| `INV-Q-05` khi seed báo giá | Báo giá phải ở `DRAFT` lúc nhập dòng rồi mới chốt sang `APPROVED`. Chèn thẳng `APPROVED` là chèn dòng vào một tờ đã gửi khách |
+| `INVOICE_IMMUTABLE` khi seed hoá đơn bảo hiểm | Gắn `insurance_claim_id` bằng `UPDATE` sau khi phát hành thì trúng INV-M-03. Phải gắn ngay lúc `INSERT` dòng |
 
-## Hàng rào quét toàn bộ — bốn cái, và vì sao chúng đáng giá
+## Vòng tự review sau Phase 3 — mười phát hiện, sáu cùng một lỗi
 
-Bốn bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
+Codex chưa dùng lại được, nên vòng này tự review, có bằng chứng chạy được cho
+từng phát hiện.
+
+| # | Phase | Vấn đề | Mức |
+|---|---|---|---|
+| F-1 | 3 | Không có phạm vi chi nhánh ở **toàn bộ** tầng hoá đơn — đọc, phát hành, thu tiền, công nợ | 🔴 |
+| F-6 | 3 | Gắn được dòng hoá đơn của **đơn khác** vào hồ sơ bồi thường | 🔴 |
+| P-1 | 5.4 | Thủ kho chi nhánh này mở được phiếu kiểm kê kho chi nhánh kia | 🔴 |
+| P-2 | 6 | Báo cáo tồn kho hiện cả kho — và **giá vốn** — của chi nhánh khác | 🟠 |
+| P-3 | 8 | Tool AI trả về dữ liệu mọi chi nhánh | 🟠 |
+| F-3 | 3 | Quyết toán huỷ đơn còn `DRAFT` vẫn thành tiền trên hoá đơn | 🟠 |
+| F-4 | 3 | Gọi nhà cung cấp HĐĐT **bên trong** giao dịch phát hành | 🟠 |
+| F-5 | 3 | Hoá đơn tổng 0đ kẹt `ISSUED` vĩnh viễn | 🟡 |
+| F-2 | 3 | Phân bổ ngược dấu chỉ chặn ở API, không chặn ở database | 🟡 |
+| F-7 | 2.5 | Đọc được lịch sử liên hệ khách của đơn ở chi nhánh khác | 🟠 |
+| F-8 | 3 | Thợ mở đơn ra vẫn thấy nút "Lập hoá đơn" — bấm vào ăn 403 | 🟡 |
+
+💡 **Sáu trong mười là cùng MỘT lỗi**, lặp qua năm phase: quên phạm vi chi
+nhánh. Không phải sáu lỗi độc lập — là một thói quen sai lặp sáu lần. F-7 là cái
+thứ sáu, và nó không do người tìm ra: hàng rào quét dựng để chống năm cái đầu
+tìm thấy nó ngay lượt chạy đầu tiên.
+
+RLS che mất nó: nó cô lập theo **tenant**, mà hai chi nhánh cùng một garage nằm
+trong cùng tenant. Nên mọi thứ *trông như* đã được bảo vệ.
+
+⚠️ **P-3 là loại nguy hiểm riêng của tầng tool.** Mọi endpoint siết đúng, rồi
+trợ lý AI — thứ thêm vào sau cùng — lặng lẽ mở lại tất cả. Phase 8 tuyên bố
+"phân quyền enforce trong tool", nhưng chỉ enforce VAI, không enforce CHI
+NHÁNH. Quy tắc đã ghi vào đầu `tools.ts`: **tool không bao giờ trả về nhiều hơn
+endpoint tương đương.**
+
+### Hai bằng chứng đến từ chính bộ test
+
+1. Vá xong P-1 thì `kiem-ke.spec.ts` đỏ cả 10 bài — fixture của nó lấy kho bằng
+   `ORDER BY code LIMIT 1`, trúng chi nhánh khác. Suốt Phase 5.4 nó xanh **vì**
+   chưa có phạm vi. Một bài test đỏ vì một lỗ hổng vừa được bịt là bằng chứng
+   tốt nhất rằng lỗ hổng ấy có thật.
+
+2. Bài kiểm F-4 bản đầu dùng regex tìm `goiNhaCungCap` trong vòng 4000 ký tự
+   sau `withTenant(` — và ĐỎ trên mã nguồn đã đúng. Regex không phân biệt được
+   "nằm trong lời gọi" với "nằm sau lời gọi". **Một bài kiểm nói sai về điều nó
+   đo còn tệ hơn không có bài kiểm**, vì nó bắt người ta sửa mã đang đúng.
+
+## Vòng `/codex-review` thứ bảy — Phase 3, ba phát hiện, hai đúng
+
+Codex dùng lại được từ 2026-08-09. Vòng này review toàn bộ Phase 3 cộng các bản
+vá sau đó (44 file, 8.274 dòng). Bản ghi đầy đủ ở
+[`docs/reviews/2026-08-09-phase-3-tien.md`](docs/reviews/2026-08-09-phase-3-tien.md).
+
+| ID | Vị trí | Kết luận | Phân xử bằng |
+|---|---|---|---|
+| BRANCH-001 | `payment.service.ts` | ✅ CONFIRMED | Test đỏ: HTTP 201, tiền vào dòng chi nhánh khác |
+| PAYMENT-001 | `payment.service.ts` | ❌ REFUTED | Test xanh: đúng 1/2 request thành công |
+| STOCKTAKE-001 | `stock-take.service.ts` | ✅ CONFIRMED | Test đỏ: 2 phiếu cùng mở trên một kho |
+
+🔒 **BRANCH-001 là lần thứ BẢY của cùng một lỗi phạm vi chi nhánh** — và nó nằm
+ngay trong đoạn code tôi vừa tự review xong, ngay sau khi dựng hàng rào để canh
+đúng loại lỗi đó. Hàng rào không bắt được vì nó chỉ thử **đọc thẳng bằng id chi
+nhánh khác**; lỗ này nằm ở một payload **TRỘN** một id hợp lệ với một id ngoài
+phạm vi. Hàng rào chỉ tìm được lỗi thuộc loại nó biết đặt câu hỏi.
+
+⚠️ Comment ngay trên đoạn hỏng **tuyên bố** nó kiểm số dòng cho đủ, đúng vì lo
+chính kịch bản đó. Nó kiểm thật — nhưng kiểm trên một tập KHÁC. **Một kiểm tra
+so hai tập khác nhau thì không kiểm gì cả.** Lần thứ hai trong dự án một comment
+sống sót qua nhiều vòng đọc vì người đọc tin comment thay vì đọc câu SQL.
+
+💡 PAYMENT-001 bị bác bỏ, nhưng bài test được **giữ lại và đáng giá hơn cả hai
+bài kia**: hoá đơn được bảo vệ nhờ `trg_hoa_don_theo_tien` chạy TRƯỚC
+`trg_khong_thu_qua` (thứ tự chữ cái) và tình cờ giành khoá dòng hoá đơn. Đó là
+bảo vệ TÌNH CỜ, không phải có thiết kế — đổi tên trigger hoặc tối ưu nó thành
+"chỉ UPDATE khi status đổi" là lỗ hổng Codex mô tả thành thật. Bài test canh
+đúng điều kiện đó.
+
+## Vòng thứ tám và thứ chín — trả nốt nợ review, và một chỗ ghi XUYÊN TENANT
+
+Phase 2.2–2.7 và Phase 4 là hai lát cắt cuối cùng chưa có reviewer độc lập. Chạy
+cả hai trong một buổi. Bản ghi:
+[`docs/reviews/2026-08-09-phase-2.2-2.7-va-phase-4.md`](docs/reviews/2026-08-09-phase-2.2-2.7-va-phase-4.md).
+
+**Năm phát hiện, cả năm đúng, không cái nào bị bác bỏ.**
+
+| ID | Vị trí | Vấn đề |
+|---|---|---|
+| R-002 | `0030_time_log.sql` | 🔴 Đóng giờ hộ **ghi xuyên tenant** |
+| R-001 | `0030_time_log.sql` | Đóng đoạn giờ nhưng để phân công kẹt `IN_PROGRESS` |
+| R-003 | `reserve-parts.ts` | Nhả giữ chỗ không khoá theo thứ tự `part_id` |
+| R-004 | `public-tracking.service.ts` | Cờ duyệt phát sinh suy ra từ SỐ TIỀN |
+| MOBILE-001 | `apps/mobile/src/lib/api.ts` | App thợ khai `segmentId`, API trả `id` |
+
+🔒 **R-002 là chỗ DUY NHẤT trong toàn hệ thống INV-T-01 bị phá**, và lý do nó
+sống sót đáng nhớ hơn bản thân lỗi:
+
+```
+function owner: garageos   rolsuper: true   rolbypassrls: true
+```
+
+`SECURITY DEFINER` được thêm vào để hàm *ghi được* `time_log` — và cùng lúc đó
+nó lặng lẽ **gỡ mất RLS**. Với một vai `BYPASSRLS` thì `FORCE ROW LEVEL
+SECURITY` cũng không cứu. Một garage bấm "đóng giờ bỏ quên" đóng luôn các đoạn
+giờ đang chạy của MỌI garage khác.
+
+💡 **Cái giá của `SECURITY DEFINER` không nằm ở quyền nó cho thêm, mà ở lớp bảo
+vệ nó lấy đi.** Các hàm `SECURITY DEFINER` khác trong dự án đều là trigger chỉ
+chạm đúng dòng `NEW`/`OLD` nên mang sẵn ngữ cảnh tenant; hàm này là hàm duy nhất
+quét CẢ BẢNG — và đó chính là hàm không được phép thiếu bộ lọc.
+
+⚠️ Bốn trong năm phát hiện nằm ở lát cắt **đã tự rà soát đối kháng** rồi (2.2 tự
+tìm ra ba lỗi, 4.5 tự vá ba lỗ rò tiền). Tự rà soát không thay được một con mắt
+không có sẵn kết luận trong đầu — giờ đã có bằng chứng, không còn là khẩu hiệu.
+
+## Hàng rào quét toàn bộ — sáu cái, và vì sao chúng đáng giá
+
+Sáu bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
 NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ sót:
 
 | Hàng rào | Đối chiếu với | Đã bắt được |
@@ -133,15 +248,24 @@ NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ 
 | `tho-khong-thay-tien.spec.ts` | Mọi route `@Get` trong mã nguồn | Ba endpoint rò giá bán và đơn giá giờ công cho thợ |
 | `privileges.spec.ts` | `information_schema.role_table_grants` | Bốn bảng `GRANT UPDATE` không kèm cột, mỗi vòng review một bảng khác |
 | `schema-invariants.spec.ts` | `information_schema.columns` | Cột tiền không phải `bigint`, cột tiền thiếu chặn trên |
+| `quet-pham-vi-chi-nhanh.spec.ts` | Mọi route có ghi trong controller | F-7: lịch sử liên hệ khách của đơn chi nhánh khác trả 200 |
+| `hop-dong-mobile.spec.ts` | Phản hồi THẬT của API | App thợ khai một trường mà API chưa bao giờ trả |
 
 💡 Điểm chung: **không cái nào có danh sách viết tay**. Danh sách viết tay chỉ
 bảo vệ được những gì người viết đã nghĩ ra — và bốn vòng review liên tiếp đã
 chứng minh điều đó bằng bốn lỗi cùng loại ở bốn bảng khác nhau.
 
+⚠️ Bản đầu của hàng rào phạm vi chi nhánh **đã có** danh sách viết tay, dưới dạng
+nhãn kiểu "phụ tùng", "xe" — và báo động giả ngay hai cái, vì hai thứ đó cô lập
+theo tenant chứ không theo chi nhánh. Bản dùng được quét theo **id thực thể**:
+tạo dữ liệu ở chi nhánh kia, rồi thử gọi mọi route bằng tài khoản chi nhánh này.
+Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng câu trả lời.
+
 ## Nợ kỹ thuật đã biết
 
 | Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
+| Ba bài test bấm giờ không chạy lại được nếu chưa seed lại | Chúng mở một đoạn giờ ở `now() − 90 phút` cho **người thợ của seed**, nên chạm `no_timelog_overlap` với đoạn giờ mà lượt trước (hoặc bộ E2E) để lại. CI seed một lần rồi chạy một lần nên vẫn xanh; chạy tay hai lượt liên tiếp thì đỏ ba bài — `pnpm db:seed` trước là xong. Sửa đúng là mỗi bài tự dựng thợ của mình |
 | Token đăng nhập để trong `localStorage` | Phase 1 là bản chạy được để review. Cookie HttpOnly + refresh token là việc của Phase 6 |
 | Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
 | Chưa có test kiến trúc chặn `withTenantId` / `queryWithoutTenant` dùng sai chỗ | Hai hàm này mở đường đi ngoài ngữ cảnh tenant. Hiện chỉ `PublicTrackingService` gọi, nhưng không có gì bắt buộc điều đó |
@@ -239,8 +363,9 @@ sửa và có test hồi quy:
 | **Huỷ đơn** không nhả chỗ → hàng treo vĩnh viễn | `on_hand` vẫn đúng nên đối soát INV-S-02 vẫn xanh. Chỉ thủ kho nhận ra, sau vài tuần. Comment ở 0027 đã liệt kê huỷ đơn là một đường nhả chỗ — viết ra được mà vẫn quên nối |
 | Giữ chỗ **một phần** không bao giờ được bù nốt | `NOT EXISTS` bỏ qua cả dòng nếu đã có bản ghi nào. Đơn kẹt ở `AWAITING_PARTS` kể cả khi kho đã đầy hàng trở lại (BC-04 mục 5.1 bước 5) |
 
-🔒 Khi Codex dùng lại được, **chạy review cho lát cắt này trước** — tự rà soát
-không thay được một con mắt không có sẵn kết luận trong đầu.
+✅ **Đã trả xong nợ** ngày 2026-08-09: Codex dùng lại được, và ba vòng chạy liên
+tiếp (Phase 3, Phase 2.2–2.7, Phase 4) tìm ra **bảy lỗi thật** — trong đó một
+chỗ ghi xuyên tenant. Mọi lát cắt của dự án giờ đều đã qua reviewer độc lập.
 
 ## Quy trình bắt buộc
 
