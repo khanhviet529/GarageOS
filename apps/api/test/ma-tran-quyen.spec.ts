@@ -467,11 +467,25 @@ before(async () => {
   );
   co.quotationLineId = ql[0]!.id;
 
+  /*
+   * 🔒 Phân công phải thuộc một đơn ĐANG SỬA, không phải phân công cũ nhất.
+   *
+   * `ORDER BY planned_start LIMIT 1` chọn cái sớm nhất về thời gian — và seed
+   * Phase 3 thêm những phân công ĐÃ XONG đặt ở quá khứ, nên chúng chiếm vị trí
+   * đầu. Bài kiểm "vai được phép không bị 403" khi đó thao tác lên một phân
+   * công của đơn đã chờ thanh toán, và bị chặn vì lý do chẳng liên quan gì tới
+   * phân quyền.
+   *
+   * Nói ra điều kiện thật: bài này cần một phân công còn thao tác được.
+   */
   const { rows: wa } = await pool.query<{ id: string; technician_id: string; bay_id: string }>(
-    `SELECT id, technician_id, bay_id FROM work_assignment
-      WHERE tenant_id = $1 ORDER BY planned_start LIMIT 1`,
+    `SELECT w.id, w.technician_id, w.bay_id FROM work_assignment w
+       JOIN repair_order r ON r.id = w.repair_order_id
+      WHERE w.tenant_id = $1 AND r.status = 'IN_PROGRESS'
+      ORDER BY w.planned_start LIMIT 1`,
     [TENANT_A],
   );
+  assert.ok(wa[0], 'seed không còn phân công nào của đơn đang sửa');
   co.assignmentId = wa[0]!.id;
   co.technicianId = wa[0]!.technician_id;
   co.bayId = wa[0]!.bay_id;

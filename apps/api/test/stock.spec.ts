@@ -650,8 +650,22 @@ describe('🔒 Giữ chỗ — Phase 2.2 (BC-04)', () => {
     );
 
     // Dòng công làm cha — INV-Q-02 bắt buộc phụ tùng phải gắn vào một hạng mục
+    /*
+     * 🔒 Hạng mục phải ÁP DỤNG ĐƯỢC cho chiếc xe vừa dựng (ICE).
+     *
+     * `LIMIT 1` trần chọn theo thứ tự vật lý của bảng — thứ tự đó khác nhau
+     * giữa database đã dùng lâu và database mới tinh. Trên CI (container mới
+     * mỗi lượt) nó trúng "Cập nhật phần mềm điều khiển", hạng mục chỉ dành cho
+     * xe điện, và INV-V-01 chặn ngay. Bài test đỏ vì fixture, ở một chỗ chẳng
+     * liên quan gì tới thứ nó định kiểm.
+     *
+     * `ORDER BY code` để tất định, và điều kiện powertrain để nói ra yêu cầu
+     * thật thay vì trông vào may rủi.
+     */
     const { rows: sv } = await pool.query<{ id: string }>(
-      `SELECT id FROM service_item WHERE tenant_id = $1 LIMIT 1`,
+      `SELECT id FROM service_item
+        WHERE tenant_id = $1 AND 'ICE' = ANY(applicable_powertrains)
+        ORDER BY code LIMIT 1`,
       [TENANT_A],
     );
     const { rows: cha } = await pool.query<{ id: string }>(

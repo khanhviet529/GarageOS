@@ -360,16 +360,28 @@ describe('🔒 BC-12 — kiểm kê là lỗ hổng kiểm soát nội bộ lớ
 
   test('bài 6: đếm ít hơn phần ĐANG GIỮ CHỖ — chặn, và nói rõ đơn nào', async () => {
     const pt = await maHangRieng(10);
-    const { rows: ro } = await pool.query<{ id: string; code: string }>(
-      `SELECT ro.id, ro.code FROM repair_order ro
-        WHERE ro.tenant_id = $1 AND ro.status NOT IN ('DELIVERED','CANCELLED') LIMIT 1`,
+    /*
+     * 🔒 Chọn đơn và dòng phụ tùng trong MỘT truy vấn.
+     *
+     * Bản trước chọn đơn trước, rồi tìm dòng PART của đơn đó. Hai bước, và
+     * bước hai có thể không tìm thấy gì — đơn được chọn có thể chỉ có dòng
+     * công. Khi đó `ql[0]` là undefined và câu INSERT sau ném "null value in
+     * column quotation_line_id", một thông báo không nói gì về nguyên nhân.
+     *
+     * Hỏi thẳng "đơn nào CÓ dòng phụ tùng" thì không có bước hai để hụt.
+     */
+    const { rows: ql } = await pool.query<{ id: string; ro_id: string; ro_code: string }>(
+      `SELECT ql.id, ro.id AS ro_id, ro.code AS ro_code
+         FROM quotation_line ql
+         JOIN quotation q ON q.id = ql.quotation_id
+         JOIN repair_order ro ON ro.id = q.repair_order_id
+        WHERE ro.tenant_id = $1 AND ro.status NOT IN ('DELIVERED','CANCELLED')
+          AND ql.line_type = 'PART'
+        ORDER BY ro.code, ql.seq LIMIT 1`,
       [TENANT_A],
     );
-    const { rows: ql } = await pool.query<{ id: string }>(
-      `SELECT ql.id FROM quotation_line ql JOIN quotation q ON q.id = ql.quotation_id
-        WHERE q.repair_order_id = $1 AND ql.line_type = 'PART' LIMIT 1`,
-      [ro[0]!.id],
-    );
+    assert.ok(ql[0], 'seed không còn đơn nào có dòng phụ tùng — bài này cần một cái');
+    const ro = [{ id: ql[0].ro_id, code: ql[0].ro_code }];
     await pool.query(
       `INSERT INTO stock_reservation (tenant_id, warehouse_id, part_id, repair_order_id,
                                       quotation_line_id, quantity, expires_at)
