@@ -53,9 +53,45 @@ console.log(`Chạy ${files.length} file test`);
  * lỗi tốn nhiều thời gian nhất để chẩn đoán. Đổi lấy vài giây chạy lâu hơn là
  * đánh đổi rẻ.
  */
+/*
+ * 🔒 Trên CI, BẮT lấy output thay vì để nó trôi thẳng ra stdout.
+ *
+ * Log của GitHub Actions cần token mới đọc được. Nên khi test đỏ trên CI, thứ
+ * duy nhất nhìn thấy từ bên ngoài là "exited (1)" — không tên bài, không thông
+ * điệp. Đã mất một buổi dựng lại toàn bộ điều kiện CI ở máy local chỉ để đoán.
+ *
+ * Annotation của check-run thì đọc được CÔNG KHAI. Nên ở đây in lại các dòng
+ * `not ok` dưới dạng `::error::`, và GitHub biến chúng thành annotation.
+ *
+ * Vẫn in nguyên output ra stdout: người có quyền đọc log không mất gì.
+ */
+const tenCI = process.env.CI === 'true';
 const r = spawnSync(
   'npx',
   ['tsx', '--test', '--test-concurrency=1', ...files],
-  { stdio: 'inherit', shell: true },
+  tenCI
+    ? { encoding: 'utf8', shell: true }
+    : { stdio: 'inherit', shell: true },
 );
+
+if (tenCI) {
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  process.stdout.write(out);
+
+  if ((r.status ?? 1) !== 0) {
+    const dong = out.split('\n');
+    for (const [i, l] of dong.entries()) {
+      // `not ok 12 - tên bài` — bỏ qua dòng của suite cha, chúng chỉ nói
+      // "N subtests failed" và không thêm thông tin gì.
+      const m = /^\s*not ok \d+ - (.+)$/.exec(l);
+      if (m === null || /subtest/.test(dong[i + 4] ?? '')) continue;
+      // Thông điệp lỗi nằm ở khối YAML ngay dưới, trong trường `error:`
+      const ctx = dong.slice(i + 1, i + 12).join('\n');
+      const loi = /error:\s*(?:\|-?\s*\n)?\s*'?(.+?)'?\s*$/m.exec(ctx);
+      const chiTiet = loi === null ? '' : ` — ${loi[1]}`;
+      console.log(`::error title=Test đỏ::${m[1]}${chiTiet}`.replace(/\r/g, ''));
+    }
+  }
+}
+
 process.exit(r.status ?? 1);
