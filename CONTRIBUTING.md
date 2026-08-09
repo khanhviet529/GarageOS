@@ -19,9 +19,23 @@
 **Quy tắc:**
 
 - 🔒 **Không push thẳng vào `main`.** Mọi thay đổi đi qua nhánh riêng.
+- 🔒 **Đẩy `main` lên remote NGAY sau mỗi lần merge lát cắt.** Không đợi ai nhắc.
 - Một nhánh = một lát cắt dọc ([15-roadmap.md](docs/15-roadmap.md)), không gộp nhiều việc.
 - Mô tả nhánh **không dấu**, kebab-case, ≤ 5 từ.
-- Xoá nhánh sau khi merge.
+- Xoá nhánh sau khi merge — cả local lẫn remote.
+
+⚠️ **Vì sao quy tắc "đẩy ngay" đứng ngang hàng với những quy tắc còn lại:** đã
+có lúc bốn lát cắt liên tiếp (Phase 5, 6, 8, 3) được merge vào `main` ở local mà
+**không lần nào đẩy lên**. Quy trình chạy đúng tới bước áp chót rồi dừng, và
+không có gì báo động vì `git log` ở local trông hoàn toàn bình thường.
+
+Hai cái giá, cái thứ hai nặng hơn:
+
+- Toàn bộ công việc chỉ nằm trên **một máy** — ổ hỏng là mất sạch.
+- Người cùng làm mở GitHub ra thấy dự án **dừng ở Phase 4**, trong khi thực tế
+  đã xong tới Phase 8. Họ không có cách nào biết mình đang nhìn một bản cũ.
+
+💡 "Merge xong" không phải là xong. **Xong là khi người khác thấy được.**
 
 ## 2. Quy ước commit
 
@@ -111,7 +125,7 @@ Bất biến: INV-S-01
 5. /codex-review          ← review độc lập + phản biện
 6. Sửa các CONFIRMED
 7. Commit theo quy ước
-8. Merge vào main, xoá nhánh
+8. Merge vào main, ĐẨY LÊN REMOTE, xoá nhánh
 ```
 
 🔒 **Bước 5 không được bỏ qua** với bất kỳ thay đổi nào chạm: kho, tiền, phân
