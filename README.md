@@ -254,7 +254,7 @@ Mở http://localhost:3000, đăng nhập `0901000003` / `demo1234` (cố vấn 
 Trang đăng nhập liệt kê sẵn các tài khoản demo khác.
 
 ```bash
-pnpm test           # 395 test tích hợp trên Postgres THẬT — cần API đang chạy
+pnpm test           # 451 test tích hợp trên Postgres THẬT — cần API đang chạy
 pnpm e2e            # 69 kịch bản Playwright — cần cả API lẫn web
 ```
 
@@ -278,7 +278,7 @@ constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
 
 | | |
 |---|---|
-| Test tích hợp (Postgres thật) | 395 |
+| Test tích hợp (Postgres thật) | 451 |
 | E2E Playwright | 69 |
 | Migration SQL viết tay | 48 |
 | Vòng codex-review | 6 · 17 phát hiện · 17 xác nhận |

@@ -46,7 +46,7 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 395 (domain 12, db 42, api 341) |
+| Test tự động | 451 (domain 12, db 42, api 397) |
 | E2E Playwright | 69 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
 | Migration | 48 |
 | Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
@@ -121,6 +121,22 @@ không có ngoại lệ nào được ném. Với báo cáo, "không lỗi" khô
 | Thu tiền trùng trả về 500 thay vì thành công | Thiếu `SAVEPOINT` quanh INSERT đụng UNIQUE. Đúng cái bẫy đã ghi thành comment ở `repair-order.service.ts` từ Phase 1 — **dẫm lại lần thứ ba** |
 | Bài quét "cột tiền có chặn trên" đỏ vì hai view | `information_schema.columns` gồm cả VIEW, mà view không gắn CHECK được. Không lọc `relkind = 'r'` thì mỗi view báo cáo mới sẽ làm test đỏ với một yêu cầu không thực hiện nổi |
 | Mọi bài thanh toán đỏ với `OVERPAY` | Helper trong test phân bổ cả tổng hoá đơn vào `lines[0]` — dòng công trị giá 412.500. Không phải lỗi mã nguồn: chính INV-M-04 đang làm việc, không thu quá số phải thu CỦA TỪNG DÒNG |
+
+## Hàng rào quét toàn bộ — bốn cái, và vì sao chúng đáng giá
+
+Bốn bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
+NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ sót:
+
+| Hàng rào | Đối chiếu với | Đã bắt được |
+|---|---|---|
+| `ma-tran-quyen.spec.ts` | `ACTION_ROLES` | Mọi quyền mới thêm mà quên viết kịch bản |
+| `tho-khong-thay-tien.spec.ts` | Mọi route `@Get` trong mã nguồn | Ba endpoint rò giá bán và đơn giá giờ công cho thợ |
+| `privileges.spec.ts` | `information_schema.role_table_grants` | Bốn bảng `GRANT UPDATE` không kèm cột, mỗi vòng review một bảng khác |
+| `schema-invariants.spec.ts` | `information_schema.columns` | Cột tiền không phải `bigint`, cột tiền thiếu chặn trên |
+
+💡 Điểm chung: **không cái nào có danh sách viết tay**. Danh sách viết tay chỉ
+bảo vệ được những gì người viết đã nghĩ ra — và bốn vòng review liên tiếp đã
+chứng minh điều đó bằng bốn lỗi cùng loại ở bốn bảng khác nhau.
 
 ## Nợ kỹ thuật đã biết
 

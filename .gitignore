@@ -20,3 +20,8 @@ test-results/
 playwright-report/
 e2e/screenshots/
 # docs/images/ KHÔNG bị bỏ qua — đó là ảnh minh hoạ trong README, chọn lọc thủ công
+
+# File dò tạm — dùng để thử một câu SQL rồi vứt.
+# Đã lọt vào ba commit của Phase 3 vì nó nằm trong `apps/api/` để `tsx` tìm được
+# `pg`. Chặn theo TÊN thay vì nhắc nhau nhớ xoá.
+probe.mjs
