@@ -54,29 +54,48 @@ export class PaymentService {
        * số doanh thu theo chi nhánh sẽ sai, và không ai phát hiện ra vì tổng
        * toàn chuỗi vẫn đúng.
        */
-      const params: unknown[] = [input.allocations.map((a) => a.invoiceLineId)];
+      const idDong = [...new Set(input.allocations.map((a) => a.invoiceLineId))];
+      const params: unknown[] = [idDong];
       const scope = appendBranchScope(actor, params, 'i');
-      const { rows: hd } = await tx.query<{ branch_id: string; customer_id: string; status: string; code: string }>(
-        `SELECT DISTINCT i.branch_id, i.customer_id, i.status::text AS status, i.code
+      /*
+       * 🔒 Đếm PHẢI đếm trên cùng tập đã lọc chi nhánh.
+       *
+       * Bản trước lấy hoá đơn có `appendBranchScope` nhưng đếm dòng bằng một
+       * truy vấn KHÔNG có phạm vi. Hai câu chạy trên hai tập khác nhau, nên
+       * một payload trộn một dòng HN01 với một dòng HCM01 đi lọt cả hai cửa:
+       * `hd` không rỗng (thấy dòng HN01), và số đếm vẫn khớp (đếm cả hai). Sau
+       * đó allocation được ghi cho CẢ dòng ngoài phạm vi.
+       *
+       * 💡 Một kiểm tra so hai tập KHÁC NHAU thì không kiểm gì cả — nó chỉ
+       *    trông như đang kiểm. Lấy về đúng những dòng nhìn thấy được, rồi đòi
+       *    số lượng phải đủ.
+       */
+      const { rows: dong } = await tx.query<{
+        id: string;
+        branch_id: string;
+        customer_id: string;
+        status: string;
+        code: string;
+      }>(
+        `SELECT l.id, i.branch_id, i.customer_id, i.status::text AS status, i.code
            FROM invoice_line l JOIN invoice i ON i.id = l.invoice_id
           WHERE l.id = ANY($1::uuid[]) ${scope}`,
         params,
       );
-      /*
-       * 🔒 Số dòng tìm thấy phải ĐỦ. Lọc theo chi nhánh làm những dòng ngoài
-       * phạm vi biến mất khỏi kết quả — nếu chỉ kiểm `length === 0` thì một
-       * khoản thu trộn dòng của hai chi nhánh sẽ đi qua với phần còn lại.
-       */
-      const { rows: dem } = await tx.query<{ n: string }>(
-        `SELECT count(*) AS n FROM invoice_line WHERE id = ANY($1::uuid[])`,
-        [input.allocations.map((a) => a.invoiceLineId)],
-      );
-      if (hd.length === 0) {
+      if (dong.length === 0) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy dòng hoá đơn để phân bổ');
       }
-      if (Number(dem[0]!.n) !== new Set(input.allocations.map((a) => a.invoiceLineId)).size) {
-        throw new BusinessError(ErrorCode.NOT_FOUND, 'Có dòng hoá đơn không tồn tại');
+      if (dong.length !== idDong.length) {
+        /*
+         * Không nói ra dòng thiếu là "không tồn tại" hay "của chi nhánh khác":
+         * phân biệt hai câu đó là một kênh dò tìm id hợp lệ ở chi nhánh khác.
+         */
+        throw new BusinessError(
+          ErrorCode.NOT_FOUND,
+          'Có dòng hoá đơn không tồn tại hoặc ngoài phạm vi của bạn',
+        );
       }
+      const hd = dong;
       const chuaPhatHanh = hd.find((h) => h.status === 'DRAFT' || h.status === 'CANCELLED');
       if (chuaPhatHanh !== undefined) {
         throw new BusinessError(

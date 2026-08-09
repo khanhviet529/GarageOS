@@ -22,3 +22,4 @@ Vì sao giữ lại:
 | 2026-08-02 | [Phase 1.5 — tra cứu công khai](2026-08-02-phase-1.5-tra-cuu-cong-khai.md) | 4 | 4 CONFIRMED — nặng nhất là link tra cứu không bao giờ hết hạn, dù tài liệu đã ghi rõ 30 ngày |
 | 2026-08-02 | [Phase 1.6 — máy trạng thái](2026-08-02-phase-1.6-may-trang-thai.md) | 2 | 2 CONFIRMED — cả hai thuộc loại "code không làm điều hợp đồng hứa"; một cái lộ ra lỗi mô hình dữ liệu sâu hơn |
 | 2026-08-02 | [Rà soát TOÀN dự án — 6 reviewer song song](2026-08-02-ra-soat-toan-du-an.md) | ~50 | Audit toàn trạng thái thay vì review diff. Nặng nhất: `hasRole()` tồn tại mà không nơi nào gọi — thợ làm được mọi việc của cố vấn |
+| 2026-08-09 | [Phase 3 — tiền](2026-08-09-phase-3-tien.md) | 3 | 2 CONFIRMED (phạm vi chi nhánh lần thứ **bảy**; hai phiếu kiểm kê đồng thời), 1 REFUTED bằng test xanh |

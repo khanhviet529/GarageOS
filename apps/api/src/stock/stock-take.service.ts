@@ -106,20 +106,42 @@ export class StockTakeService {
       );
       const code = `ST-${new Date().getFullYear()}-${String(n[0]!.n).padStart(4, '0')}`;
 
-      const { rows: st } = await tx.query<{ id: string }>(
-        `INSERT INTO stock_take (tenant_id, warehouse_id, code, scope, scope_category,
-                                 status, snapshot_at, started_by_user_id)
-         VALUES ($1,$2,$3,$4,$5,'COUNTING', now(), $6) RETURNING id`,
-        [
-          actor.tenantId,
-          input.warehouseId,
-          code,
-          input.scope,
-          input.scopeCategory ?? null,
-          actor.userId,
-        ],
-      );
-      const id = st[0]!.id;
+      /*
+       * 🔒 SAVEPOINT quanh INSERT, vì sau nó còn nhiều truy vấn nữa.
+       *
+       * Câu kiểm ở trên chỉ lo phần THÔNG BÁO ĐẸP cho trường hợp thường gặp.
+       * Chặn THẬT nằm ở `uniq_stock_take_dang_mo` (0050): giữa SELECT và INSERT
+       * có một khe hở, và hai request song song đi lọt qua nó — đã kiểm chứng
+       * bằng `test/codex-vong-2.spec.ts`, hai phiếu cùng mở trên một kho.
+       */
+      await tx.query('SAVEPOINT tao_phieu');
+      let id: string;
+      try {
+        const { rows: st } = await tx.query<{ id: string }>(
+          `INSERT INTO stock_take (tenant_id, warehouse_id, code, scope, scope_category,
+                                   status, snapshot_at, started_by_user_id)
+           VALUES ($1,$2,$3,$4,$5,'COUNTING', now(), $6) RETURNING id`,
+          [
+            actor.tenantId,
+            input.warehouseId,
+            code,
+            input.scope,
+            input.scopeCategory ?? null,
+            actor.userId,
+          ],
+        );
+        id = st[0]!.id;
+      } catch (e) {
+        await tx.query('ROLLBACK TO SAVEPOINT tao_phieu');
+        const err = e as { code?: string; constraint?: string };
+        if (err.code === '23505' && err.constraint === 'uniq_stock_take_dang_mo') {
+          throw new BusinessError(
+            ErrorCode.INVALID_STATE_TRANSITION,
+            'Kho này vừa có người mở phiếu kiểm kê. Tải lại để xem phiếu đang mở.',
+          );
+        }
+        throw e;
+      }
 
       /*
        * 🔒 Sinh dòng cho MỌI mã hàng đang có số dư, kể cả số dư 0.

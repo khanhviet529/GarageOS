@@ -155,20 +155,32 @@ after(async () => {
    * kết nối quản trị — và đó là điều đúng. Dọn dẹp trong test cũng phải đi qua
    * cùng một cửa, không có lối tắt riêng.
    */
-  await pool.query(
-    // Về COUNTING chứ không PENDING_APPROVAL: chuyển sang PENDING_APPROVAL sẽ
-    // kích `kiem_tra_kiem_ke_du_ly_do` và phiếu nào còn dòng chưa đếm sẽ chặn.
-    `UPDATE stock_take SET status = 'COUNTING'
-      WHERE id IN (SELECT DISTINCT l.stock_take_id FROM stock_take_line l
-                     JOIN part p ON p.id = l.part_id WHERE p.sku LIKE $1)`,
+  /*
+   * 🔒 MỘT phiếu một lượt, không mở khoá cả loạt.
+   *
+   * `uniq_stock_take_dang_mo` (0050) chỉ cho mỗi kho một phiếu đang mở. Bản
+   * trước `UPDATE ... WHERE id IN (...)` kéo tất cả phiếu của bộ test này về
+   * COUNTING cùng lúc — mà chúng dùng chung một kho, nên câu dọn dẹp đụng ngay
+   * ràng buộc vừa thêm.
+   *
+   * Đây là dấu hiệu tốt, không phải phiền toái: dọn dẹp trong test đi qua đúng
+   * cửa mà mã nguồn thật đi qua, nên nó cũng gặp đúng ràng buộc.
+   */
+  const { rows: phieu } = await pool.query<{ id: string }>(
+    `SELECT DISTINCT l.stock_take_id AS id FROM stock_take_line l
+       JOIN part p ON p.id = l.part_id WHERE p.sku LIKE $1`,
     [`PT-KK-${uniq}%`],
   );
+  for (const p of phieu) {
+    // Về COUNTING chứ không PENDING_APPROVAL: chuyển sang PENDING_APPROVAL sẽ
+    // kích `kiem_tra_kiem_ke_du_ly_do` và phiếu nào còn dòng chưa đếm sẽ chặn.
+    await pool.query(`UPDATE stock_take SET status = 'COUNTING' WHERE id = $1`, [p.id]);
+    await pool.query(`DELETE FROM stock_take_line WHERE stock_take_id = $1`, [p.id]);
+    await pool.query(`UPDATE stock_take SET status = 'CANCELLED' WHERE id = $1`, [p.id]);
+  }
   await pool.query(
     `DELETE FROM stock_take_line WHERE part_id IN (SELECT id FROM part WHERE sku LIKE $1)`,
     [`PT-KK-${uniq}%`],
-  );
-  await pool.query(
-    `UPDATE stock_take SET status = 'CANCELLED' WHERE status = 'COUNTING'`,
   );
   await pool.end();
 });

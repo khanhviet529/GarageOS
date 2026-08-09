@@ -46,11 +46,11 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 479 (domain 12, db 42, api 425) |
+| Test tự động | 482 (domain 12, db 42, api 428) |
 | E2E Playwright | 73 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 49 |
-| Vòng review đã chạy | 6 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
-| Phát hiện đã xử lý | 17 + ~50 |
+| Migration | 50 |
+| Vòng review đã chạy | 7 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
+| Phát hiện đã xử lý | 19 + ~50 |
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -169,6 +169,36 @@ endpoint tương đương.**
    sau `withTenant(` — và ĐỎ trên mã nguồn đã đúng. Regex không phân biệt được
    "nằm trong lời gọi" với "nằm sau lời gọi". **Một bài kiểm nói sai về điều nó
    đo còn tệ hơn không có bài kiểm**, vì nó bắt người ta sửa mã đang đúng.
+
+## Vòng `/codex-review` thứ bảy — Phase 3, ba phát hiện, hai đúng
+
+Codex dùng lại được từ 2026-08-09. Vòng này review toàn bộ Phase 3 cộng các bản
+vá sau đó (44 file, 8.274 dòng). Bản ghi đầy đủ ở
+[`docs/reviews/2026-08-09-phase-3-tien.md`](docs/reviews/2026-08-09-phase-3-tien.md).
+
+| ID | Vị trí | Kết luận | Phân xử bằng |
+|---|---|---|---|
+| BRANCH-001 | `payment.service.ts` | ✅ CONFIRMED | Test đỏ: HTTP 201, tiền vào dòng chi nhánh khác |
+| PAYMENT-001 | `payment.service.ts` | ❌ REFUTED | Test xanh: đúng 1/2 request thành công |
+| STOCKTAKE-001 | `stock-take.service.ts` | ✅ CONFIRMED | Test đỏ: 2 phiếu cùng mở trên một kho |
+
+🔒 **BRANCH-001 là lần thứ BẢY của cùng một lỗi phạm vi chi nhánh** — và nó nằm
+ngay trong đoạn code tôi vừa tự review xong, ngay sau khi dựng hàng rào để canh
+đúng loại lỗi đó. Hàng rào không bắt được vì nó chỉ thử **đọc thẳng bằng id chi
+nhánh khác**; lỗ này nằm ở một payload **TRỘN** một id hợp lệ với một id ngoài
+phạm vi. Hàng rào chỉ tìm được lỗi thuộc loại nó biết đặt câu hỏi.
+
+⚠️ Comment ngay trên đoạn hỏng **tuyên bố** nó kiểm số dòng cho đủ, đúng vì lo
+chính kịch bản đó. Nó kiểm thật — nhưng kiểm trên một tập KHÁC. **Một kiểm tra
+so hai tập khác nhau thì không kiểm gì cả.** Lần thứ hai trong dự án một comment
+sống sót qua nhiều vòng đọc vì người đọc tin comment thay vì đọc câu SQL.
+
+💡 PAYMENT-001 bị bác bỏ, nhưng bài test được **giữ lại và đáng giá hơn cả hai
+bài kia**: hoá đơn được bảo vệ nhờ `trg_hoa_don_theo_tien` chạy TRƯỚC
+`trg_khong_thu_qua` (thứ tự chữ cái) và tình cờ giành khoá dòng hoá đơn. Đó là
+bảo vệ TÌNH CỜ, không phải có thiết kế — đổi tên trigger hoặc tối ưu nó thành
+"chỉ UPDATE khi status đổi" là lỗ hổng Codex mô tả thành thật. Bài test canh
+đúng điều kiện đó.
 
 ## Hàng rào quét toàn bộ — năm cái, và vì sao chúng đáng giá
 
@@ -295,8 +325,9 @@ sửa và có test hồi quy:
 | **Huỷ đơn** không nhả chỗ → hàng treo vĩnh viễn | `on_hand` vẫn đúng nên đối soát INV-S-02 vẫn xanh. Chỉ thủ kho nhận ra, sau vài tuần. Comment ở 0027 đã liệt kê huỷ đơn là một đường nhả chỗ — viết ra được mà vẫn quên nối |
 | Giữ chỗ **một phần** không bao giờ được bù nốt | `NOT EXISTS` bỏ qua cả dòng nếu đã có bản ghi nào. Đơn kẹt ở `AWAITING_PARTS` kể cả khi kho đã đầy hàng trở lại (BC-04 mục 5.1 bước 5) |
 
-🔒 Khi Codex dùng lại được, **chạy review cho lát cắt này trước** — tự rà soát
-không thay được một con mắt không có sẵn kết luận trong đầu.
+🔒 Codex dùng lại được từ **2026-08-09**, và vòng đầu tiên (Phase 3) đã chứng
+minh đúng điều này: nó tìm ra hai lỗi thật trong đoạn code vừa được tự review
+xong. **Phase 2.2–2.7 và Phase 4 vẫn còn nợ** — chạy tiếp.
 
 ## Quy trình bắt buộc
 
