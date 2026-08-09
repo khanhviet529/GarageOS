@@ -15,6 +15,14 @@ coverage/
 .claude/codex-review/self-notes.md
 .claude/codex-review/verdict.md
 
+# Cấu hình Claude Code riêng của từng máy: chứa đường dẫn binary Codex kèm mã
+# hash, và mã hash đó đổi mỗi lần app cập nhật. Commit lên chỉ tổ làm máy khác
+# trỏ vào một đường dẫn không tồn tại.
+# 💡 Bản ghi review thì KHÁC — nó nằm ở `docs/reviews/` và có vào git, vì đó là
+#    bằng chứng vòng review đã chạy thật.
+.claude/settings.json
+.claude/settings.local.json
+
 # Playwright
 test-results/
 playwright-report/
