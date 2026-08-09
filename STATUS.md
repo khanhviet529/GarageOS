@@ -266,7 +266,6 @@ Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng 
 | Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
 | Lịch xưởng vẽ ô theo giờ TRÌNH DUYỆT, không theo `branch.timezone` | Seed đặt việc theo giờ chi nhánh, giao diện đọc theo giờ máy người xem. Trùng nhau ở Việt Nam, lệch 7 tiếng trên CI — việc xếp 8h sáng thành 1h sáng và rơi ra ngoài khung 7–18h. Đã ghim `timezoneId` cho Playwright để CI tất định, nhưng cột `branch.timezone` vẫn chưa được giao diện dùng tới. Sửa đúng là vẽ lịch theo múi giờ chi nhánh |
-| Ba bài test bấm giờ không chạy lại được nếu chưa seed lại | Chúng mở một đoạn giờ ở `now() − 90 phút` cho **người thợ của seed**, nên chạm `no_timelog_overlap` với đoạn giờ mà lượt trước (hoặc bộ E2E) để lại. CI seed một lần rồi chạy một lần nên vẫn xanh; chạy tay hai lượt liên tiếp thì đỏ ba bài — `pnpm db:seed` trước là xong. Sửa đúng là mỗi bài tự dựng thợ của mình |
 | Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
 | Chưa có test kiến trúc chặn `withTenantId` / `queryWithoutTenant` dùng sai chỗ | Hai hàm này mở đường đi ngoài ngữ cảnh tenant. Hiện chỉ `PublicTrackingService` gọi, nhưng không có gì bắt buộc điều đó |
 | Chưa upload ảnh hiện trạng thật | Cần lưu trữ đối tượng (S3/MinIO). Bảng và quyền đã dựng đúng, giao diện đang hiện cảnh báo thay vì giả vờ có |
@@ -281,6 +280,7 @@ Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng 
 
 | Nợ | Trả bằng |
 |---|---|
+| Ba bài test bấm giờ đỏ nếu chạy lượt hai mà chưa seed lại | `before()` của `time-log.spec.ts` và `huy-don.spec.ts` đóng mọi đoạn giờ còn mở — đúng việc `dong_ho_gio_bo_quen()` làm trong đời thật. Một đoạn chưa đóng kéo dài tới vô cùng nên chồng lên mọi đoạn khác của cùng người thợ; một lượt chạy hỏng giữa chừng làm MỌI lượt sau đỏ, ở những bài chẳng liên quan. Đã báo động nhầm hai lần trong một ngày |
 | Token đăng nhập để trong `localStorage` | Cookie `HttpOnly` + xoay vòng refresh token + chống CSRF. Điểm mấu chốt không phải "web đừng lưu token" mà là **máy chủ không gửi token cho web nữa** — không có gì để lưu. App thợ xin token bằng `X-Auth-Mode: token` vì Expo không dùng cookie đáng tin được. 10 bài ở `phien-cookie.spec.ts` |
 | Thuế suất nhận từ client | 0022 mục B. Phụ tùng lấy `price_list_item.tax_rate_percent` (cột có từ 0008, chưa ai đọc); dòng công lấy `tenant.default_tax_rate_percent` (cột mới — VAT là chính sách cấp doanh nghiệp, đổi thì sửa một chỗ) |
 | PR-03 không được enforce | `assertDiscountWithinAuthority()` trong `QuotationService`. Kiểm theo TỪNG DÒNG: chiết khấu % của cả tờ báo giá là trung bình có trọng số của các dòng, nên kiểm từng dòng vừa chặt hơn vừa không tách nhỏ để lách được |
