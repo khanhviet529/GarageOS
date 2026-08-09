@@ -1142,6 +1142,48 @@ async function main(): Promise<void> {
     [bgLech[0]!.id],
   );
 
+  /*
+   * 🔒 Hai hạng mục này phải có phân công ĐÃ XONG, không được để trống.
+   *
+   * Đơn đang ở AWAITING_PAYMENT — nghĩa là đã sửa xong, đã qua kiểm tra chất
+   * lượng, chỉ còn chờ thu tiền. Một đơn như vậy mà không có việc nào đã làm là
+   * dữ liệu tự mâu thuẫn.
+   *
+   * ⚠️ Và nó KHÔNG chỉ là chuyện thẩm mỹ. Danh sách "việc chờ xếp" lấy mọi dòng
+   *    công đã duyệt chưa có phân công, của đơn chưa giao — rồi `ORDER BY
+   *    ro.received_at`. Đơn này nhận cách đây một ngày nên **nhảy lên đầu danh
+   *    sách**, và mọi bộ E2E lấy mục ĐẦU TIÊN đều đổi mục tiêu sang nó. Hai bộ
+   *    đã đỏ trên CI vì đúng chuyện đó, trong khi ở máy dev vẫn xanh — chênh
+   *    lệch múi giờ khiến việc bị xếp nhầm rơi ra ngoài khung giờ hiển thị.
+   *
+   * 💡 `STATUS.md` đã ghi cái bẫy "bộ E2E đói dữ liệu lẫn nhau" từ Phase 4.
+   *    Lần này nó quay lại theo hướng ngược: không phải seed cho ÍT quá, mà là
+   *    seed thêm dữ liệu chen vào ĐẦU một danh sách có thứ tự.
+   *
+   * Trạng thái DONE nằm ngoài `no_bay_overlap` / `no_technician_overlap` (chỉ
+   * áp cho SCHEDULED/IN_PROGRESS/PAUSED), nên xếp vào quá khứ không đụng ai.
+   */
+  const { rows: khoangLech } = await db.query<{ id: string }>(
+    `SELECT id FROM bay WHERE tenant_id = $1 AND branch_id = $2 ORDER BY code LIMIT 1`,
+    [TENANT_A, chiNhanhHD],
+  );
+  const { rows: thoLech } = await db.query<{ id: string }>(
+    `SELECT id FROM app_user WHERE tenant_id = $1 AND phone = '0901000004'`,
+    [TENANT_A],
+  );
+  for (const [i, dongId] of dongBaoGia.entries()) {
+    await db.query(
+      `INSERT INTO work_assignment (tenant_id, repair_order_id, quotation_line_id,
+                                    technician_id, bay_id, planned_start, planned_end,
+                                    status, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,
+               now() - interval '5 day' + make_interval(hours => $6::int),
+               now() - interval '5 day' + make_interval(hours => $6::int) + interval '1 hour',
+               'DONE',$7)`,
+      [TENANT_A, donLech[0]!.id, dongId, thoLech[0]!.id, khoangLech[0]!.id, i * 2, nguoiTao],
+    );
+  }
+
   const { rows: hdNhap } = await db.query<{ id: string }>(
     `INSERT INTO invoice (tenant_id, branch_id, repair_order_id, customer_id, code,
                           created_by_user_id)

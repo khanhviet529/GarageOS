@@ -31,5 +31,26 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     viewport: { width: 1280, height: 900 },
     locale: 'vi-VN',
+    /*
+     * 🔒 Ghim múi giờ, đừng để nó theo máy chạy test.
+     *
+     * Lịch xưởng vẽ ô theo `new Date(plannedStart).getHours()` — tức GIỜ TRÌNH
+     * DUYỆT. Còn seed đặt việc theo `branch.timezone` (Asia/Ho_Chi_Minh), vì
+     * ngày làm việc của một xưởng là ngày ở nơi xưởng đứng.
+     *
+     * Hai cái đó trùng nhau trên máy dev ở Việt Nam và LỆCH 7 TIẾNG trên CI
+     * (UTC). Việc xếp lúc 8h sáng thành 1h sáng, rơi ra ngoài khung 7–18h, ô
+     * lịch rỗng — và bài test tìm nút "Kiểm tra" đỏ với thông báo không nói gì
+     * về múi giờ.
+     *
+     * Ghim vào giờ Việt Nam vì đó là thực tế của sản phẩm: một tiệm sửa xe ở
+     * Việt Nam, `docs/00-vision.md` đã gạch "đa ngôn ngữ / đa tiền tệ" khỏi
+     * phạm vi. Test chạy ở đâu cũng phải thấy đúng cái người dùng thấy.
+     *
+     * ⚠️ Nhưng việc lịch xưởng đọc giờ TRÌNH DUYỆT thay vì giờ CHI NHÁNH vẫn là
+     *    một giả định chưa được enforce — đã ghi vào phần nợ kỹ thuật của
+     *    STATUS.md. Ghim ở đây làm CI tất định, không làm giả định đó biến mất.
+     */
+    timezoneId: 'Asia/Ho_Chi_Minh',
   },
 });

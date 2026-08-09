@@ -265,6 +265,7 @@ Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng 
 
 | Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
+| Lịch xưởng vẽ ô theo giờ TRÌNH DUYỆT, không theo `branch.timezone` | Seed đặt việc theo giờ chi nhánh, giao diện đọc theo giờ máy người xem. Trùng nhau ở Việt Nam, lệch 7 tiếng trên CI — việc xếp 8h sáng thành 1h sáng và rơi ra ngoài khung 7–18h. Đã ghim `timezoneId` cho Playwright để CI tất định, nhưng cột `branch.timezone` vẫn chưa được giao diện dùng tới. Sửa đúng là vẽ lịch theo múi giờ chi nhánh |
 | Ba bài test bấm giờ không chạy lại được nếu chưa seed lại | Chúng mở một đoạn giờ ở `now() − 90 phút` cho **người thợ của seed**, nên chạm `no_timelog_overlap` với đoạn giờ mà lượt trước (hoặc bộ E2E) để lại. CI seed một lần rồi chạy một lần nên vẫn xanh; chạy tay hai lượt liên tiếp thì đỏ ba bài — `pnpm db:seed` trước là xong. Sửa đúng là mỗi bài tự dựng thợ của mình |
 | Token đăng nhập để trong `localStorage` | Phase 1 là bản chạy được để review. Cookie HttpOnly + refresh token là việc của Phase 6 |
 | Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
