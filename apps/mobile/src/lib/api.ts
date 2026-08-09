@@ -159,8 +159,17 @@ export const api = {
   gioCong: (assignmentId: string) =>
     goi<GioCong>('GET', `/api/v1/assignments/${assignmentId}/time`),
 
+  /*
+   * 🔒 Trường trả về là `id`, không phải `segmentId`.
+   *
+   * Bản trước khai `segmentId` — một cái tên API chưa bao giờ trả. Không màn
+   * hình nào đọc nó nên không có gì hỏng, và đó chính là chỗ nguy: một lời khai
+   * kiểu SAI mà trình biên dịch vẫn cho qua, nằm chờ người đầu tiên tin nó.
+   * Cùng họ với bản sao bảng chuyển trạng thái ở web — hai bản cài đặt của một
+   * hợp đồng, và bản không ai chạy là bản trôi đi.
+   */
   batDau: (workAssignmentId: string) =>
-    goi<{ segmentId: string }>('POST', '/api/v1/time-logs/start', { workAssignmentId }),
+    goi<{ id: string }>('POST', '/api/v1/time-logs/start', { workAssignmentId }),
 
   /** Bỏ trống `reason` = hoàn thành; có lý do = tạm dừng */
   ketThuc: (workAssignmentId: string, reason?: string, note?: string) =>

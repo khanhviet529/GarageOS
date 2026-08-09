@@ -46,11 +46,11 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 482 (domain 12, db 42, api 428) |
+| Test tự động | 487 (domain 12, db 42, api 433) |
 | E2E Playwright | 73 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 50 |
-| Vòng review đã chạy | 7 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
-| Phát hiện đã xử lý | 19 + ~50 |
+| Migration | 51 |
+| Vòng review đã chạy | 9 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
+| Phát hiện đã xử lý | 24 + ~50 |
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -200,9 +200,46 @@ bảo vệ TÌNH CỜ, không phải có thiết kế — đổi tên trigger ho
 "chỉ UPDATE khi status đổi" là lỗ hổng Codex mô tả thành thật. Bài test canh
 đúng điều kiện đó.
 
-## Hàng rào quét toàn bộ — năm cái, và vì sao chúng đáng giá
+## Vòng thứ tám và thứ chín — trả nốt nợ review, và một chỗ ghi XUYÊN TENANT
 
-Năm bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
+Phase 2.2–2.7 và Phase 4 là hai lát cắt cuối cùng chưa có reviewer độc lập. Chạy
+cả hai trong một buổi. Bản ghi:
+[`docs/reviews/2026-08-09-phase-2.2-2.7-va-phase-4.md`](docs/reviews/2026-08-09-phase-2.2-2.7-va-phase-4.md).
+
+**Năm phát hiện, cả năm đúng, không cái nào bị bác bỏ.**
+
+| ID | Vị trí | Vấn đề |
+|---|---|---|
+| R-002 | `0030_time_log.sql` | 🔴 Đóng giờ hộ **ghi xuyên tenant** |
+| R-001 | `0030_time_log.sql` | Đóng đoạn giờ nhưng để phân công kẹt `IN_PROGRESS` |
+| R-003 | `reserve-parts.ts` | Nhả giữ chỗ không khoá theo thứ tự `part_id` |
+| R-004 | `public-tracking.service.ts` | Cờ duyệt phát sinh suy ra từ SỐ TIỀN |
+| MOBILE-001 | `apps/mobile/src/lib/api.ts` | App thợ khai `segmentId`, API trả `id` |
+
+🔒 **R-002 là chỗ DUY NHẤT trong toàn hệ thống INV-T-01 bị phá**, và lý do nó
+sống sót đáng nhớ hơn bản thân lỗi:
+
+```
+function owner: garageos   rolsuper: true   rolbypassrls: true
+```
+
+`SECURITY DEFINER` được thêm vào để hàm *ghi được* `time_log` — và cùng lúc đó
+nó lặng lẽ **gỡ mất RLS**. Với một vai `BYPASSRLS` thì `FORCE ROW LEVEL
+SECURITY` cũng không cứu. Một garage bấm "đóng giờ bỏ quên" đóng luôn các đoạn
+giờ đang chạy của MỌI garage khác.
+
+💡 **Cái giá của `SECURITY DEFINER` không nằm ở quyền nó cho thêm, mà ở lớp bảo
+vệ nó lấy đi.** Các hàm `SECURITY DEFINER` khác trong dự án đều là trigger chỉ
+chạm đúng dòng `NEW`/`OLD` nên mang sẵn ngữ cảnh tenant; hàm này là hàm duy nhất
+quét CẢ BẢNG — và đó chính là hàm không được phép thiếu bộ lọc.
+
+⚠️ Bốn trong năm phát hiện nằm ở lát cắt **đã tự rà soát đối kháng** rồi (2.2 tự
+tìm ra ba lỗi, 4.5 tự vá ba lỗ rò tiền). Tự rà soát không thay được một con mắt
+không có sẵn kết luận trong đầu — giờ đã có bằng chứng, không còn là khẩu hiệu.
+
+## Hàng rào quét toàn bộ — sáu cái, và vì sao chúng đáng giá
+
+Sáu bài test không kiểm một tính năng nào cả. Chúng đối chiếu mã nguồn với
 NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ sót:
 
 | Hàng rào | Đối chiếu với | Đã bắt được |
@@ -212,6 +249,7 @@ NGUỒN SỰ THẬT, và bắt được đúng loại lỗi mà đọc tay bỏ 
 | `privileges.spec.ts` | `information_schema.role_table_grants` | Bốn bảng `GRANT UPDATE` không kèm cột, mỗi vòng review một bảng khác |
 | `schema-invariants.spec.ts` | `information_schema.columns` | Cột tiền không phải `bigint`, cột tiền thiếu chặn trên |
 | `quet-pham-vi-chi-nhanh.spec.ts` | Mọi route có ghi trong controller | F-7: lịch sử liên hệ khách của đơn chi nhánh khác trả 200 |
+| `hop-dong-mobile.spec.ts` | Phản hồi THẬT của API | App thợ khai một trường mà API chưa bao giờ trả |
 
 💡 Điểm chung: **không cái nào có danh sách viết tay**. Danh sách viết tay chỉ
 bảo vệ được những gì người viết đã nghĩ ra — và bốn vòng review liên tiếp đã
@@ -325,9 +363,9 @@ sửa và có test hồi quy:
 | **Huỷ đơn** không nhả chỗ → hàng treo vĩnh viễn | `on_hand` vẫn đúng nên đối soát INV-S-02 vẫn xanh. Chỉ thủ kho nhận ra, sau vài tuần. Comment ở 0027 đã liệt kê huỷ đơn là một đường nhả chỗ — viết ra được mà vẫn quên nối |
 | Giữ chỗ **một phần** không bao giờ được bù nốt | `NOT EXISTS` bỏ qua cả dòng nếu đã có bản ghi nào. Đơn kẹt ở `AWAITING_PARTS` kể cả khi kho đã đầy hàng trở lại (BC-04 mục 5.1 bước 5) |
 
-🔒 Codex dùng lại được từ **2026-08-09**, và vòng đầu tiên (Phase 3) đã chứng
-minh đúng điều này: nó tìm ra hai lỗi thật trong đoạn code vừa được tự review
-xong. **Phase 2.2–2.7 và Phase 4 vẫn còn nợ** — chạy tiếp.
+✅ **Đã trả xong nợ** ngày 2026-08-09: Codex dùng lại được, và ba vòng chạy liên
+tiếp (Phase 3, Phase 2.2–2.7, Phase 4) tìm ra **bảy lỗi thật** — trong đó một
+chỗ ghi xuyên tenant. Mọi lát cắt của dự án giờ đều đã qua reviewer độc lập.
 
 ## Quy trình bắt buộc
 
