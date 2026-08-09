@@ -105,14 +105,27 @@ test.describe('Giờ công', () => {
     await expect(batDau).toBeVisible();
     await batDau.click();
 
-    // Đang chạy: nhãn phải nói ra, vì con số thực tế đang tăng
+    /*
+     * Đang chạy: nhãn phải nói ra, vì con số thực tế đang tăng.
+     *
+     * 🔒 `exact: true` không phải cho gọn. Tên khả truy cập của một ô LỊCH gồm
+     *    cả biển số, hạng mục, giờ, tên thợ VÀ nhãn trạng thái — nên
+     *    `name: 'đang làm'` (khớp chuỗi con) trúng luôn ô lịch của chính việc
+     *    vừa bấm, và Playwright báo strict mode violation.
+     *
+     *    Nó chỉ xảy ra khi việc đó rơi vào khung giờ lịch đang hiển thị, tức là
+     *    phụ thuộc múi giờ và giờ chạy test — xanh ở máy này, đỏ trên CI.
+     *
+     * 💡 Điều bài này muốn khẳng định là bảng giờ công có một ô ghi ĐÚNG "đang
+     *    làm", không phải "có chỗ nào đó trên trang chứa mấy chữ đó".
+     */
     await expect(page.getByText('đang chạy')).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'đang làm' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'đang làm', exact: true })).toBeVisible();
 
     await page.locator('#ly-do-dung').selectOption('WAITING_PARTS');
     await page.getByRole('button', { name: 'Tạm dừng' }).click();
 
-    await expect(page.getByRole('cell', { name: 'Chờ phụ tùng' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Chờ phụ tùng', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Bắt đầu làm' })).toBeVisible();
   });
 });
