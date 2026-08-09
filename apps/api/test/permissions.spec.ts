@@ -51,6 +51,7 @@ async function call(
     method,
     headers: {
       'Content-Type': 'application/json',
+      'X-Auth-Mode': 'token',
       ...(bearer === undefined ? {} : { Authorization: `Bearer ${bearer}` }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

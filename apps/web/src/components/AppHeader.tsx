@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { auth, roleLabel } from '@/lib/api';
+import { api, auth, roleLabel } from '@/lib/api';
 
 /** Giữ khớp với `ACTION_ROLES['stock:read']` ở packages/contracts */
 const VAI_XEM_KHO = ['STORE_KEEPER', 'BRANCH_MANAGER', 'OWNER'];
@@ -25,11 +25,14 @@ export function AppHeader({
   const [who, setWho] = useState<{ fullName: string; roles: string[] } | null>(null);
 
   useEffect(() => {
-    if (auth.token() === null) {
+    // Cookie HttpOnly không đọc được từ đây, nên mốc là hồ sơ đã lưu. Phiên
+    // chết thật thì request đầu tiên trả 401 và lớp gọi API lo phần chuyển trang.
+    const nguoi = auth.user();
+    if (nguoi === null) {
       window.location.href = '/dang-nhap';
       return;
     }
-    setWho(auth.user());
+    setWho(nguoi);
   }, []);
 
   return (
@@ -84,8 +87,23 @@ export function AppHeader({
       <button
         className="secondary"
         onClick={() => {
-          auth.clear();
-          window.location.href = '/dang-nhap';
+          /*
+           * 🔒 Gọi máy chủ, không chỉ xoá phía trình duyệt.
+           *
+           * Xoá localStorage không đụng được cookie HttpOnly, và quan trọng hơn:
+           * refresh token vẫn sống ở database thêm 30 ngày. Người vừa bấm "đăng
+           * xuất" tin rằng phiên đã đóng — nên nó phải thật sự đóng.
+           *
+           * Chuyển trang dù gọi hỏng: mất mạng thì vẫn phải thoát được khỏi máy
+           * đang dùng chung, và phiên còn sống là chuyện xử lý ở lần sau.
+           */
+          void api
+            .logout()
+            .catch(() => undefined)
+            .finally(() => {
+              auth.clear();
+              window.location.href = '/dang-nhap';
+            });
         }}
       >
         Đăng xuất

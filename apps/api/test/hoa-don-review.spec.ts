@@ -39,7 +39,8 @@ async function call(
 ): Promise<{ status: number; body: any }> {
   const res = await fetch(`${API}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json',
+      'X-Auth-Mode': 'token', Authorization: `Bearer ${token}` },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await res.text();

@@ -43,6 +43,8 @@ const API = process.env.API_URL ?? 'http://localhost:3001';
  */
 async function idDon(request: APIRequestContext, ma: string): Promise<string> {
   const dn = await request.post(`${API}/api/v1/auth/login`, {
+    // 🔒 Client dùng Bearer phải XIN token — mặc định máy chủ chỉ đặt cookie
+    headers: { 'X-Auth-Mode': 'token' },
     data: { phone: '0901000006', password: 'demo1234' },
   });
   const { accessToken } = (await dn.json()) as { accessToken: string };

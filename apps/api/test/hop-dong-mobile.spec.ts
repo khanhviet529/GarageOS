@@ -45,7 +45,7 @@ let token = '';
 async function dangNhap(phone: string): Promise<string> {
   const res = await fetch(`${API}/api/v1/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'token' },
     body: JSON.stringify({ phone, password: 'demo1234' }),
   });
   const j = (await res.json()) as { accessToken?: string };

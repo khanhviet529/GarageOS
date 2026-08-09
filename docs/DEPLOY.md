@@ -60,6 +60,8 @@ Xem [`.env.example`](../.env.example). Bắt buộc đổi trong production:
 | `JWT_REFRESH_SECRET` | 🔒 Khác secret ở trên |
 | `DATABASE_URL` | Role thường |
 | `DATABASE_ADMIN_URL` | Chỉ đặt ở môi trường chạy migration, **không** đặt ở runtime API |
+| `COOKIE_SECURE` | 🔒 **`true`** — cookie phiên chỉ đi qua HTTPS. Để `false` là gửi cookie đăng nhập qua kết nối không mã hoá |
+| `WEB_ORIGIN` | 🔒 Danh sách nguồn được phép, phân tách bằng dấu phẩy. Vừa là CORS, vừa là lớp chống CSRF cho thao tác ghi bằng cookie — sai giá trị thì hoặc web không gọi được API, hoặc mở cửa cho trang lạ |
 
 ## Các bước
 

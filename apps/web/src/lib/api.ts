@@ -2,9 +2,20 @@
 
 import { ROLE_LABEL } from '@garageos/contracts';
 
-/** Client gọi API — giữ token trong localStorage cho Phase 1 (đủ cho demo). */
+/**
+ * Client gọi API — phiên nằm trong cookie `HttpOnly`, KHÔNG trong localStorage.
+ *
+ * 🔒 Ở đây không có biến nào giữ token, và đó không phải vì kỷ luật: máy chủ
+ *    **không gửi token cho web nữa**. Đăng nhập trả về đúng thông tin người
+ *    dùng để vẽ giao diện; phần chứng thực đi trong cookie mà JavaScript không
+ *    đọc được. Một lỗ XSS vẫn có thể gọi API thay người dùng, nhưng không mang
+ *    được phiên ra khỏi trình duyệt.
+ *
+ * `USER_KEY` vẫn ở localStorage và đó là chủ ý: nó chỉ là tên và vai để vẽ
+ * header, không phải chứng thực. Ai sửa nó cũng chẳng được thêm quyền gì —
+ * mọi quyết định phân quyền nằm ở máy chủ, đọc từ token trong cookie.
+ */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-const TOKEN_KEY = 'garageos.accessToken';
 const USER_KEY = 'garageos.user';
 
 export interface ApiError {
@@ -21,7 +32,6 @@ export class ApiCallError extends Error {
 }
 
 export const auth = {
-  token: (): string | null => globalThis.localStorage?.getItem(TOKEN_KEY) ?? null,
   user: (): { id: string; fullName: string; roles: string[]; branchIds: string[] } | null => {
     // 🔒 `JSON.parse` KHÔNG được để trần ở đây: hàm này chạy trong useEffect của
     //    AppHeader, tức là trên mọi màn hình nội bộ. Dữ liệu phiên hỏng (ghi dở
@@ -35,26 +45,76 @@ export const auth = {
       return null;
     }
   },
-  save: (token: string, user: unknown): void => {
-    localStorage.setItem(TOKEN_KEY, token);
+  save: (user: unknown): void => {
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   },
   clear: (): void => {
-    localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   },
 };
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = auth.token();
-  const res = await fetch(`${BASE}${path}`, {
+/**
+ * `credentials: 'include'` là dòng làm cả cơ chế chạy được.
+ *
+ * Web và API nằm ở hai cổng khác nhau (3000 và 3001), nên với trình duyệt đây
+ * là cross-origin. Mặc định `fetch` KHÔNG gửi cookie cross-origin — thiếu tuỳ
+ * chọn này thì mọi request đi ra mà không có phiên, và triệu chứng là 401 ở
+ * khắp nơi ngay sau khi đăng nhập thành công.
+ */
+async function goiThuc(method: string, path: string, body?: unknown): Promise<Response> {
+  return fetch(`${BASE}${path}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
-    },
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+}
+
+/*
+ * Chỉ MỘT lần gia hạn đang bay tại một thời điểm.
+ *
+ * Một màn hình mở bốn request song song, cả bốn cùng gặp 401 khi access token
+ * vừa hết hạn. Không có hàng đợi này thì chúng gọi bốn lần `/auth/refresh` —
+ * và vì refresh XOAY VÒNG, ba lần sau dùng token đã bị thu hồi. Máy chủ coi
+ * đó là dấu hiệu token bị đánh cắp và thu hồi TOÀN BỘ phiên. Người dùng bị đá
+ * ra ngoài bởi chính cơ chế bảo vệ họ.
+ */
+let dangGiaHan: Promise<boolean> | null = null;
+
+async function giaHanPhien(): Promise<boolean> {
+  dangGiaHan ??= (async () => {
+    try {
+      const res = await goiThuc('POST', '/api/v1/auth/refresh');
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      // Nhả chốt ở microtask kế tiếp: mọi request đang chờ đã kịp bám vào
+      // cùng một promise, và request SAU đó thì được gia hạn mới.
+      queueMicrotask(() => {
+        dangGiaHan = null;
+      });
+    }
+  })();
+  return dangGiaHan;
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  let res = await goiThuc(method, path, body);
+
+  /*
+   * 401 -> thử gia hạn ĐÚNG MỘT LẦN rồi gọi lại.
+   *
+   * Access token sống 15 phút (docs/13-nfr.md), nên với người dùng mở màn hình
+   * cả buổi thì đây là đường đi thường xuyên, không phải ngoại lệ. Không có nó,
+   * cứ 15 phút một lần họ bị đá về trang đăng nhập giữa lúc đang làm việc.
+   *
+   * Không thử lại lần hai: nếu gia hạn xong vẫn 401 thì phiên đã chết thật, và
+   * lặp tiếp chỉ biến một lỗi thành một vòng lặp.
+   */
+  if (res.status === 401 && !path.startsWith('/api/v1/auth/')) {
+    if (await giaHanPhien()) res = await goiThuc(method, path, body);
+  }
 
   const json = (await res.json().catch(() => ({}))) as { error?: ApiError };
 
@@ -465,12 +525,17 @@ export const INVOICE_STATUS_LABEL: Record<string, string> = {
 };
 
 export const api = {
+  /*
+   * Không khai `accessToken` trong kiểu trả về — máy chủ không gửi nó cho web
+   * nữa. Khai một trường không tồn tại là mời người sau đọc nó và tin là có.
+   */
   login: (phone: string, password: string) =>
-    call<{ accessToken: string; user: { fullName: string; roles: string[]; branchIds: string[] } }>(
+    call<{ user: { fullName: string; roles: string[]; branchIds: string[] } }>(
       'POST',
       '/api/v1/auth/login',
       { phone, password },
     ),
+  logout: () => call<{ ok: true }>('POST', '/api/v1/auth/logout'),
   lookupPlate: (plate: string) =>
     call<VehicleLookup>('GET', `/api/v1/vehicles/lookup?plate=${encodeURIComponent(plate)}`),
   createCustomer: (input: unknown) => call<{ id: string }>('POST', '/api/v1/customers', input),

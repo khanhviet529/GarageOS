@@ -14,7 +14,8 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const r = await api.login(phone.trim(), password);
-      auth.save(r.accessToken, r.user);
+      // Token đi trong cookie HttpOnly; chỗ này chỉ nhớ tên và vai để vẽ header
+      auth.save(r.user);
       window.location.href = '/tiep-nhan';
     } catch (err) {
       setError(err instanceof ApiCallError ? err.api.message : 'Không kết nối được máy chủ');

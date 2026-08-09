@@ -98,6 +98,20 @@ async function goi<T>(method: string, path: string, body?: unknown): Promise<T> 
     method,
     headers: {
       'Content-Type': 'application/json',
+      /*
+       * 🔒 App thợ XIN token trong thân phản hồi — web thì không.
+       *
+       * Từ khi web chuyển sang cookie `HttpOnly`, máy chủ mặc định KHÔNG trả
+       * token nữa: đó là cách chắc chắn nhất để web không có gì đem cất vào
+       * `localStorage`. Client nào thật sự cần token phải nói ra.
+       *
+       * App thợ cần, vì WebView và fetch của React Native xử lý cookie khác
+       * nhau giữa iOS, Android và bản web dùng để test — một cơ chế phiên chạy
+       * ở hai trong ba nơi thì tệ hơn là không có. Đổi lại, header
+       * `Authorization` thì trình duyệt không tự gắn, nên đường này miễn nhiễm
+       * CSRF và không phải kiểm `Origin`.
+       */
+      'X-Auth-Mode': 'token',
       ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

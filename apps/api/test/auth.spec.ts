@@ -31,7 +31,7 @@ interface LoginBody {
 async function post(path: string, body: unknown): Promise<{ status: number; body: LoginBody }> {
   const res = await fetch(`${API}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'token' },
     body: JSON.stringify(body),
   });
   return { status: res.status, body: (await res.json()) as LoginBody };
@@ -63,7 +63,15 @@ describe('Điều kiện tiên quyết hạ tầng', () => {
 });
 
 describe('Đăng nhập', () => {
-  test('đăng nhập đúng trả về token và thông tin người dùng', async () => {
+  test('client dùng Bearer XIN token thì nhận được token', async () => {
+    /*
+     * `post()` ở đầu file gửi `X-Auth-Mode: token` — nó đóng vai một client
+     * dùng Bearer, giống app thợ.
+     *
+     * 🔒 Client KHÔNG xin thì không nhận: đó là mặc định, và
+     *    `phien-cookie.spec.ts` kiểm vế đó. Hai bài, hai chế độ, không bài nào
+     *    che vế của bài kia.
+     */
     const { status, body } = await post('/api/v1/auth/login', {
       phone: PHONE,
       password: PASSWORD,
