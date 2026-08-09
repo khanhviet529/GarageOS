@@ -24,3 +24,4 @@ Vì sao giữ lại:
 | 2026-08-02 | [Rà soát TOÀN dự án — 6 reviewer song song](2026-08-02-ra-soat-toan-du-an.md) | ~50 | Audit toàn trạng thái thay vì review diff. Nặng nhất: `hasRole()` tồn tại mà không nơi nào gọi — thợ làm được mọi việc của cố vấn |
 | 2026-08-09 | [Phase 3 — tiền](2026-08-09-phase-3-tien.md) | 3 | 2 CONFIRMED (phạm vi chi nhánh lần thứ **bảy**; hai phiếu kiểm kê đồng thời), 1 REFUTED bằng test xanh |
 | 2026-08-09 | [Phase 2.2–2.7 và Phase 4](2026-08-09-phase-2.2-2.7-va-phase-4.md) | 5 | **5 CONFIRMED, 0 bác bỏ** — trong đó một chỗ GHI XUYÊN TENANT do `SECURITY DEFINER` gỡ mất RLS |
+| 2026-08-09 | [Phiên cookie HttpOnly](2026-08-09-phien-cookie-httponly.md) | 1 | 1 CONFIRMED — xoay vòng refresh token là check-then-act; hậu quả thật NẶNG HƠN dự đoán: một cú bấm đúp đăng xuất người dùng |

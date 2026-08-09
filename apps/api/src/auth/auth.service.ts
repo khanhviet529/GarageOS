@@ -7,6 +7,14 @@ import { ErrorCode, type LoginInput, type LoginOutput, type Role } from '@garage
 import { BusinessError } from '../common/errors';
 import { APP_POOL } from '../db/db.module';
 
+/**
+ * Cửa sổ coi một lần dùng lại là "thua cuộc đua" chứ không phải "bị đánh cắp".
+ *
+ * Đủ rộng để bao một cú bấm đúp hoặc hai tab cùng gia hạn; đủ hẹp để một token
+ * thật sự bị đánh cắp và đem dùng sau đó vẫn kích hoạt thu hồi toàn bộ phiên.
+ */
+const AN_HAN_GIAY = 10;
+
 interface UserRow {
   id: string;
   tenant_id: string;
@@ -68,7 +76,8 @@ export class AuthService {
 
     return {
       accessToken: this.signAccess(user, branchIds),
-      refreshToken: await this.issueRefresh(user.tenant_id, user.id),
+      // Không truyền `thayCho` nên không có cuộc đua nào để thua -> luôn có giá trị
+      refreshToken: (await this.issueRefresh(user.tenant_id, user.id))!,
       user: {
         id: user.id,
         fullName: user.full_name,
@@ -140,13 +149,17 @@ export class AuthService {
       tenant_id: string;
       user_id: string;
       revoked_at: Date | null;
+      replaced_by_id: string | null;
       het_han: boolean;
+      vua_thay_the: boolean;
     }>(
       // Truy vấn này chạy TRƯỚC khi biết tenant — cùng lý do với `login`, nên
       // đi qua hàm SECURITY DEFINER hẹp thay vì nới RLS.
-      `SELECT id, tenant_id, user_id, revoked_at, expires_at <= now() AS het_han
+      `SELECT id, tenant_id, user_id, revoked_at, replaced_by_id,
+              expires_at <= now() AS het_han,
+              revoked_at > now() - make_interval(secs => $2::int) AS vua_thay_the
          FROM auth_find_refresh_token($1)`,
-      [hash],
+      [hash, AN_HAN_GIAY],
     );
     const rt = rows[0];
 
@@ -158,7 +171,23 @@ export class AuthService {
     if (rt === undefined || rt.het_han) return hong();
 
     if (rt.revoked_at !== null) {
-      await this.thuHoiToanBoPhien(rt.tenant_id, rt.user_id);
+      /*
+       * 🔒 Phân biệt "dùng lại token cũ" với "thua một cuộc đua".
+       *
+       * Token vừa bị thay thế trong vài giây gần đây là hai tab, một cú bấm
+       * đúp, hoặc một lần thử lại của client — không phải tấn công. Gộp nó vào
+       * diện "token bị đánh cắp" có hậu quả đo được: bài kiểm chứng cho thấy
+       * sau hai request đồng thời, người dùng còn ĐÚNG 0 token sống. Kẻ thua
+       * kích hoạt thu hồi toàn bộ, và cái bị thu hồi gồm cả token mà kẻ thắng
+       * vừa cấp. Một cú bấm đúp đá người dùng ra khỏi hệ thống.
+       *
+       * Cửa sổ ân hạn KHÔNG nới lỏng bảo mật: kẻ tấn công dùng token cũ trong
+       * cửa sổ đó vẫn nhận 401 và vẫn không có phiên nào. Nó chỉ ngăn phản ứng
+       * hạt nhân khi hai request HỢP LỆ chạm nhau.
+       */
+      if (!(rt.vua_thay_the && rt.replaced_by_id !== null)) {
+        await this.thuHoiToanBoPhien(rt.tenant_id, rt.user_id);
+      }
       return hong();
     }
 
@@ -175,6 +204,7 @@ export class AuthService {
 
     const branchIds = await this.loadBranchIds(user.tenant_id, user.id);
     const moi = await this.issueRefresh(user.tenant_id, user.id, rt.id);
+    if (moi === null) return hong();   // thua cuộc đua — token đã bị request khác dùng
 
     return {
       accessToken: this.signAccess(user, branchIds),
@@ -213,30 +243,53 @@ export class AuthService {
     tenantId: string,
     userId: string,
     thayCho?: string,
-  ): Promise<string> {
+  ): Promise<string | null> {
     const raw = randomBytes(32).toString('hex');
     const hash = createHash('sha256').update(raw).digest('hex');
-    await this.trongTenant(tenantId, async (client) => {
+
+    const thang = await this.trongTenant(tenantId, async (client) => {
+      /*
+       * 🔒 GIÀNH token cũ TRƯỚC khi phát token mới, bằng một câu vừa kiểm vừa ghi.
+       *
+       * `WHERE ... AND revoked_at IS NULL` biến câu này thành compare-and-set:
+       * PostgreSQL khoá hàng, và chỉ giao dịch nào còn thấy `NULL` mới ghi
+       * được. Giao dịch thứ hai chờ, rồi thấy 0 dòng bị ảnh hưởng — nó biết
+       * mình thua và không phát token nào.
+       *
+       * Bản trước đọc trạng thái ở một câu và ghi ở câu khác. Giữa hai câu đó
+       * là một cửa sổ, và Codex chỉ đúng vào nó (AUTH-001). Cùng họ với
+       * STOCKTAKE-001 ở vòng review trước: kiểm rồi mới ghi thì luôn có một
+       * khoảng ở giữa.
+       */
+      if (thayCho !== undefined) {
+        const { rowCount } = await client.query(
+          `UPDATE refresh_token SET revoked_at = now()
+            WHERE id = $1 AND revoked_at IS NULL`,
+          [thayCho],
+        );
+        if (rowCount !== 1) return false;
+      }
+
       const { rows } = await client.query<{ id: string }>(
         `INSERT INTO refresh_token (tenant_id, user_id, token_hash, expires_at)
          VALUES ($1,$2,$3, now() + interval '30 days') RETURNING id`,
         [tenantId, userId, hash],
       );
       /*
-       * 🔒 Thu hồi cái cũ và trỏ sang cái mới TRONG CÙNG giao dịch.
-       *
-       * Tách ra hai giao dịch thì có một khoảnh khắc hai token cùng sống — và
-       * nếu tiến trình chết đúng lúc đó, token cũ sống mãi. Cả hai đều làm
-       * hỏng chính điều mà việc xoay vòng sinh ra để bảo đảm.
+       * Nối cũ sang mới TRONG CÙNG giao dịch. Tách ra thì có một khoảnh khắc
+       * token cũ đã thu hồi mà chưa trỏ đi đâu — và `refresh()` dùng đúng con
+       * trỏ đó để phân biệt "thua cuộc đua" với "token bị đánh cắp".
        */
       if (thayCho !== undefined) {
-        await client.query(
-          `UPDATE refresh_token SET revoked_at = now(), replaced_by_id = $2 WHERE id = $1`,
-          [thayCho, rows[0]!.id],
-        );
+        await client.query(`UPDATE refresh_token SET replaced_by_id = $2 WHERE id = $1`, [
+          thayCho,
+          rows[0]!.id,
+        ]);
       }
+      return true;
     });
-    return raw;
+
+    return thang ? raw : null;
   }
 
   /**

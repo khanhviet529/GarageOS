@@ -46,11 +46,11 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 497 (domain 12, db 42, api 443) |
+| Test tự động | 499 (domain 12, db 42, api 445) |
 | E2E Playwright | 73 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 52 |
-| Vòng review đã chạy | 9 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
-| Phát hiện đã xử lý | 24 + ~50 |
+| Migration | 54 |
+| Vòng review đã chạy | 10 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
+| Phát hiện đã xử lý | 25 + ~50 |
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -265,6 +265,8 @@ Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng 
 
 | Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
+| `WEB_ORIGIN=*` sẽ vô hiệu hoá lớp chống CSRF trong im lặng | `kiemTraNguonGhi` đọc cùng biến mà CORS dùng. Đặt `*` cho tiện là gỡ mất lớp bảo vệ mà không có gì báo động. Chưa có hàng rào nào chặn cấu hình đó |
+| Cookie phiên chưa kiểm chứng ở cấu hình hai tên miền | Dev và CI đều chạy web/API cùng host khác cổng. Production có thể đặt chúng ở hai tên miền, khi đó cần `SameSite=None; Secure` hoặc một tên miền chung — đã ghi trong `docs/DEPLOY.md` |
 | Lịch xưởng vẽ ô theo giờ TRÌNH DUYỆT, không theo `branch.timezone` | Seed đặt việc theo giờ chi nhánh, giao diện đọc theo giờ máy người xem. Trùng nhau ở Việt Nam, lệch 7 tiếng trên CI — việc xếp 8h sáng thành 1h sáng và rơi ra ngoài khung 7–18h. Đã ghim `timezoneId` cho Playwright để CI tất định, nhưng cột `branch.timezone` vẫn chưa được giao diện dùng tới. Sửa đúng là vẽ lịch theo múi giờ chi nhánh |
 | Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
 | Chưa có test kiến trúc chặn `withTenantId` / `queryWithoutTenant` dùng sai chỗ | Hai hàm này mở đường đi ngoài ngữ cảnh tenant. Hiện chỉ `PublicTrackingService` gọi, nhưng không có gì bắt buộc điều đó |
