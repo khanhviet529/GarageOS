@@ -45,7 +45,4 @@ await build({
   // `pg` và `bcrypt`-like dùng binding gốc; để nguyên trong node_modules
   external: ['pg-native', ...optionalNestDeps],
   logLevel: 'info',
-  banner: {
-    js: "require('reflect-metadata');",
-  },
 });

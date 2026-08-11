@@ -96,3 +96,65 @@ pnpm db:migrate
 | Sao lưu tự động + **kiểm tra khôi phục hằng tháng** | Trước khi có dữ liệu thật |
 | Quan trắc (log, trace, cảnh báo) | Giai đoạn 2 |
 | Tích hợp hoá đơn điện tử thật | Khi có khách hàng — xem [ADR-0005](adr/0005-einvoice-adapter.md) |
+
+## Baseline production đã chọn
+
+| Thành phần | Nền tảng | Cấu hình trong repo |
+|---|---|---|
+| API | Railway | `Dockerfile`, `railway.toml`, health check `/health` |
+| Web | Vercel | Root Directory `apps/web`, build bằng pnpm workspace |
+| PostgreSQL | Neon | Hai role tách biệt, migration chạy qua GitHub Actions thủ công |
+| Redis | Upstash | Sẵn sàng cho rate-limit/job khi chuyển sang nhiều instance |
+| Backup | Cloudflare R2 | Workflow backup hằng ngày, giữ 30 ngày bằng lifecycle rule |
+| Theo dõi | Railway + GitHub Actions | Health check của Railway và probe `/health` mỗi 5 phút |
+
+### Tạo service API trên Railway
+
+1. Kết nối repository, để **Root Directory là repository root**. Railway tự nhận
+   `Dockerfile` và `railway.toml`.
+2. Đặt các biến runtime: `DATABASE_URL` (role `garageos_app`),
+   `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `COOKIE_SECURE=true`,
+   `WEB_ORIGIN=https://<ten-mien-web>`, `NODE_ENV=production`.
+   Railway tự cấp `PORT`; API đã đọc biến này.
+3. **Không** đặt `DATABASE_ADMIN_URL` trong service API. Chỉ đặt nó trong GitHub
+   Environment `production` để workflow migration dùng một lần.
+4. Sinh public domain Railway, rồi dùng URL đó làm `NEXT_PUBLIC_API_URL` trên
+   Vercel. Vì biến `NEXT_PUBLIC_*` được đóng vào bundle, phải redeploy web sau
+   khi đổi URL API.
+
+Trên Vercel, đặt **Root Directory** là `apps/web`, rồi dùng Install Command
+`cd ../.. && pnpm install --frozen-lockfile` và Build Command
+`cd ../.. && pnpm --filter @garageos/web build`. Đặt
+`NEXT_PUBLIC_API_URL=https://<ten-mien-api>` ở Production và redeploy sau mỗi
+lần đổi biến. API sẽ từ chối chạy production nếu `COOKIE_SECURE` không là
+`true` hoặc `WEB_ORIGIN` không phải một danh sách HTTPS tường minh.
+
+### PostgreSQL, backup và khôi phục
+
+Trên Neon, chạy ba `CREATE EXTENSION` ở đầu tài liệu này, rồi chạy workflow
+**Production migration** thủ công. Tạo hai role đúng như migration 0001; URL
+runtime phải là role `garageos_app`, còn `DATABASE_ADMIN_URL` chỉ là owner.
+
+Tạo bucket R2 riêng cho backup, bật lifecycle xoá bản sao sau 30 ngày và đặt
+các GitHub configuration sau trong Environment `production`:
+
+| Loại | Tên |
+|---|---|
+| Secret | `DATABASE_BACKUP_URL`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY` |
+| Variable | `BACKUP_R2_BUCKET`, `R2_ENDPOINT_URL`, `PRODUCTION_API_URL` |
+
+`DATABASE_BACKUP_URL` có quyền **chỉ đọc dữ liệu cần dump**, không dùng role
+owner hay role API. Workflow backup hằng ngày tạo bản dump PostgreSQL dạng
+custom; mỗi tháng phải thực hành khôi phục vào một Neon branch/database rỗng
+và ghi lại thời gian khôi phục.
+
+### Theo dõi và release
+
+- Railway gọi `/health` sau deploy; endpoint này kiểm cả kết nối PostgreSQL.
+- Workflow **Production health probe** gọi endpoint đó mỗi 5 phút. Nó là hàng
+  rào bổ sung, không thay thế dịch vụ uptime/alert 24×7; khi có khách thật hãy
+  thêm alert nhận pager/email ở Railway hoặc một dịch vụ chuyên dụng.
+- GitHub Actions không tự chạy migration khi deploy. Chạy CI xanh → chạy
+  workflow migration → deploy API → health xanh → deploy web.
+- Chỉ scale API quá một replica sau khi chuyển rate limit hiện tại sang Redis;
+  hiện nó chủ ý chạy trong bộ nhớ tiến trình.

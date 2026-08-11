@@ -61,6 +61,31 @@ export function assertSecretsUsable(): void {
     );
   }
 
+  if (laProduction && process.env.COOKIE_SECURE !== 'true') {
+    loi.push('COOKIE_SECURE phải là true ở production — cookie phiên chỉ được đi qua HTTPS');
+  }
+
+  if (laProduction) {
+    const origins = (process.env.WEB_ORIGIN ?? '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter((o) => o !== '');
+
+    if (origins.length === 0) {
+      loi.push('WEB_ORIGIN phải liệt kê rõ domain web HTTPS ở production');
+    }
+    for (const origin of origins) {
+      try {
+        const url = new URL(origin);
+        if (origin === '*' || url.protocol !== 'https:' || url.origin !== origin) {
+          loi.push(`WEB_ORIGIN không hợp lệ ở production: ${origin}`);
+        }
+      } catch {
+        loi.push(`WEB_ORIGIN không hợp lệ ở production: ${origin}`);
+      }
+    }
+  }
+
   const rateLimit = Number(process.env.LOGIN_RATE_LIMIT_MAX ?? '5');
   if (laProduction && rateLimit > 20) {
     loi.push(

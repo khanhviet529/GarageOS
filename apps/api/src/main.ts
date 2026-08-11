@@ -49,7 +49,8 @@ async function bootstrap(): Promise<void> {
     .filter((o) => o !== '');
   app.enableCors({ origin: nguonChoPhep, credentials: true });
 
-  const port = Number(process.env.API_PORT ?? 3001);
+  // Railway và phần lớn PaaS cấp cổng qua `PORT`; máy local vẫn dùng API_PORT.
+  const port = Number(process.env.API_PORT ?? process.env.PORT ?? 3001);
   await app.listen(port);
   new Logger('bootstrap').log(`API chạy tại http://localhost:${port}`);
 }

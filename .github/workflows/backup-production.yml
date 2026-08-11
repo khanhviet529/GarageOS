@@ -1,0 +1,46 @@
+name: Production backup
+
+on:
+  schedule:
+    - cron: '15 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    # Tránh báo động giả trước khi tài khoản R2 được cấu hình.
+    if: vars.BACKUP_R2_BUCKET != '' && vars.R2_ENDPOINT_URL != ''
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_BACKUP_URL: ${{ secrets.DATABASE_BACKUP_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      BACKUP_R2_BUCKET: ${{ vars.BACKUP_R2_BUCKET }}
+      R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
+    steps:
+      - name: Kiểm tra cấu hình backup
+        run: |
+          test -n "$DATABASE_BACKUP_URL"
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+      - name: Cài PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Tạo dump PostgreSQL
+        run: |
+          stamp=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          file="garageos-${stamp}.dump"
+          pg_dump --dbname="$DATABASE_BACKUP_URL" --format=custom --compress=9 \
+            --no-owner --no-privileges --file="$file"
+          echo "BACKUP_FILE=$file" >> "$GITHUB_ENV"
+      - name: Đẩy backup lên Cloudflare R2
+        run: |
+          aws s3 cp "$BACKUP_FILE" "s3://$BACKUP_R2_BUCKET/postgres/$BACKUP_FILE" \
+            --endpoint-url "$R2_ENDPOINT_URL" --only-show-errors

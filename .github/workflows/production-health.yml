@@ -1,0 +1,23 @@
+name: Production health probe
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: vars.PRODUCTION_API_URL != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kiểm tra API và PostgreSQL qua health endpoint
+        env:
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          curl --fail --show-error --silent --retry 3 --connect-timeout 10 \
+            "$PRODUCTION_API_URL/health" | tee health.json
+          grep -q '"status":"ok"' health.json
+          grep -q '"db":"ok"' health.json

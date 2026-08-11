@@ -317,6 +317,26 @@ describe('🔒 Kiểm tra cấu hình lúc khởi động', () => {
       'bật echo OTP ở production vẫn khởi động được',
     );
 
+    const prodAnToan = {
+      NODE_ENV: 'production',
+      JWT_ACCESS_SECRET: 'a'.repeat(40),
+      JWT_REFRESH_SECRET: 'b'.repeat(40),
+      COOKIE_SECURE: 'true',
+      WEB_ORIGIN: 'https://app.garageos.example',
+    };
+
+    assert.match(
+      thu({ ...prodAnToan, COOKIE_SECURE: 'false' }) ?? '',
+      /COOKIE_SECURE/,
+      'cookie HTTP ở production vẫn khởi động được',
+    );
+    assert.match(
+      thu({ ...prodAnToan, WEB_ORIGIN: '*' }) ?? '',
+      /WEB_ORIGIN/,
+      'wildcard CORS/CSRF ở production vẫn khởi động được',
+    );
+    assert.equal(thu(prodAnToan), null, 'cấu hình production hợp lệ bị từ chối');
+
     assert.equal(
       thu({
         JWT_ACCESS_SECRET: 'a'.repeat(40),

@@ -6,8 +6,10 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": false,
     "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "typeRoots": ["./node_modules/@types", "../../node_modules/@types"]
   },
   "include": ["src/**/*", "index.ts", "app.config.ts"]
 }

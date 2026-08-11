@@ -1,0 +1,30 @@
+name: Production migration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-database-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Chạy migration chỉ-tiến
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_ADMIN_URL: ${{ secrets.DATABASE_ADMIN_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Từ chối chạy khi chưa cấu hình secret
+        run: test -n "$DATABASE_ADMIN_URL"
+      - run: pnpm db:migrate
