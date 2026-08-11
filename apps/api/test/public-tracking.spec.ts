@@ -984,10 +984,9 @@ describe('🔒 Ba lỗi tự rà soát tìm ra sau 2.2 — giữ lại làm hồ
     );
 
     const truocHuy = await call('GET', `/api/v1/repair-orders/${ro[0]!.id}`);
-    const huy = await call('POST', `/api/v1/repair-orders/${ro[0]!.id}/status`, {
-      to: 'CANCELLED',
-      cancelCategory: 'CUSTOMER_REQUEST',
-      cancelReason: 'Khách đổi ý, thử nhả chỗ',
+    const huy = await call('POST', `/api/v1/repair-orders/${ro[0]!.id}/cancel`, {
+      category: 'CUSTOMER_REQUEST',
+      reason: 'Khách đổi ý, thử nhả chỗ',
       version: truocHuy.body.version,
     });
     assert.equal(huy.status, 201, JSON.stringify(huy.body));

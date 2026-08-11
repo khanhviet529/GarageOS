@@ -369,6 +369,14 @@ export class CancellationService {
     to: 'CONFIRMED' | 'DISPUTED' | 'WAIVED',
     note: string | null,
   ): Promise<Settlement> {
+    // Xác nhận hoặc ghi nhận tranh chấp cũng là chốt nghĩa vụ tài chính. Không
+    // để một tài khoản chỉ đăng nhập được gọi thẳng endpoint này.
+    if (!canRoleTransition(actor.roles, 'CANCELLED')) {
+      throw new BusinessError(
+        ErrorCode.FORBIDDEN,
+        'Vai trò của bạn không được xác nhận hoặc xử lý tranh chấp quyết toán.',
+      );
+    }
     return this.db.withTenant(actor, async (tx) => {
       const { rows } = await tx.query<{ status: string }>(
         `SELECT status FROM cancellation_settlement WHERE id = $1 FOR UPDATE`,

@@ -4,6 +4,10 @@ import { mkdirSync } from 'node:fs';
 const SHOTS = 'e2e/screenshots';
 mkdirSync(SHOTS, { recursive: true });
 
+// Lần đầu mở web dev còn phải biên dịch route chi tiết đơn; 30 giây không đủ
+// trên Windows chậm dù thao tác nghiệp vụ bên trong đều hoàn tất nhanh.
+test.setTimeout(60_000);
+
 function shot(page: Page, name: string) {
   return page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true, caret: 'initial' });
 }
@@ -13,7 +17,9 @@ async function login(page: Page) {
   await page.getByLabel('Số điện thoại').fill('0901000003');
   await page.getByLabel('Mật khẩu').fill('demo1234');
   await page.getByRole('button', { name: 'Đăng nhập' }).click();
-  await expect(page.getByText('Lê Văn Cố Vấn · Cố vấn dịch vụ')).toBeVisible();
+  // Header nạp thông tin người dùng từ localStorage bằng effect; route đích là
+  // tín hiệu đăng nhập hoàn tất ổn định hơn và không phụ thuộc thứ tự render.
+  await expect(page.getByRole('heading', { name: 'Tra cứu biển số' })).toBeVisible();
 }
 
 async function intake(page: Page, plate: string) {
@@ -40,7 +46,7 @@ test('🔒 chỉ hiện những bước hợp lệ, và đi hết vòng đời t
   // Từ "Đã tiếp nhận" chỉ có hai đường: bắt đầu kiểm tra, hoặc huỷ.
   // Nút không hợp lệ KHÔNG xuất hiện — không phải bị làm mờ.
   await expect(actions.getByRole('button', { name: 'Bắt đầu kiểm tra' })).toBeVisible();
-  await expect(actions.getByRole('button', { name: 'Huỷ đơn' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Mở quy trình hủy đơn' })).toBeVisible();
   await expect(actions.getByRole('button', { name: 'Giao xe cho khách' })).toHaveCount(0);
   await expect(actions.getByRole('button', { name: 'Bắt đầu sửa' })).toHaveCount(0);
   await shot(page, '26-buoc-tiep-theo');
@@ -73,21 +79,21 @@ test('🔒 chỉ hiện những bước hợp lệ, và đi hết vòng đời t
   await shot(page, '28-trang-thai-cuoi');
 });
 
-test('huỷ đơn bắt buộc chọn nhóm lý do và ghi diễn giải', async ({ page }) => {
+test('hủy đơn xem trước tác động, bắt buộc ghi lý do rồi lập quyết toán', async ({ page }) => {
   await login(page);
   await intake(page, `43H-${Date.now().toString().slice(-5)}`);
 
-  const actions = page.locator('.card', { has: page.getByRole('heading', { name: 'Bước tiếp theo' }) });
-  await actions.getByRole('button', { name: 'Huỷ đơn' }).click();
+  await page.getByRole('button', { name: 'Mở quy trình hủy đơn' }).click();
 
-  await expect(page.getByLabel('Nhóm lý do')).toBeVisible();
+  await expect(page.getByLabel('Phân loại')).toBeVisible();
   // Chưa ghi diễn giải thì chưa xác nhận được
-  await expect(page.getByRole('button', { name: 'Xác nhận huỷ đơn' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Xác nhận hủy và lập quyết toán' })).toBeDisabled();
 
-  await page.getByLabel('Nhóm lý do').selectOption('GARAGE_UNABLE');
-  await page.getByLabel('Diễn giải').fill('Xe cần thiết bị chuyên dụng xưởng chưa có');
-  await page.getByRole('button', { name: 'Xác nhận huỷ đơn' }).click();
+  await page.getByLabel('Phân loại').selectOption('GARAGE_UNABLE');
+  await page.getByLabel('Lý do hủy').fill('Xe cần thiết bị chuyên dụng xưởng chưa có');
+  await page.getByRole('button', { name: 'Xác nhận hủy và lập quyết toán' }).click();
 
-  await expect(page.getByText('Đơn đã ở trạng thái cuối')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Chờ khách xác nhận')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Tổng quyết toán')).toBeVisible();
   await shot(page, '29-huy-don');
 });

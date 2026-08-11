@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import {
   api, ApiCallError, ORDER_STATUS_LABEL,
-  REPAIR_ORDER_TRANSITIONS, ORDER_ACTION_LABEL, CANCEL_CATEGORY_LABEL,
+  REPAIR_ORDER_TRANSITIONS, ORDER_ACTION_LABEL,
 } from '@/lib/api';
 
 export function StatusActions({
@@ -29,10 +29,9 @@ export function StatusActions({
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [odometerOut, setOdometerOut] = useState('');
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelCategory, setCancelCategory] = useState('CUSTOMER_REQUEST');
-
-  const nexts = REPAIR_ORDER_TRANSITIONS[status] ?? [];
+  // Huỷ là một quy trình quyết toán riêng (BC-10), không được gọi route đổi
+  // trạng thái chung vì sẽ bỏ qua hoàn kho và chứng từ quyết toán.
+  const nexts = (REPAIR_ORDER_TRANSITIONS[status] ?? []).filter((to) => to !== 'CANCELLED');
 
   async function go(to: string, extra: Record<string, unknown> = {}) {
     setError(null);
@@ -48,8 +47,8 @@ export function StatusActions({
     }
   }
 
-  // Hai chuyển đổi cần thêm dữ liệu -> mở form thay vì bấm một phát là xong
-  const needsForm = (to: string) => to === 'DELIVERED' || to === 'CANCELLED';
+  // Giao xe cần thêm dữ liệu -> mở form thay vì bấm một phát là xong
+  const needsForm = (to: string) => to === 'DELIVERED';
 
   if (nexts.length === 0) {
     return (
@@ -116,40 +115,6 @@ export function StatusActions({
         </div>
       )}
 
-      {pending === 'CANCELLED' && (
-        <div className="stack" style={{ marginTop: 12 }}>
-          <div className="field" style={{ maxWidth: 320 }}>
-            <label htmlFor="cancel-cat">Nhóm lý do <span className="req">*</span></label>
-            <select id="cancel-cat" value={cancelCategory}
-                    onChange={(e) => setCancelCategory(e.target.value)}>
-              {Object.entries(CANCEL_CATEGORY_LABEL).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-            <span className="hint">
-              Chọn từ danh sách để thống kê được vì sao khách bỏ đi — lý do gõ tay
-              không tổng hợp được.
-            </span>
-          </div>
-          <div className="field">
-            <label htmlFor="cancel-reason">Diễn giải <span className="req">*</span></label>
-            <textarea id="cancel-reason" rows={2} value={cancelReason}
-                      onChange={(e) => setCancelReason(e.target.value)} />
-          </div>
-          <div className="row">
-            <button
-              disabled={busy || cancelReason.trim().length < 3}
-              onClick={() => void go('CANCELLED', {
-                cancelReason: cancelReason.trim(),
-                cancelCategory,
-              })}
-            >
-              Xác nhận huỷ đơn
-            </button>
-            <button className="secondary" onClick={() => setPending(null)}>Bỏ qua</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

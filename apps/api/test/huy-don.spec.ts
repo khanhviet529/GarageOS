@@ -385,6 +385,27 @@ describe('🔒 BC-10 — huỷ là quyết toán, không phải xoá', () => {
     assert.equal(rows[0]!.cancel_category, 'CUSTOMER_REQUEST');
   });
 
+  test('không thể bỏ qua quyết toán bằng route đổi trạng thái chung', async () => {
+    const c = await donDangSua();
+    try {
+      const r = await call('POST', `/api/v1/repair-orders/${c.repairOrderId}/status`, {
+        to: 'CANCELLED',
+        version: c.version,
+        cancelReason: 'Thử đi tắt quy trình hủy',
+        cancelCategory: 'CUSTOMER_REQUEST',
+      });
+      assert.equal(r.status, 409, JSON.stringify(r.body));
+
+      const { rows } = await pool.query<{ status: string }>(
+        'SELECT status::text AS status FROM repair_order WHERE id = $1',
+        [c.repairOrderId],
+      );
+      assert.notEqual(rows[0]!.status, 'CANCELLED');
+    } finally {
+      await c.donDep();
+    }
+  });
+
   test('bài 2: huỷ sau khi giữ chỗ — mọi giữ chỗ được nhả, reserved về 0', async () => {
     const c = await donDangSua({ giuCho: 2 });
     try {
