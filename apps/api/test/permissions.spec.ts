@@ -266,6 +266,81 @@ describe('🔒 Phạm vi chi nhánh áp cho CẢ module báo giá', () => {
   });
 });
 
+describe('🔒 Schema phải theo kịp code', () => {
+  /*
+   * Deploy và migration là hai đường tách rời, có chủ ý: `DATABASE_ADMIN_URL`
+   * không có mặt ở runtime API nên API không tự chạy migration được.
+   *
+   * Tách rời để lại một khe hở về THỨ TỰ — code mới lên trước migration. Giữa
+   * hai mốc đó API chạy trên schema cũ và trả 500 ở đúng những đường vừa thêm,
+   * trong khi `/health` vẫn xanh vì nó chỉ hỏi `SELECT current_user`.
+   *
+   * 🔒 Bài này canh cả HAI chiều, và chiều thứ hai mới là chiều dễ hỏng:
+   *    chặn nhầm khi database đi TRƯỚC code sẽ biến mọi lần rollback thành
+   *    sự cố.
+   */
+  let pool: Pool;
+  let daGiau: { name: string; checksum: string; applied_at: Date } | null = null;
+
+  before(() => {
+    pool = new Pool({
+      connectionString:
+        process.env.DATABASE_ADMIN_URL ??
+        'postgresql://garageos:garageos_dev@localhost:5433/garageos',
+    });
+  });
+
+  after(async () => {
+    // Trả lại đúng dòng đã mượn, kể cả khi bài test đỏ giữa chừng
+    if (daGiau !== null) {
+      await pool.query(
+        `INSERT INTO schema_migration (name, checksum, applied_at)
+         VALUES ($1,$2,$3) ON CONFLICT (name) DO NOTHING`,
+        [daGiau.name, daGiau.checksum, daGiau.applied_at],
+      );
+    }
+    await pool.end();
+  });
+
+  test('database THIẾU migration mới nhất -> từ chối khởi động', async () => {
+    const { assertSchemaUpToDate } = await import('../src/common/startup-checks');
+
+    // Không hỏng gì khi schema đang đúng — kiểm vế này TRƯỚC, để nếu nó đã đỏ
+    // sẵn thì ta biết ngay là môi trường chưa migrate, không phải code sai.
+    await assertSchemaUpToDate(pool);
+
+    const { rows } = await pool.query<{ name: string; checksum: string; applied_at: Date }>(
+      `SELECT name, checksum, applied_at FROM schema_migration ORDER BY name DESC LIMIT 1`,
+    );
+    assert.ok(rows[0], 'database chưa chạy migration nào — bài này mất chỗ dựa');
+    daGiau = rows[0];
+
+    await pool.query(`DELETE FROM schema_migration WHERE name = $1`, [daGiau.name]);
+
+    await assert.rejects(
+      () => assertSchemaUpToDate(pool),
+      /Database đi SAU code/,
+      'database thiếu migration mới nhất mà API vẫn khởi động',
+    );
+
+    await pool.query(
+      `INSERT INTO schema_migration (name, checksum, applied_at) VALUES ($1,$2,$3)`,
+      [daGiau.name, daGiau.checksum, daGiau.applied_at],
+    );
+    daGiau = null;
+
+    // Và database đi TRƯỚC code thì KHÔNG được chặn — rollback phải đi qua được
+    await pool.query(
+      `INSERT INTO schema_migration (name, checksum) VALUES ('9999_migration_tuong_lai.sql','x')`,
+    );
+    try {
+      await assertSchemaUpToDate(pool);
+    } finally {
+      await pool.query(`DELETE FROM schema_migration WHERE name = '9999_migration_tuong_lai.sql'`);
+    }
+  });
+});
+
 describe('🔒 Kiểm tra cấu hình lúc khởi động', () => {
   test('bí mật JWT mẫu bị từ chối, bí mật thật được chấp nhận', async () => {
     // Không khởi động lại API được trong test tích hợp, nên kiểm thẳng hàm.

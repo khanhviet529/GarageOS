@@ -88,12 +88,41 @@ export function HopThanhToan({
     );
   }, [invoice.id, invoice.lines]);
 
+  /*
+   * 🔒 Ô nhập SAI phải chặn nút, không được lặng lẽ biến mất.
+   *
+   * Bản trước lọc thẳng: `.filter(Number.isInteger(a.amount) && a.amount > 0)`.
+   * Gõ "1.5", hay dán vào một chuỗi có dấu chấm ngăn cách nghìn, thì dòng đó
+   * RƠI KHỎI phân bổ mà không có dấu hiệu nào — khoản thu vẫn ghi thành công,
+   * thu ngân đóng màn hình với cảm giác đã xong, còn dòng kia vẫn nguyên nợ.
+   *
+   * Sai lệch đó chỉ lộ ra ở lần đối chiếu công nợ sau, khi không còn ai nhớ
+   * hôm ấy đã gõ gì.
+   *
+   * 💡 `HopBaoHiem` và `HopDieuChinhHoaDon` đều KHOÁ NÚT khi số không hợp lệ.
+   *    Ba màn cùng nhập tiền thì phải cư xử giống nhau — người dùng học một
+   *    lần rồi tin vào cả ba.
+   */
+  const dongNhap = useMemo(
+    () =>
+      invoice.lines.map((l) => {
+        const conLai = Math.max(0, l.lineTotal - l.daThu);
+        const tho = (phanBo[l.id] ?? '').trim();
+        const so = Number(tho);
+        // Bỏ trống = không thu dòng này. Đó là lựa chọn hợp lệ, không phải lỗi.
+        const hopLe = tho === '' || (Number.isInteger(so) && so >= 0 && so <= conLai);
+        return { line: l, conLai, tho, so: tho === '' ? 0 : so, hopLe };
+      }),
+    [invoice.lines, phanBo],
+  );
+
+  const coLoiNhap = dongNhap.some((d) => !d.hopLe);
   const allocations = useMemo(
     () =>
-      invoice.lines
-        .map((l) => ({ invoiceLineId: l.id, amount: Number(phanBo[l.id] ?? 0) }))
-        .filter((a) => Number.isInteger(a.amount) && a.amount > 0),
-    [invoice.lines, phanBo],
+      dongNhap
+        .filter((d) => d.hopLe && d.so > 0)
+        .map((d) => ({ invoiceLineId: d.line.id, amount: d.so })),
+    [dongNhap],
   );
   const tongThu = allocations.reduce((tong, a) => tong + a.amount, 0);
 
@@ -209,30 +238,55 @@ export function HopThanhToan({
 
           <div className="field">
             <label>Phân bổ vào hạng mục</label>
-            {invoice.lines.map((l) => {
-              const conLai = Math.max(0, l.lineTotal - l.daThu);
+            {dongNhap.map(({ line: l, conLai, hopLe }) => {
               if (conLai === 0) return null;
+              const idLoi = `loi-thu-${l.id}`;
               return (
-                <label className="row" key={l.id} style={{ justifyContent: 'space-between', gap: 12, marginTop: 6 }}>
-                  <span>{l.description} · còn {formatMoney(conLai)}</span>
-                  <input
-                    aria-label={`Số tiền thu cho ${l.description}`}
-                    type="number"
-                    min={0}
-                    max={conLai}
-                    step={1}
-                    value={phanBo[l.id] ?? ''}
-                    onChange={(e) => setPhanBo((cu) => ({ ...cu, [l.id]: e.target.value }))}
-                    style={{ maxWidth: 160 }}
-                  />
-                </label>
+                <div key={l.id} style={{ marginTop: 6 }}>
+                  <label className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+                    <span>{l.description} · còn {formatMoney(conLai)}</span>
+                    <input
+                      aria-label={`Số tiền thu cho ${l.description}`}
+                      type="number"
+                      min={0}
+                      max={conLai}
+                      step={1}
+                      value={phanBo[l.id] ?? ''}
+                      onChange={(e) => setPhanBo((cu) => ({ ...cu, [l.id]: e.target.value }))}
+                      style={{ maxWidth: 160 }}
+                      /*
+                       * `aria-invalid` + `aria-describedby` chứ không chỉ đổi
+                       * màu viền: người dùng trình đọc màn hình phải biết ô nào
+                       * sai và sai vì sao, không chỉ biết "nút bị khoá".
+                       */
+                      aria-invalid={!hopLe}
+                      {...(hopLe ? {} : { 'aria-describedby': idLoi })}
+                    />
+                  </label>
+                  {!hopLe && (
+                    <p className="alert error" id={idLoi} style={{ marginTop: 4 }}>
+                      Nhập số nguyên đồng từ 0 đến {formatMoney(conLai)}. Tiền là số
+                      nguyên — không có đơn vị nhỏ hơn đồng.
+                    </p>
+                  )}
+                </div>
               );
             })}
           </div>
 
           <p><strong>Tổng thu: {formatMoney(tongThu)}</strong></p>
+          {coLoiNhap && (
+            <p className="alert error">
+              Có ô số tiền chưa hợp lệ. Sửa xong mới ghi nhận được — nếu bỏ qua,
+              dòng đó sẽ không được thu mà không ai nhận ra.
+            </p>
+          )}
           <div className="row">
-            <button type="button" disabled={dangGui || tongThu <= 0} onClick={() => void thuTien()}>
+            <button
+              type="button"
+              disabled={dangGui || coLoiNhap || tongThu <= 0}
+              onClick={() => void thuTien()}
+            >
               {dangGui ? 'Đang ghi…' : 'Xác nhận đã thu'}
             </button>
             <button type="button" className="secondary" disabled={dangGui} onClick={() => setMoForm(false)}>Huỷ</button>
