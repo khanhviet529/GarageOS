@@ -181,6 +181,38 @@ test('🔒 hoá đơn đã phát hành: không còn nút sửa, và hiện đã 
   await shot(page, '42-hoa-don-da-phat-hanh');
 });
 
+test('💰 thu ngân phân bổ khoản thu còn lại theo từng dòng trước khi xác nhận', async ({
+  page,
+  request,
+}) => {
+  // RO-DEMO-0100 còn nợ 3.100.000đ ở HAI dòng khác nhau. Một ô tổng tiền sẽ
+  // không nói được dòng nào đã được thanh toán, nên màn phải hiện cả hai ô.
+  const id = await idDon(request, 'RO-DEMO-0100');
+  await dangNhap(page, '0901000006');
+  await page.goto(`/don/${id}`);
+
+  const hop = page.locator('section.card', { has: page.getByRole('heading', { name: 'Hoá đơn' }) });
+  const nutThu = hop.getByRole('button', { name: 'Ghi nhận khoản thu' });
+  await expect(nutThu).toBeVisible({ timeout: 15_000 });
+  await nutThu.click();
+
+  await expect(hop.getByLabel('Số tiền thu cho Bộ lọc gió, lọc dầu, lọc nhiên liệu')).toHaveValue('1850000');
+  await expect(hop.getByLabel('Số tiền thu cho Dầu hộp số')).toHaveValue('1250000');
+  await expect(hop.getByText('Tổng thu: 3.100.000đ')).toBeVisible();
+});
+
+test('🔒 chỉ quản lý được thấy luồng hoá đơn điều chỉnh', async ({ page, request }) => {
+  const id = await idDon(request, 'RO-DEMO-0050');
+  await dangNhap(page, '0901000002');
+  await page.goto(`/don/${id}`);
+
+  const hop = page.locator('section.card', { has: page.getByRole('heading', { name: 'Hoá đơn' }) });
+  const nut = hop.getByRole('button', { name: 'Lập hoá đơn điều chỉnh' });
+  await expect(nut).toBeVisible({ timeout: 15_000 });
+  await nut.click();
+  await expect(hop.getByText(/Hoá đơn gốc sẽ không bị sửa/)).toBeVisible();
+});
+
 test('🔒 vai không xem được tiền thì không thấy hộp hoá đơn', async ({ page, request }) => {
   /*
    * Thợ không có `invoice:read`. Chặn thật nằm ở API; ở đây khẳng định giao

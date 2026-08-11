@@ -353,6 +353,31 @@ after(async () => {
   await pool.end();
 });
 
+describe('🔒 Đọc quyết toán của đơn CHƯA huỷ', () => {
+  test('trả 200 kèm null, không phải 404', async () => {
+    /*
+     * Gần như MỌI đơn đều chưa huỷ, nên đây là đường đi thường xuyên nhất của
+     * endpoint này — không phải trường hợp biên.
+     *
+     * 🔒 Trả 404 cho trạng thái bình thường làm bốn bài E2E canh "giao diện
+     *    không phát sinh lỗi console" đỏ. Hàng rào đó tồn tại để bắt lỗi THẬT;
+     *    một lỗi giả thường trực làm người ta tắt nó đi, và lúc đó lỗi thật đi
+     *    qua tự do.
+     *
+     * 💡 Cùng hình dạng với `GET /repair-orders/:id/insurance-claim`, vốn đã
+     *    trả `null` từ Phase 3.
+     */
+    const c = await donDangSua();
+    try {
+      const r = await call('GET', `/api/v1/repair-orders/${c.repairOrderId}/settlement`);
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.equal(r.body, null, 'đơn chưa huỷ mà đã có bảng quyết toán');
+    } finally {
+      await c.donDep();
+    }
+  });
+});
+
 describe('🔒 BC-10 — huỷ là quyết toán, không phải xoá', () => {
   test('bài 1: huỷ ở RECEIVED — không có gì để quyết toán', async () => {
     const v = await call('POST', '/api/v1/vehicles', {
@@ -383,6 +408,27 @@ describe('🔒 BC-10 — huỷ là quyết toán, không phải xoá', () => {
     assert.equal(rows[0]!.status, 'CANCELLED');
     // 🔒 Đơn vẫn còn đó — huỷ không bao giờ là DELETE
     assert.equal(rows[0]!.cancel_category, 'CUSTOMER_REQUEST');
+  });
+
+  test('không thể bỏ qua quyết toán bằng route đổi trạng thái chung', async () => {
+    const c = await donDangSua();
+    try {
+      const r = await call('POST', `/api/v1/repair-orders/${c.repairOrderId}/status`, {
+        to: 'CANCELLED',
+        version: c.version,
+        cancelReason: 'Thử đi tắt quy trình hủy',
+        cancelCategory: 'CUSTOMER_REQUEST',
+      });
+      assert.equal(r.status, 409, JSON.stringify(r.body));
+
+      const { rows } = await pool.query<{ status: string }>(
+        'SELECT status::text AS status FROM repair_order WHERE id = $1',
+        [c.repairOrderId],
+      );
+      assert.notEqual(rows[0]!.status, 'CANCELLED');
+    } finally {
+      await c.donDep();
+    }
   });
 
   test('bài 2: huỷ sau khi giữ chỗ — mọi giữ chỗ được nhả, reserved về 0', async () => {

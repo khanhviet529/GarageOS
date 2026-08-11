@@ -8,7 +8,7 @@
     "web": "expo start --web --port 3002",
     "build": "echo 'mobile: build bằng EAS, xem apps/mobile/README.md'",
     "lint": "eslint src --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --project tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
     "@garageos/contracts": "workspace:*",

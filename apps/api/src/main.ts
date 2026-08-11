@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { TenantAwareDb } from '@garageos/db';
 import { AppModule } from './app.module';
+import { APP_POOL } from './db/db.module';
 import { ErrorFilter } from './common/errors';
-import { assertSecretsUsable } from './common/startup-checks';
+import { assertSchemaUpToDate, assertSecretsUsable } from './common/startup-checks';
 
 async function bootstrap(): Promise<void> {
   // 🔒 Kiểm tra bí mật TRƯỚC khi dựng app: không cần kết nối gì để biết cấu
@@ -19,6 +20,10 @@ async function bootstrap(): Promise<void> {
   //    Superuser bỏ qua Row-Level Security kể cả khi bảng đã bật FORCE, khiến
   //    cô lập tenant vô hiệu ÂM THẦM. Thà không chạy còn hơn chạy sai.
   await app.get(TenantAwareDb).assertNotPrivileged();
+
+  // 🔒 Và schema phải theo kịp code. Đặt SAU `assertNotPrivileged` vì quyền DB
+  //    sai là vấn đề nghiêm trọng hơn, nên nó phải là câu báo đầu tiên.
+  await assertSchemaUpToDate(app.get(APP_POOL));
 
   // requestId xuyên suốt web/mobile -> api -> db (docs/13-nfr.md mục 4)
   app.use((req: Request & { requestId?: string }, res: Response, next: NextFunction) => {
@@ -49,7 +54,8 @@ async function bootstrap(): Promise<void> {
     .filter((o) => o !== '');
   app.enableCors({ origin: nguonChoPhep, credentials: true });
 
-  const port = Number(process.env.API_PORT ?? 3001);
+  // Railway và phần lớn PaaS cấp cổng qua `PORT`; máy local vẫn dùng API_PORT.
+  const port = Number(process.env.API_PORT ?? process.env.PORT ?? 3001);
   await app.listen(port);
   new Logger('bootstrap').log(`API chạy tại http://localhost:${port}`);
 }

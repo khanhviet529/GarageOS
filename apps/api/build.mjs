@@ -1,4 +1,30 @@
 import { build } from 'esbuild';
+import { readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/*
+ * 🔒 Nhúng tên migration MỚI NHẤT mà bản build này trông đợi.
+ *
+ * Vì sao phải nhúng thay vì đọc thư mục lúc chạy: image production chỉ chép
+ * `dist/`, không mang theo `infra/migrations/`. Runtime không có gì để đọc, nên
+ * con số phải được chốt tại thời điểm build — đúng lúc mã nguồn và migration
+ * còn nằm cạnh nhau.
+ *
+ * Dùng cho `assertSchemaUpToDate()` ở `src/common/startup-checks.ts`.
+ */
+const thuMucMigration = join(
+  dirname(fileURLToPath(import.meta.url)), '..', '..', 'infra', 'migrations',
+);
+const migrationMoiNhat = readdirSync(thuMucMigration)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .at(-1);
+
+if (migrationMoiNhat === undefined) {
+  throw new Error('Khong tim thay migration nao — ban build se khong kiem duoc schema');
+}
+console.log(`Migration trong doi: ${migrationMoiNhat}`);
 
 /*
  * 🔒 Gói API thành MỘT file chạy được bằng `node`.
@@ -44,8 +70,6 @@ await build({
   sourcemap: true,
   // `pg` và `bcrypt`-like dùng binding gốc; để nguyên trong node_modules
   external: ['pg-native', ...optionalNestDeps],
+  define: { __MIGRATION_MONG_DOI__: JSON.stringify(migrationMoiNhat) },
   logLevel: 'info',
-  banner: {
-    js: "require('reflect-metadata');",
-  },
 });
