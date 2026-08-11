@@ -22,6 +22,52 @@ async function login(page: Page) {
   await expect(page.getByRole('heading', { name: 'Tra cứu biển số' })).toBeVisible();
 }
 
+/**
+ * 🔒 Header phải hiện ĐÚNG tên và ĐÚNG nhãn vai — cho NHIỀU vai, không chỉ một.
+ *
+ * Vì sao bài này tồn tại, và vì sao nó kiểm ba tài khoản:
+ *
+ * `login()` ở trên từng khẳng định thẳng chuỗi "Lê Văn Cố Vấn · Cố vấn dịch vụ"
+ * ngay sau khi bấm đăng nhập. Nó chập chờn — header nạp hồ sơ bằng effect nên
+ * đôi lúc chưa kịp render — nên khẳng định đó bị đổi thành "đã tới đúng trang".
+ * Đổi như vậy làm hết chập chờn, nhưng cũng làm KHÔNG CÒN BÀI NÀO kiểm header.
+ *
+ * ⚠️ Và đó đúng là chỗ dự án từng thủng: `ROLE_LABEL` ở web sai 3 trong 6 khoá
+ *    suốt Phase 1 (`MANAGER` thay vì `BRANCH_MANAGER`, `WAREHOUSE_KEEPER` thay
+ *    vì `STORE_KEEPER`, `ACCOUNTANT` thay vì `CASHIER`). Nó sống sót vì MỌI bài
+ *    E2E đều đăng nhập bằng cố vấn dịch vụ — vai duy nhất có nhãn đúng.
+ *
+ * 💡 Nên bài này không chỉ trả lại khẳng định cũ: nó kiểm ba vai khác nhau, và
+ *    hai trong ba chính là hai vai từng sai nhãn. Khôi phục nguyên trạng sẽ để
+ *    lại đúng cái lỗ đã từng cho lỗi đi qua.
+ */
+test('🔒 header hiện đúng tên và nhãn vai cho từng vai', async ({ page }) => {
+  const taiKhoan = [
+    { sdt: '0901000003', ten: 'Lê Văn Cố Vấn', vai: 'Cố vấn dịch vụ' },
+    { sdt: '0901000005', ten: 'Hoàng Thị Kho', vai: 'Thủ kho' },
+    { sdt: '0901000006', ten: 'Đỗ Thị Thu Ngân', vai: 'Thu ngân' },
+  ];
+
+  for (const tk of taiKhoan) {
+    await page.goto('/dang-nhap');
+    await page.getByLabel('Số điện thoại').fill(tk.sdt);
+    await page.getByLabel('Mật khẩu').fill('demo1234');
+    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+
+    /*
+     * Chờ CHÍNH chuỗi cần kiểm, thay vì chờ điều gì khác rồi mới kiểm nó.
+     *
+     * Đây là cách xử lý đúng cho việc render bằng effect: Playwright tự thử lại
+     * tới khi hết thời gian. Bản cũ chập chờn không phải vì khẳng định sai, mà
+     * vì nó đọc DOM đúng một lần ngay sau cú bấm.
+     */
+    await expect(page.getByText(`${tk.ten} · ${tk.vai}`)).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole('button', { name: 'Đăng xuất' }).click();
+    await expect(page).toHaveURL(/\/dang-nhap/, { timeout: 15_000 });
+  }
+});
+
 async function intake(page: Page, plate: string) {
   await page.getByLabel('Biển số xe').fill(plate);
   await page.getByRole('button', { name: 'Tra cứu' }).click();

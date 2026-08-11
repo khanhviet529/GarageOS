@@ -303,7 +303,27 @@ export class CancellationService {
     });
   }
 
-  async settlementForOrder(actor: ActorContext, orderId: string): Promise<Settlement> {
+  /**
+   * Bảng quyết toán của một đơn — `null` khi đơn chưa huỷ.
+   *
+   * 🔒 KHÔNG ném NOT_FOUND cho trạng thái bình thường.
+   *
+   * Đơn chưa huỷ thì chưa có quyết toán, và đó là tình trạng của gần như MỌI
+   * đơn. Trả 404 cho tình trạng bình thường có ba cái giá, và cái thứ ba mới
+   * là cái đắt:
+   *
+   *  1. Màn chi tiết đơn nào cũng in một dòng đỏ ra console trình duyệt.
+   *  2. Client phải bọc `try/catch` chỉ để dịch 404 thành `null`.
+   *  3. 🔒 Bốn bài E2E canh "giao diện không phát sinh lỗi console" đỏ — và
+   *     hàng rào đó tồn tại để bắt lỗi THẬT. Một lỗi giả thường trực làm người
+   *     ta tắt hàng rào, và lúc đó lỗi thật đi qua tự do.
+   *
+   * 💡 Endpoint anh em `GET /repair-orders/:id/insurance-claim` đã trả
+   *    `InsuranceClaim | null` từ Phase 3. Hai tài nguyên con cùng hình dạng
+   *    phải trả lời cùng một kiểu, nếu không người gọi phải nhớ cái nào là cái
+   *    nào.
+   */
+  async settlementForOrder(actor: ActorContext, orderId: string): Promise<Settlement | null> {
     // 🔒 Bảng quyết toán TOÀN LÀ TIỀN. Thợ không được thấy — cùng lập luận với
     //    `quotation:read` ở 4.5, và bài quét ở tho-khong-thay-tien.spec.ts sẽ
     //    bắt nếu quên.
@@ -313,9 +333,7 @@ export class CancellationService {
         `SELECT id FROM cancellation_settlement WHERE repair_order_id = $1`,
         [orderId],
       );
-      if (rows[0] === undefined) {
-        throw new BusinessError(ErrorCode.NOT_FOUND, 'Đơn này chưa có bảng quyết toán');
-      }
+      if (rows[0] === undefined) return null;
       return this.docQuyetToan(tx, rows[0].id);
     });
   }

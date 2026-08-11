@@ -711,13 +711,26 @@ export const api = {
 
   cancelPreview: (orderId: string) =>
     call<CancelPreviewView>('GET', `/api/v1/repair-orders/${orderId}/cancel-preview`),
+  /*
+   * Không còn `try/catch` dịch 404 thành `null`: máy chủ trả 200 cho đơn chưa
+   * huỷ. Bọc lỗi để diễn đạt một trạng thái BÌNH THƯỜNG là chỗ dễ nuốt mất một
+   * lỗi thật — `error.status === 404` cũng đúng khi id đơn sai.
+   *
+   * ⚠️ NestJS trả `null` bằng THÂN RỖNG, không phải chuỗi JSON `null`. `call()`
+   *    gặp thân rỗng thì trả `{}` — mà `{}` là truthy, nên giao diện tưởng có
+   *    bảng quyết toán rồi đọc trường không tồn tại và cả trang chi tiết đơn
+   *    sập vào ranh giới lỗi.
+   *
+   *    Đã xảy ra đúng như vậy: bỏ lớp chuẩn hoá này làm 13 bài E2E đỏ với màn
+   *    "Màn hình gặp sự cố". Cùng khuôn với `insuranceClaimForOrder` ngay phía
+   *    trên — hai endpoint cùng hình dạng thì client cũng phải xử lý cùng cách.
+   */
   settlementForOrder: async (orderId: string): Promise<SettlementView | null> => {
-    try {
-      return await call<SettlementView>('GET', `/api/v1/repair-orders/${orderId}/settlement`);
-    } catch (error) {
-      if (error instanceof ApiCallError && error.status === 404) return null;
-      throw error;
-    }
+    const kq = await call<SettlementView | Record<string, never> | null>(
+      'GET',
+      `/api/v1/repair-orders/${orderId}/settlement`,
+    );
+    return kq !== null && typeof kq === 'object' && 'id' in kq ? (kq as SettlementView) : null;
   },
   cancelOrder: (orderId: string, input: unknown) =>
     call<SettlementView>('POST', `/api/v1/repair-orders/${orderId}/cancel`, input),
