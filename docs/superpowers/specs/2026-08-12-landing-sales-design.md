@@ -4,6 +4,9 @@
 **Ngày:** 2026-08-12<br>
 **Phạm vi:** showroom/đại lý bán xe có xưởng hậu mãi
 
+> Đặc tả triển khai: [SRS tổng thể](2026-08-12-landing-sales-srs.md) ·
+> [SRS chi tiết Phase 1](2026-08-12-phase-1-landing-sales-srs.md)
+
 ## 1. Quyết định sản phẩm
 
 GarageOS hiện là hệ thống vận hành sau bán: tiếp nhận xe, báo giá sửa chữa,
