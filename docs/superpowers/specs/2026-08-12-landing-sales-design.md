@@ -110,6 +110,38 @@ Admin được:
 - preview desktop/mobile;
 - lưu nháp, publish và rollback bản đã publish trước đó.
 
+### 4.1 Design system cho end user
+
+Admin không chỉ sửa nội dung; mỗi tenant có một `BrandTheme` với các lựa chọn
+có kiểm soát. Theme được áp dụng nhất quán cho toàn landing, còn block chỉ được
+chọn biến thể đã thiết kế sẵn.
+
+| Nhóm tùy chỉnh | Admin được làm | Hàng rào bắt buộc |
+|---|---|---|
+| Màu thương hiệu | Chọn primary, secondary, accent, nền, chữ, màu CTA từ palette hoặc nhập mã HEX | Lưu thành semantic token (`brand`, `surface`, `text`, `action`), không cho CSS tự do; publish bị chặn khi cặp chữ/nền không đủ tương phản WCAG AA. |
+| Font và chữ | Chọn cặp font Việt hóa đã cung cấp, cỡ chữ theo thang XS–2XL, đậm/vừa/thường | Không nạp font URL tùy ý; không cho chỉnh `px` tự do để tránh vỡ responsive. |
+| Hình khối | Chọn preset bo góc, đổ bóng, viền, style nút và style card | Chỉ token/preset do hệ thống định nghĩa; một lựa chọn áp dụng nhất quán. |
+| Khoảng cách | Chọn mật độ `compact`, `comfortable`, `spacious`; khoảng cách section theo thang token | Không cho margin/padding từng pixel hoặc position tuyệt đối. |
+| Bố cục block | Chọn biến thể: ảnh trái/phải, 1–4 cột, căn trái/giữa, nền trơn/gradient/ảnh, chiều rộng container | Mỗi block có schema riêng; chỉ hiển thị các biến thể tương thích responsive. |
+| Ảnh/video | Upload/chọn asset, chọn tỷ lệ khung hình, crop/focal point, overlay và alt text | Chỉ storage adapter; MIME/size allow-list; video nhúng qua allow-list domain. |
+| Header/footer | Chọn logo, slogan, mục menu, thông tin liên hệ, social link, CTA chính | Link phải hợp lệ/HTTPS hoặc route nội bộ; giữ link pháp lý và accessibility bắt buộc. |
+| Hiển thị theo thiết bị | Chọn thứ tự block trên mobile, ẩn nội dung trang trí và preview desktop/tablet/mobile | Không được ẩn CTA hay nội dung pháp lý bắt buộc chỉ để lách kiểm tra; publish chạy responsive/a11y validation. |
+
+Các preset được quản lý ở cấp platform, ví dụ `modern`, `premium`, `minimal`,
+thay vì để từng tenant tự tạo CSS. Admin có thể nhân bản một theme/preset rồi
+đổi token được cho phép; không làm thay đổi theme của tenant khác.
+
+### 4.2 Trải nghiệm chỉnh sửa
+
+Page builder nên có ba vùng: danh sách block bên trái, preview thật ở giữa và
+panel cấu hình bên phải. Tất cả thao tác ghi vào draft; publish là hành động
+riêng, có xác nhận, audit log và khả năng rollback. Preview phải có các khung
+desktop/tablet/mobile, cảnh báo contrast/alt text/link lỗi ngay khi chỉnh.
+
+Giai đoạn sau P3 có thể thêm bản sao trang, lịch publish/hết hạn ưu đãi và A/B
+test CTA. Không thêm chúng vào MVP vì cần analytics và quy tắc xác định phiên
+thử nghiệm trước.
+
 Đường dẫn, ảnh, rich text và CTA đều được validate/sanitize ở server. Rich text
 chỉ là tập con an toàn (đoạn văn, tiêu đề, danh sách, link HTTPS); không có
 script, style inline hay event handler.
@@ -198,8 +230,8 @@ quyền hoặc dữ liệu GarageOS phải có review độc lập theo quy ư�
 
 ## 10. Tiêu chí nghiệm thu MVP
 
-1. Marketing tạo được landing từ block, preview và publish/rollback mà không
-   thể chèn mã thực thi.
+1. Marketing tạo được landing từ block, theme/preset và preview/publish/rollback
+   mà không thể chèn mã thực thi; màu chữ/nền publish phải đạt tương phản WCAG AA.
 2. Khách gửi form tạo đúng một lead trong tenant/chi nhánh đã chọn và không tạo
    Customer/Vehicle sớm.
 3. Sales xử lý được lead đến WON/LOST với lịch sử actor/thời điểm.
