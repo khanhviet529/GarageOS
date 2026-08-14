@@ -60,6 +60,13 @@ Xuyên suốt             adr/         Nhật ký quyết định kiến trúc
 | Thư mục | Nội dung |
 |---|---|
 | [adr/](adr/) | Architecture Decision Records — mỗi quyết định lớn một file, ghi lại **bối cảnh, lựa chọn, đánh đổi** |
+| [reviews/](reviews/) | Nhật ký review — phát hiện nào là thật, test nào đỏ trước khi sửa, chỗ nào bác bỏ reviewer và vì sao |
+| [superpowers/specs/](superpowers/specs/) | **Nhánh mở rộng landing bán xe và Sales Admin** — SRS tổng thể, SRS Phase 1, SEO, thiết kế trải nghiệm |
+
+> Nhánh landing bán xe (2026-08-12) mở rộng đối tượng phục vụ từ xưởng dịch vụ
+> sang **showroom có xưởng hậu mãi**. Phạm vi ở [00-vision.md](00-vision.md#bán-xe-và-chăm-sóc-sau-bán),
+> bất biến `INV-LS-*` ở [05-invariants.md](05-invariants.md#9-landing-bán-xe-catalog-marketing-và-lead),
+> lộ trình ở [15-roadmap.md](15-roadmap.md#nhánh-mở-rộng-l--landing-bán-xe-và-sales-admin).
 
 ## Quy ước trong tài liệu
 

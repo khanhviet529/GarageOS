@@ -100,6 +100,27 @@
 | Làm lại | `rework` | Làm lại do lỗi nội bộ. 🔒 Khác **phát sinh** (khách trả) và **bảo hành** (sau bàn giao). | [BC-14](07-business-cases/BC-14-rework.md) |
 | Số duyệt báo giá | `approverPhone` | 🔒 Số nhận OTP duyệt báo giá = `COALESCE(approverPhone, phone)`. | [BC-13](07-business-cases/BC-13-cong-no.md) |
 
+## Landing bán xe và Sales Admin
+
+Nhánh mở rộng 2026-08-12 ([SRS](superpowers/specs/2026-08-12-landing-sales-srs.md)).
+🔒 Từ vựng ở đây **tách bạch** với từ vựng vận hành xưởng: `VehicleProduct` là
+một *mẫu xe đang chào bán*, không phải `Vehicle` — `Vehicle` luôn là một chiếc
+xe cụ thể của một khách hàng cụ thể.
+
+| Tiếng Việt | Tên trong code | Định nghĩa |
+|---|---|---|
+| Tên miền của trang | `SiteDomain` | Hostname trỏ về landing của một tenant. 🔒 Mỗi tenant có đúng một **primary** (canonical); các hostname còn lại là alias, redirect 308 một bước. |
+| Hồ sơ trang | `SiteProfile` | Thương hiệu, mô tả mặc định, logo, NAP. Có bản nháp và bản đã publish; 🔒 bản đã publish là bất biến. |
+| Mẫu xe chào bán | `VehicleProduct` | Một dòng xe trên catalog marketing. **Không phải** `Vehicle`. |
+| Phiên bản xe | `VehicleVariant` | Bản trang bị của một mẫu xe: động cơ, nội thất, giá hiển thị. |
+| Bản nội dung | `…Revision` / `…Version` | Một lần chốt nội dung. 🔒 Landing chỉ đọc bản đang publish, không bao giờ đọc bản nháp. |
+| Giá hiển thị | `displayPrice` | Giá niêm yết trên landing. 🔒 **Không phải** giá bán thực tế — không dùng cho hoá đơn hay công nợ. `null` nghĩa là "liên hệ". |
+| Nhu cầu khách | `SalesLead` | Người lạ để lại thông tin trên landing. 🔒 **Chưa phải** `Customer` — lead không bao giờ tự sinh hồ sơ khách hàng. |
+| Nhật ký lead | `LeadActivity` | Mỗi lần liên hệ, đổi trạng thái, ghi chú. Chỉ thêm, không sửa. |
+| Hồ sơ giao xe | `VehicleDelivery` | Bàn giao một chiếc xe đã bán. 🔒 Hoàn tất là giao dịch **idempotent** tạo `Customer` + `Vehicle` + `WarrantyCoverage`. |
+| Trải nghiệm xe | `VehicleExperience` | Xem 360° / panorama nội thất trên trang chi tiết. 🔒 Luôn là bổ trợ — mọi nội dung phải có bản HTML tĩnh tương đương. |
+| Tài sản media | `MediaAsset` | Ảnh/video gốc đã upload, kèm các bản `MediaRendition` theo kích cỡ. |
+
 ## Khác
 
 | Tiếng Việt | Tên trong code | Định nghĩa |

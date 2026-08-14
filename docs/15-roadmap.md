@@ -195,6 +195,52 @@ vừa làm tiếp Phase 3–8. Không cần chờ xong hết mới đi.
 
 ---
 
+## Nhánh mở rộng L — Landing bán xe và Sales Admin
+
+> Quyết định 2026-08-12. Đặc tả: [SRS tổng thể](superpowers/specs/2026-08-12-landing-sales-srs.md)
+> · [SRS Phase 1](superpowers/specs/2026-08-12-phase-1-landing-sales-srs.md).
+
+Nhánh này **song song** với Phase 0–8, không thay thế. Nó mở rộng đối tượng
+phục vụ từ xưởng dịch vụ sang showroom có xưởng hậu mãi, và khép kín chuỗi
+lead → giao xe → hậu mãi.
+
+| Phase | Nội dung | Tuần | Trạng thái |
+|---|---|---|---|
+| **L1** | Landing + catalog + lead + Sales Admin cơ bản; resolve tenant theo domain; SEO foundation | 3 | 🚧 code đã có, **chưa có test bất biến** |
+| **L2** | Bàn giao xe sang GarageOS: `Customer` + `Vehicle` + `WarrantyCoverage`, idempotent | 2 | ⏳ chưa bắt đầu |
+| **L3** | Page builder có kiểm soát, BrandTheme, preview/rollback | 2.5 | ⏳ chưa bắt đầu |
+| **L4** | Showroom 360°/panorama, SEO Control Center | 3+ | ⏳ chưa bắt đầu |
+
+### Điểm dừng đề nghị: hết L2
+
+Câu chuyện sản phẩm — *"mua xe ở đây thì theo dõi sửa chữa ở đây"* — trọn vẹn
+ngay khi L2 xong. L3 và L4 tốn nhiều công mà không thêm luận điểm kỹ thuật nào
+mà L1–L2 chưa có: cô lập tenant trên bề mặt công khai, nội dung publish bất
+biến và một giao dịch bàn giao idempotent đã là ba thứ khó nhất.
+
+L4 đặc biệt đắt (asset 360°, panorama, ngân sách hiệu năng) và giá trị của nó
+phụ thuộc vào việc showroom có ảnh chụp thật hay không — thứ chỉ biết được khi
+có khách hàng thật.
+
+### Chặn L2 — phải xong trước
+
+| # | Việc | Trạng thái |
+|---|---|---|
+| 1 | Bộ test cho biên giới tenant công khai | ✅ 27 ca, 13/15 `INV-LS-*` đã có test |
+| 2 | Sửa LS-001 → LS-004 | ✅ migration `0059` + `EDGE_HOST_TRUST` + `trust proxy` |
+| 3 | LS-007, LS-008 — tìm ra khi chạy test | ✅ `repairOrder:read`; migration `0062` |
+| 4 | Chính sách lưu trữ và xoá dữ liệu lead (LS-006) | ✅ redaction + 24 tháng, `INV-LS-15` |
+| 5 | Chốt khoá tra cứu cho xe chưa có biển | ⏳ `vehicle.plate_number` đang `NOT NULL`; **không dùng biển giả** |
+| 6 | Chốt cách gộp khách trùng số điện thoại | ⏳ `customer.phone` chưa unique |
+| 7 | Chốt cách đồng bộ `vehicle.customer_id` với `vehicle_ownership` | ⏳ hai nguồn sự thật về chủ xe |
+| 8 | Bài quét quyền theo VAI (như bài quét phạm vi chi nhánh) | ⏳ LS-007 tìm ra nhờ may, không nhờ hệ thống |
+
+Mục 3 đáng chú ý: nó là **điều kiện cần** của chính lý do làm nhánh này. Xe vừa
+giao chưa có biển trong 1–2 tháng, mà trang tra cứu tiến độ lại tra theo biển —
+nên đúng giai đoạn khách hàng hào hứng nhất thì tính năng không dùng được.
+
+---
+
 ## Giai đoạn 2 — khi có khách hàng thật
 
 Những thứ đã ghi ⚠️ trong tài liệu, chỉ làm khi có yêu cầu cụ thể:
