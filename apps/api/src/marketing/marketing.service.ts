@@ -2,7 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { TenantAwareDb } from '@garageos/db';
-import { contentHashOf, normalizeSlug } from '@garageos/domain';
+import { normalizeSlug } from '@garageos/domain';
+import { contentHashOf } from '../common/content-hash';
 import {
   ErrorCode,
   type ActorContext,

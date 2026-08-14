@@ -1,9 +1,15 @@
-import { createHash } from 'node:crypto';
 import type { ActorContext } from '@garageos/contracts';
 
 /**
  * Logic thuần cho landing/marketing — không import framework (quy tắc 5 CLAUDE.md).
  * Nguồn: SRS Phase 1 mục 7 (tenant resolution) và 8.3 (form validation).
+ *
+ * 🔒 Và không import cả API RIÊNG CỦA MỘT MÔI TRƯỜNG. `contentHashOf` từng ở
+ *    đây cùng `node:crypto`; vì `index.ts` re-export cả gói, mọi màn hình web
+ *    import `formatPlate` đều kéo theo `node:crypto` và bản build production
+ *    của `apps/web` chết. Hàm đó đã về `apps/api/src/common/content-hash.ts`.
+ *
+ *    Ranh giới thật của gói này: **chạy được ở mọi nơi**, kể cả trình duyệt.
  */
 
 /**
@@ -49,14 +55,6 @@ export function normalizeSlug(raw: string): string | null {
     .replace(/^-+|-+$/g, '');
   if (slug.length < 1 || slug.length > 200) return null;
   return slug;
-}
-
-/**
- * SHA-256 canonical projection — dùng cho content_hash/ETag/audit (SRS 6.4).
- * Đầu vào là chuỗi JSON đã canonicalize ở tầng gọi (thứ tự khoá ổn định).
- */
-export function contentHashOf(canonicalJson: string): string {
-  return createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
 }
 
 /**
