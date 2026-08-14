@@ -265,9 +265,33 @@ export class AssignmentService {
     return this.db.withTenant(actor, (tx) => this.docPhanCong(tx, actor, { repairOrderId }));
   }
 
-  async listSchedule(actor: ActorContext, ngay: string): Promise<WorkAssignment[]> {
+  async listSchedule(
+    actor: ActorContext,
+    loc: { date?: string; from?: string; to?: string },
+  ): Promise<WorkAssignment[]> {
     assertCan(actor, 'assignment:read');
-    return this.db.withTenant(actor, (tx) => this.docPhanCong(tx, actor, { ngay }));
+    /*
+     * Mặc định 7 ngày gần nhất — vừa đủ cho app thợ mở lên thấy việc tuần này
+     * mà không cần chọn ngày. Từ chối `to` trước `from` ở đây để API trả 400
+     * rõ ràng thay vì SQL ném sau đó.
+     */
+    let tu = loc.from;
+    let den = loc.to;
+    if (loc.date !== undefined) {
+      tu = loc.date;
+      den = loc.date;
+    }
+    if (tu === undefined && den === undefined) {
+      const homNay = new Date().toISOString().slice(0, 10);
+      den = homNay;
+      const bayNgay = new Date();
+      bayNgay.setUTCDate(bayNgay.getUTCDate() - 6);
+      tu = bayNgay.toISOString().slice(0, 10);
+    }
+    if (tu !== undefined && den !== undefined && tu > den) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, '`from` phải trước hoặc bằng `to`');
+    }
+    return this.db.withTenant(actor, (tx) => this.docPhanCong(tx, actor, { tu, den }));
   }
 
   /**
@@ -426,7 +450,7 @@ export class AssignmentService {
   private async docPhanCong(
     tx: PoolClient,
     actor: ActorContext,
-    loc: { repairOrderId?: string; ngay?: string },
+    loc: { repairOrderId?: string; ngay?: string; tu?: string; den?: string },
   ): Promise<WorkAssignment[]> {
     const params: unknown[] = [];
     let where = '';
@@ -437,6 +461,14 @@ export class AssignmentService {
     if (loc.ngay !== undefined) {
       params.push(loc.ngay);
       where += ` AND wa.planned_start::date = $${params.length}::date`;
+    }
+    if (loc.tu !== undefined) {
+      params.push(loc.tu);
+      where += ` AND wa.planned_start::date >= $${params.length}::date`;
+    }
+    if (loc.den !== undefined) {
+      params.push(loc.den);
+      where += ` AND wa.planned_start::date <= $${params.length}::date`;
     }
     const scope = appendBranchScope(actor, params, 'ro');
     // 🔒 Thợ chỉ thấy việc của mình — docs/02 mục 1, phạm vi SELF

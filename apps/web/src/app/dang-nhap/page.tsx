@@ -1,6 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { api, auth, ApiCallError } from '@/lib/api';
+import { ErrorState } from '@/components/ErrorState';
 
 export default function LoginPage() {
   const [phone, setPhone] = useState('');
@@ -41,7 +42,7 @@ export default function LoginPage() {
           <p className="muted small">Quản lý xưởng dịch vụ ô tô</p>
         </div>
 
-        {error !== null && <div className="alert error" role="alert">{error}</div>}
+        {error !== null && <ErrorState message={error} />}
 
         <div className="field">
           <label htmlFor="phone">Số điện thoại <span className="req">*</span></label>

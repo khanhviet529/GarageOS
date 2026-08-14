@@ -55,9 +55,17 @@ export class AssignmentController {
   @Get('assignments')
   listSchedule(
     @Actor() actor: ActorContext,
-    @Query('date') date: string,
+    @Query('date') date?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ): Promise<WorkAssignment[]> {
-    return this.svc.listSchedule(actor, date);
+    /*
+     * Ba chế độ, tương thích ngược:
+     *   - ?date=YYYY-MM-DD       lịch của một ngày (cũ)
+     *   - ?from=&to=YYYY-MM-DD   lịch sử khoảng ngày (mobile màn lịch sử)
+     *   - không có               7 ngày gần nhất — lịch mặc định cho app thợ
+     */
+    return this.svc.listSchedule(actor, { ...(date !== undefined ? { date } : {}), ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) });
   }
 
   @Get('repair-orders/:id/assignments')

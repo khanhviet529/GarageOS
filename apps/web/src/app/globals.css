@@ -85,12 +85,33 @@ body {
      đăng xuất đẩy header rộng hơn viewport và làm CẢ TRANG trượt ngang. */
   display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap;
 }
+/*
+ * Chiều cao header — TOC sidebar dùng làm offset (`top` cho `position: sticky`
+ * + `scroll-margin-top` cho neo). Mặc định 120px đủ cho cả 1 dòng (~64px) lẫn
+ * 2 dòng (5 mục nav wrap khi tablet 768px) mà không để khoảng trống lớn.
+ * Chiều cao thật của header phụ thuộc nội dung, mình ước lượng từ font-size +
+ * padding rồi thêm 8px an toàn. Đo lại khi đổi cỡ chữ header.
+ */
+:root { --header-stack: 120px; }
 .app-header h1 { font-size: var(--fs-lg); font-weight: 600; letter-spacing: .2px; }
 .app-header .spacer { flex: 1; }
 .app-header .who { font-size: var(--fs-sm); opacity: .9; }
 
 .container { max-width: 1100px; margin: 0 auto; padding: var(--sp-5); }
 .stack { display: flex; flex-direction: column; gap: var(--sp-4); }
+/*
+ * `card-section` — khoảng cách giữa các khối con trong một `.card`.
+ *
+ * Trước class này, mỗi trang tự thêm `style={{ marginTop: 12 }}` trên phần
+ * tử thứ hai trở đi — 35 chỗ viết tay rải trên 8 file. Đổi khoảng cách là
+ * phải sửa từng chỗ, dễ quên. Selector `> * + *` (adjacent sibling) tự động
+ * cách mọi phần tử con liền kề -- bao gồm `<div className="card-section">`
+ * lẫn các `<p>`, `<form>` đứng liền nhau.
+ *
+ * `gap: var(--sp-3)` = 12px khớp với `marginTop: 12` cũ — số nào khác đều
+ * gây lệch nhịp. Nếu sau này muốn spacing khác, đổi ở đây một chỗ duy nhất.
+ */
+.card-section { display: flex; flex-direction: column; gap: var(--sp-3); }
 .row   { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
 /* Hàng form nhiều trường: căn theo MÉP TRÊN. Căn mép dưới sẽ làm các ô lệch
    nhau khi có trường kèm dòng gợi ý bên dưới. */
@@ -214,6 +235,15 @@ td.mono { font-family: var(--font-mono); }
   /* Màn hẹp: bỏ thụt lề trái để nav dùng hết chiều ngang còn lại */
   .app-header .nav { margin-left: 0; }
 }
+/*
+ * Tablet (641–1023): nav vẫn hiện ngang nhưng thu nhỏ gap và font để 5 mục
+ * không vừa đẩy header tràn. Nếu vẫn tràn thì `flex-wrap` ở trên đã xử lý
+ * — mục wrap xuống dòng thứ hai.
+ */
+@media (max-width: 1023px) and (min-width: 641px) {
+  .app-header .nav { gap: 2px; margin-left: var(--sp-2); }
+  .app-header .nav a { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); }
+}
 .app-header .nav a {
   color: #fff; text-decoration: none; opacity: .8;
   padding: var(--sp-1) var(--sp-3); border-radius: var(--r-sm);
@@ -271,9 +301,16 @@ td.nowrap, th.nowrap { white-space: nowrap; }
 tbody tr.group-row:hover td { background: var(--c-bg); }
 
 /* Hai cột: danh mục để chọn bên trái, báo giá đang hình thành bên phải.
-   Tổng tiền phải luôn trong tầm mắt khi cố vấn ngồi cạnh khách. */
+   Tổng tiền phải luôn trong tầm mắt khi cố vấn ngồi cạnh khách.
+   3 breakpoint:
+     - ≥1024 (desktop)    2 cột cạnh nhau, mỗi cột đủ rộng
+     - 641–1023 (tablet)  2 cột thu nhỏ (450px mỗi cột) — iPad dọc & ngang
+     - ≤640 (mobile)      xếp dọc */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); align-items: start; }
-@media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+@media (max-width: 1023px) and (min-width: 641px) {
+  .split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-3); }
+}
+@media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
 
 .tabs { display: flex; gap: var(--sp-1); border-bottom: 1px solid var(--c-border); }
 .tab {
@@ -541,3 +578,327 @@ td.am { color: var(--c-danger); }
 
 /* Vốn chết: tiền đang nằm im trên kệ */
 .tag.von-chet { background: var(--c-danger-soft); color: var(--c-danger); }
+
+/* --- Skeleton (trạng thái đang tải) ---
+ *
+ * Thanh xám chạy ngang tạo cảm giác "đang có gì đó xảy ra" mà không nặng nề
+ * như spinner. Khung đứng yên nên khi dữ liệu tới, trang không nhảy — chỉ
+ * chữ và số thay.
+ *
+ * Gradient 3 điểm dừng thay vì 2 để cảm giác chuyển động mượt hơn ở đầu và
+ * cuối thanh. Nếu làm 2 điểm dừng, mắt thấy "lập tức biến mất" ở mép.
+ *
+ * `aria-hidden` đặt ở phần tử (component), KHÔNG đặt animation ở đây — để
+ * `prefers-reduced-motion` ở trên áp dụng cho mọi skeleton, không phải mỗi
+ * chỗ dùng phải nhớ.
+ */
+.skeleton {
+  display: block;
+  background:
+    linear-gradient(
+      90deg,
+      var(--c-bg) 0%,
+      var(--c-border) 50%,
+      var(--c-bg) 100%
+    );
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  border-radius: var(--r-sm);
+  /* Tương phản giữa điểm sáng (--c-border) và điểm tối (--c-bg) phải vừa đủ
+     để người bình thường thấy được NHƯNG không chói. --c-bg #f6f7f9 và
+     --c-border #d5dae1 đạt khoảng 1.5:1 — đúng ngưỡng "có hình nhưng không
+     phân tâm". */
+  color: transparent;
+}
+@keyframes skeleton-pulse {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* --- EmptyState (truy vấn trả về rỗng) ---
+ *
+ * Viền nét đứt và nền `--c-surface` thay vì `--c-bg` để phân biệt với khối
+ * bình thường. Nét đứt nói "không có nội dung ở đây" mà không cần icon.
+ */
+.empty-state {
+  text-align: center;
+  padding: var(--sp-6) var(--sp-4);
+  border: 1px dashed var(--c-border);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
+}
+.empty-state .empty-title { font-size: var(--fs-md); font-weight: 600; margin: 0; }
+.empty-state .empty-desc  { max-width: 420px; margin: 0; }
+.empty-state .empty-icon  { font-size: 28px; line-height: 1; color: var(--c-text-muted); }
+.empty-state .empty-action { margin-top: var(--sp-3); }
+
+/* --- Dashboard báo cáo ---
+ *
+ * Ba cột trên desktop (TOC + nội dung), một cột trên tablet/mobile.
+ * TOC có `position: sticky` để giữ trong viewport khi cuộn xuống — KHÔNG dùng
+ * `position: fixed` vì sẽ chiếm chỗ trên mobile.
+ *
+ * `top: var(--header-stack)` KHỚP với `scroll-margin-top` của `.bao-cao-khoi`.
+ * Khi header wrap xuống 2 dòng (tablet 768px khi .nav có 5 mục) thì chiều cao
+ * thực của header là ~110–130px. Cố định `top: 80px` là TOC bị header che;
+ * 120px đủ cho cả 1 dòng (~64px) lẫn 2 dòng mà không để khoảng trống lớn.
+ */
+ */
+.bao-cao-tieu-de-trang {
+  margin-bottom: var(--sp-3);
+}
+.bao-cao-ky-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  border-bottom: 1px solid var(--c-border);
+  margin-bottom: var(--sp-4);
+  overflow-x: auto;
+  /* Tại sao CẦN overflow-x: trên tablet dọc 768px, 4 tab có thể không đủ
+     chỗ — cuộn ngang thay vì tràn dọc gây vỡ layout. */
+}
+.bao-cao-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-4);
+}
+@media (min-width: 1024px) {
+  .bao-cao-grid {
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+  }
+}
+.bao-cao-toc {
+  display: none;
+}
+.bao-cao-toc-sticky-host {
+  /* Mặc định không sticky — chỉ áp dụng ở desktop. */
+}
+@media (min-width: 1024px) {
+  .bao-cao-toc {
+    display: block;
+    position: sticky;
+    top: var(--header-stack, 120px);
+    /* Khoảng đệm trên để tiêu đề khối không bị header đè khi cuộn vào neo.
+       Khớp với scroll-margin-top ở .bao-cao-khoi bên dưới. */
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--r-md);
+    padding: var(--sp-3);
+    max-height: calc(100vh - var(--header-stack, 120px) - 24px);
+    overflow-y: auto;
+  }
+  .bao-cao-toc ul {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .bao-cao-toc .toc-link {
+    background: none;
+    border: none;
+    padding: 6px 8px;
+    text-align: left;
+    color: var(--c-text-muted);
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    border-radius: var(--r-sm);
+    min-height: 32px;
+    width: 100%;
+    cursor: pointer;
+  }
+  .bao-cao-toc .toc-link:hover { background: var(--c-bg); color: var(--c-text); }
+  .bao-cao-toc .toc-ky {
+    font-size: var(--fs-xs);
+    color: var(--c-text-muted);
+  }
+}
+.bao-cao-noi-dung {
+  display: flex; flex-direction: column; gap: var(--sp-4);
+  min-width: 0;
+}
+.bao-cao-khoi {
+  /* Cuộn tới neo không bị header đè — khớp với `top` của `.bao-cao-toc`. */
+  scroll-margin-top: var(--header-stack, 120px);
+}
+.bao-cao-tieu-de {
+  font-size: var(--fs-lg);
+  margin-bottom: var(--sp-3);
+}
+.bao-cao-ky {
+  margin: 0 0 var(--sp-2) 0;
+  font-size: var(--fs-sm);
+}
+.bao-cao-loai-tru {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.bao-cao-loai-tru summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.bao-cao-loai-tru ul {
+  margin-top: 4px;
+  padding-left: var(--sp-4);
+}
+
+/* --- Toast (phản hồi sau hành động) ---
+ *
+ * Vị trí góc dưới phải — nơi mắt người dùng ĐÃ Ở sau khi bấm nút, và không
+ * che nội dung chính. Trên mobile viewport chiếm gần hết chiều ngang và bám
+ * đáy với khoảng đệm an toàn để không bị che bởi thanh điều hướng trình duyệt.
+ */
+.toast-stack {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  pointer-events: none;
+  max-width: min(420px, calc(100vw - var(--sp-5) * 2));
+}
+@media (max-width: 640px) {
+  .toast-stack { left: var(--sp-3); right: var(--sp-3); bottom: var(--sp-3); max-width: none; }
+}
+.toast {
+  pointer-events: auto;
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: 0 4px 16px rgba(20, 24, 29, 0.12);
+  font-size: var(--fs-sm);
+  /*
+   * Animation vào từ dưới lên 200ms — vừa đủ thấy được, không chậm đến mức
+   * người dùng chờ. `prefers-reduced-motion` ở trên đã huỷ animation cho ai
+   * cần, nên đây là chế độ mặc định cho người dùng bình thường.
+   */
+  animation: toast-in 200ms ease-out;
+}
+@keyframes toast-in {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.toast-thanh-cong { border-color: #a8d3ba; background: var(--c-success-soft); color: var(--c-success); }
+.toast-loi        { border-color: #eab6b6; background: var(--c-danger-soft);  color: var(--c-danger); }
+.toast-icon {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: var(--fs-xs);
+  background: currentColor;
+  color: #fff;
+}
+/* Dấu bên trong hình tròn phải là màu nền toast, không phải currentColor — dùng
+   ::before để đảo màu chữ. */
+.toast-thanh-cong .toast-icon::before { content: '✓'; color: var(--c-success-soft); }
+.toast-loi        .toast-icon::before { content: '!'; color: var(--c-danger-soft);  }
+.toast-text { flex: 1; color: var(--c-text); }
+.toast-action {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  min-height: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: inherit;
+  border-radius: var(--r-sm);
+}
+.toast-action:hover:not(:disabled) { background: rgba(20, 24, 29, 0.06); }
+.toast-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 24px; min-width: 24px;
+  color: var(--c-text-muted);
+  border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.toast-close:hover:not(:disabled) { background: rgba(20, 24, 29, 0.06); color: var(--c-text); }
+
+/* --- Landing (trang chủ) ---
+ *
+ * Đây là TRANG DUY NHẤT có gradient nền và animation nhẹ. Toàn bộ phần còn
+ * lại của app là công cụ nghiệp vụ — xem comment đầu globals.css.
+ *
+ * Lý do cho ngoại lệ này: đây là lần đầu người dùng nhìn thấy GarageOS, và
+ * ấn tượng đầu tiên KHÔNG lặp lại. Hai nút bấm lớn cho cả nhân viên lẫn
+ * khách — không phải hai mục nav mảnh, vì đây là lúc họ quyết định mình
+ * thuộc về nhóm nào.
+ */
+.landing {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(20, 80, 140, 0.08), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(23, 104, 59, 0.06), transparent 50%),
+    var(--c-bg);
+}
+.landing-card {
+  width: min(480px, 100%);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  padding: var(--sp-6);
+  text-align: center;
+  display: flex; flex-direction: column; gap: var(--sp-4);
+  box-shadow: 0 2px 16px rgba(20, 24, 29, 0.04);
+  animation: landing-in 400ms ease-out;
+}
+@keyframes landing-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.landing-logo {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  color: var(--c-primary);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+.landing-tag {
+  margin: 0;
+  color: var(--c-text-muted);
+  font-size: var(--fs-md);
+}
+.landing-actions {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.landing-cta {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 48px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-sm);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  text-decoration: none;
+  transition: background-color var(--thoi-luong) ease, border-color var(--thoi-luong) ease,
+              color var(--thoi-luong) ease, transform var(--thoi-luong) ease;
+}
+.landing-cta-primary {
+  background: var(--c-primary);
+  color: #fff;
+  border: 1px solid var(--c-primary);
+}
+.landing-cta-primary:hover { background: var(--c-primary-hover); border-color: var(--c-primary-hover); }
+.landing-cta-secondary {
+  background: #fff;
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+}
+.landing-cta-secondary:hover { background: var(--c-bg); }
+.landing-cta:active { transform: scale(0.99); }
+.landing-note {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+  line-height: 1.6;
+}

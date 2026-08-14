@@ -8,9 +8,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
 } from 'react-native';
 import { api, ApiCallError, phien, type NguoiDung } from '../lib/api';
+import { Loi } from '../lib/trang-thai';
 import { co, mau } from '../theme';
 
 export function DangNhap({ onXong }: { onXong: (nguoi: NguoiDung) => void }) {
@@ -56,11 +56,7 @@ export function DangNhap({ onXong }: { onXong: (nguoi: NguoiDung) => void }) {
         <Text style={kieu.tieuDe}>GarageOS</Text>
         <Text style={kieu.phu}>Ứng dụng kỹ thuật viên</Text>
 
-        {loi !== null && (
-          <View style={kieu.hopLoi} accessibilityRole="alert">
-            <Text style={kieu.chuLoi}>{loi}</Text>
-          </View>
-        )}
+        {loi !== null && <Loi message={loi} />}
 
         <Text style={kieu.nhan}>Số điện thoại</Text>
         <TextInput
@@ -142,13 +138,4 @@ const kieu = StyleSheet.create({
   // tương phản. Cùng lập luận đã áp cho web ở đợt giao diện.
   nutTat: { backgroundColor: mau.chuMo },
   chuNut: { color: '#fff', fontSize: co.chuTo, fontWeight: '600' },
-  hopLoi: {
-    backgroundColor: mau.loiNhat,
-    borderColor: mau.loi,
-    borderWidth: 1,
-    borderRadius: co.bo,
-    padding: co.dem3,
-    marginBottom: co.dem3,
-  },
-  chuLoi: { color: mau.loi, fontSize: co.chuNho },
 });

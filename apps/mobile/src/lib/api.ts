@@ -170,6 +170,13 @@ export const api = {
   /** Lịch hôm nay — API đã lọc theo phạm vi của vai đăng nhập */
   lichHomNay: (ngay: string) => goi<JobCard[]>('GET', `/api/v1/assignments?date=${ngay}`),
 
+  /**
+   * Lịch sử việc đã xong trong khoảng ngày. Vai TECHNICIAN chỉ thấy việc của
+   * mình — scope SELF đã enforce ở service, mobile không truyền id.
+   */
+  lichSu: (tu: string, den: string) =>
+    goi<JobCard[]>('GET', `/api/v1/assignments?from=${tu}&to=${den}`),
+
   gioCong: (assignmentId: string) =>
     goi<GioCong>('GET', `/api/v1/assignments/${assignmentId}/time`),
 
