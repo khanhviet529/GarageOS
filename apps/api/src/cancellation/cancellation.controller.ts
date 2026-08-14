@@ -24,7 +24,10 @@ export class CancellationController {
   }
 
   @Get('repair-orders/:id/settlement')
-  settlement(@Actor() actor: ActorContext, @Param('id') id: string): Promise<Settlement> {
+  settlement(
+    @Actor() actor: ActorContext,
+    @Param('id') id: string,
+  ): Promise<Settlement | null> {
     return this.svc.settlementForOrder(actor, id);
   }
 

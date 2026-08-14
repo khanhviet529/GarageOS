@@ -4,11 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { BangCuon } from '@/components/BangCuon';
 import {
   api,
+  auth,
   ApiCallError,
   formatMoney,
   INVOICE_STATUS_LABEL,
   type InvoiceView,
 } from '@/lib/api';
+import { HopDieuChinhHoaDon } from '@/components/HopDieuChinhHoaDon';
+import { HopThanhToan } from '@/components/HopThanhToan';
 
 /**
  * Khối hoá đơn trên màn chi tiết đơn — BC-07.
@@ -38,6 +41,11 @@ export function HopHoaDon({
   const [lyDo, setLyDo] = useState('');
   const [ghiCongNo, setGhiCongNo] = useState(false);
   const [dangGui, setDangGui] = useState(false);
+  const [canAdjust, setCanAdjust] = useState(false);
+
+  useEffect(() => {
+    setCanAdjust(auth.user()?.roles.some((r) => r === 'BRANCH_MANAGER' || r === 'OWNER') ?? false);
+  }, []);
 
   const tai = useCallback(() => {
     api
@@ -269,6 +277,23 @@ export function HopHoaDon({
           {hd.varianceReason !== null && (
             <p className="hint">Giải trình chênh lệch: {hd.varianceReason}</p>
           )}
+          <div className="row" style={{ marginTop: 12 }}>
+            <HopDieuChinhHoaDon
+              invoice={hd}
+              canAdjust={canAdjust}
+              onThayDoi={() => {
+                tai();
+                onThayDoi?.();
+              }}
+            />
+          </div>
+          <HopThanhToan
+            invoice={hd}
+            onThayDoi={() => {
+              tai();
+              onThayDoi?.();
+            }}
+          />
         </div>
       ))}
     </section>

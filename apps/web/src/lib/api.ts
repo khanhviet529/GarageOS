@@ -530,6 +530,87 @@ export interface CustomerDebtRow {
   creditOnHold: boolean;
 }
 
+export interface PaymentView {
+  id: string;
+  customerId: string;
+  payerType: 'CUSTOMER' | 'INSURER' | 'WARRANTY';
+  payerName: string | null;
+  amount: number;
+  method: 'CASH' | 'TRANSFER' | 'CARD' | 'CREDIT';
+  paidAt: string;
+  reference: string | null;
+  reversalOfPaymentId: string | null;
+  allocations: {
+    invoiceLineId: string;
+    invoiceCode: string;
+    description: string;
+    amount: number;
+  }[];
+}
+
+export interface InsuranceClaimView {
+  id: string;
+  repairOrderId: string;
+  repairOrderCode: string;
+  insurerName: string;
+  policyNumber: string;
+  claimNumber: string | null;
+  deductibleAmount: number;
+  approvedAmount: number | null;
+  status:
+    | 'DRAFT'
+    | 'SUBMITTED'
+    | 'SURVEYED'
+    | 'APPROVED'
+    | 'PARTIALLY_APPROVED'
+    | 'REJECTED'
+    | 'SETTLED'
+    | 'CANCELLED';
+  rejectionReason: string | null;
+  submittedAt: string | null;
+  settledAt: string | null;
+}
+
+export interface CancelPreviewView {
+  repairOrderId: string;
+  status: string;
+  openTimeLogCount: number;
+  activeAssignmentCount: number;
+  activeReservationCount: number;
+  issuedParts: {
+    movementId: string;
+    partId: string;
+    sku: string;
+    partName: string;
+    quantity: number;
+    quotationLineId: string | null;
+  }[];
+  cancellable: boolean;
+  lyDoKhongHuyDuoc: string | null;
+}
+
+export interface SettlementView {
+  id: string;
+  repairOrderId: string;
+  repairOrderCode: string;
+  status: 'DRAFT' | 'CONFIRMED' | 'DISPUTED' | 'WAIVED';
+  chinhSachCong: 'ACTUAL_HOURS' | 'PERCENTAGE' | 'NONE';
+  thuCongChanDoan: boolean;
+  lines: {
+    id: string;
+    seq: number;
+    nguon: 'DIAGNOSIS' | 'LABOR' | 'PART_FITTED' | 'PART_DAMAGED' | 'REFIT';
+    description: string;
+    completionPercent: number | null;
+    quantity: number;
+    unitPrice: number;
+    amount: number;
+  }[];
+  totalAmount: number;
+  disputeNote: string | null;
+  confirmedAt: string | null;
+}
+
 export const INVOICE_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Nháp',
   ISSUED: 'Đã phát hành',
@@ -620,8 +701,69 @@ export const api = {
     call<InvoiceView>('POST', '/api/v1/invoices', { repairOrderId }),
   issueInvoice: (id: string, input: unknown) =>
     call<InvoiceView>('POST', `/api/v1/invoices/${id}/issue`, input),
-  recordPayment: (input: unknown) => call<unknown>('POST', '/api/v1/payments', input),
+  adjustInvoice: (id: string, input: unknown) =>
+    call<InvoiceView>('POST', `/api/v1/invoices/${id}/adjust`, input),
+  recordPayment: (input: unknown) => call<PaymentView>('POST', '/api/v1/payments', input),
+  reversePayment: (id: string, input: unknown) =>
+    call<PaymentView>('POST', `/api/v1/payments/${id}/reverse`, input),
+  customerPayments: (customerId: string) =>
+    call<PaymentView[]>('GET', `/api/v1/customers/${customerId}/payments`),
   debtReport: () => call<CustomerDebtRow[]>('GET', '/api/v1/reports/debt'),
+
+  insuranceForOrder: async (orderId: string): Promise<InsuranceClaimView | null> => {
+    /*
+     * NestJS biểu diễn `null` ở endpoint này bằng body rỗng. Lớp `call()` cố
+     * tình coi JSON rỗng là `{}` để báo lỗi HTTP vẫn đọc được; riêng ở đây `{}`
+     * không phải hồ sơ. Chuẩn hoá nó thành null trước khi giao cho giao diện.
+     */
+    const result = await call<InsuranceClaimView | Record<string, never> | null>(
+      'GET',
+      `/api/v1/repair-orders/${orderId}/insurance-claim`,
+    );
+    return result !== null && typeof result === 'object' && 'id' in result
+      ? result as InsuranceClaimView
+      : null;
+  },
+  createInsuranceClaim: (input: unknown) =>
+    call<InsuranceClaimView>('POST', '/api/v1/insurance-claims', input),
+  updateInsuranceClaim: (id: string, input: unknown) =>
+    call<InsuranceClaimView>('POST', `/api/v1/insurance-claims/${id}/status`, input),
+  setInsuranceExpectedLines: (id: string, invoiceLineIds: string[]) =>
+    call<{ soDong: number }>('POST', `/api/v1/insurance-claims/${id}/expected-lines`, {
+      invoiceLineIds,
+    }),
+
+  cancelPreview: (orderId: string) =>
+    call<CancelPreviewView>('GET', `/api/v1/repair-orders/${orderId}/cancel-preview`),
+  /*
+   * Không còn `try/catch` dịch 404 thành `null`: máy chủ trả 200 cho đơn chưa
+   * huỷ. Bọc lỗi để diễn đạt một trạng thái BÌNH THƯỜNG là chỗ dễ nuốt mất một
+   * lỗi thật — `error.status === 404` cũng đúng khi id đơn sai.
+   *
+   * ⚠️ NestJS trả `null` bằng THÂN RỖNG, không phải chuỗi JSON `null`. `call()`
+   *    gặp thân rỗng thì trả `{}` — mà `{}` là truthy, nên giao diện tưởng có
+   *    bảng quyết toán rồi đọc trường không tồn tại và cả trang chi tiết đơn
+   *    sập vào ranh giới lỗi.
+   *
+   *    Đã xảy ra đúng như vậy: bỏ lớp chuẩn hoá này làm 13 bài E2E đỏ với màn
+   *    "Màn hình gặp sự cố". Cùng khuôn với `insuranceClaimForOrder` ngay phía
+   *    trên — hai endpoint cùng hình dạng thì client cũng phải xử lý cùng cách.
+   */
+  settlementForOrder: async (orderId: string): Promise<SettlementView | null> => {
+    const kq = await call<SettlementView | Record<string, never> | null>(
+      'GET',
+      `/api/v1/repair-orders/${orderId}/settlement`,
+    );
+    return kq !== null && typeof kq === 'object' && 'id' in kq ? (kq as SettlementView) : null;
+  },
+  cancelOrder: (orderId: string, input: unknown) =>
+    call<SettlementView>('POST', `/api/v1/repair-orders/${orderId}/cancel`, input),
+  confirmSettlement: (id: string) =>
+    call<SettlementView>('POST', `/api/v1/settlements/${id}/confirm`),
+  disputeSettlement: (id: string, note: string) =>
+    call<SettlementView>('POST', `/api/v1/settlements/${id}/dispute`, { note }),
+  waiveSettlement: (id: string, note: string) =>
+    call<SettlementView>('POST', `/api/v1/settlements/${id}/waive`, { note }),
 
   listBays: () => call<Bay[]>('GET', '/api/v1/bays'),
   listPendingWork: () => call<PendingWorkItem[]>('GET', '/api/v1/assignments/pending-work'),

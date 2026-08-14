@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Chỉ TypeScript cần ép React 18. Metro cũng đọc tsconfig.json và coi
+    // `paths` là alias RUNTIME; trỏ `react` tới @types ở đó sẽ làm bundle lỗi.
+    "paths": {
+      "@/*": ["./src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"]
+    }
+  }
+}

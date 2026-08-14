@@ -156,22 +156,28 @@ describe('Chuyển trạng thái qua API', () => {
 
   test('huỷ đơn bắt buộc có lý do và nhóm lý do', async () => {
     const o = await newOrder('D');
-    const thieu = await move(o.id, 'CANCELLED');
+    const thieu = await call('POST', `/api/v1/repair-orders/${o.id}/cancel`, {
+      version: o.version,
+      category: 'CUSTOMER_REQUEST',
+    });
     assert.equal(thieu.status, 400, JSON.stringify(thieu.body));
 
-    const du = await move(o.id, 'CANCELLED', {
-      cancelReason: 'Khách báo bận, hẹn tuần sau mang xe lại',
-      cancelCategory: 'CUSTOMER_REQUEST',
+    const du = await call('POST', `/api/v1/repair-orders/${o.id}/cancel`, {
+      version: o.version,
+      reason: 'Khách báo bận, hẹn tuần sau mang xe lại',
+      category: 'CUSTOMER_REQUEST',
     });
     assert.equal(du.status, 201, JSON.stringify(du.body));
   });
 
   test('đơn đã huỷ là trạng thái cuối, không mở lại được', async () => {
     const o = await newOrder('E');
-    await move(o.id, 'CANCELLED', {
-      cancelReason: 'Xe hỏng nặng ngoài phạm vi xưởng',
-      cancelCategory: 'GARAGE_UNABLE',
+    const huy = await call('POST', `/api/v1/repair-orders/${o.id}/cancel`, {
+      version: o.version,
+      reason: 'Xe hỏng nặng ngoài phạm vi xưởng',
+      category: 'GARAGE_UNABLE',
     });
+    assert.equal(huy.status, 201, JSON.stringify(huy.body));
     const r = await move(o.id, 'DIAGNOSING');
     assert.equal(r.status, 409);
   });

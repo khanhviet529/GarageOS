@@ -21,6 +21,8 @@ import { StatusActions } from '@/components/StatusActions';
 import { HopHoaDon } from '@/components/HopHoaDon';
 import { ErrorState } from '@/components/ErrorState';
 import { SkeletonCard } from '@/components/Skeleton';
+import { HopBaoHiem } from '@/components/HopBaoHiem';
+import { HopHuyDon } from '@/components/HopHuyDon';
 import { formatPlate } from '@garageos/domain';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -81,6 +83,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   .catch(() =>
                     setError('Đã cập nhật, nhưng chưa tải lại được. Hãy làm mới trang.'),
                   );
+              }}
+            />
+
+            <HopHuyDon
+              repairOrderId={order.id}
+              version={order.version}
+              status={order.status}
+              onDone={() => {
+                api.getRepairOrder(id).then(setOrder).catch(() =>
+                  setError('Đã cập nhật, nhưng chưa tải lại được. Hãy làm mới trang.'),
+                );
               }}
             />
 
@@ -243,6 +256,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               lập hoá đơn, và bảng đối chiếu bên trong chỉ có nghĩa khi người
               đọc vừa nhìn qua báo giá ở phía trên.
             */}
+            <HopBaoHiem repairOrderId={id} />
             <HopHoaDon repairOrderId={id} />
 
             <div className="row">

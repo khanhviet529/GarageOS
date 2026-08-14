@@ -1,0 +1,46 @@
+name: Production health probe
+
+# ⚠️ Đây là CANARY, không phải hệ thống giám sát.
+#
+# Lịch cron của GitHub Actions bị hoãn khi hạ tầng tải cao, và có thể BỎ LƯỢT
+# hoàn toàn — GitHub nói rõ điều đó trong tài liệu. Nên workflow này trả lời
+# được câu "sáng nay production còn sống không?", KHÔNG trả lời được câu "nó
+# chết lúc mấy giờ và trong bao lâu".
+#
+# 💡 Cần uptime thật (đo từ nhiều vùng, cảnh báo tức thì, lịch sử downtime) thì
+#    dùng một dịch vụ chuyên dụng — xem `docs/DEPLOY.md` mục giám sát. Để
+#    workflow này chạy dày đặc rồi tin là đã có giám sát còn tệ hơn không có,
+#    vì nó tạo cảm giác an toàn mà không kèm theo sự an toàn.
+#
+# 15 phút chứ không phải 5: cron dày hơn không làm phát hiện nhanh hơn một cách
+# đáng tin (vì lượt vẫn bị bỏ), mà nhân ba số email báo lỗi khi production sập —
+# và một hộp thư đầy cảnh báo là một hộp thư không ai đọc.
+
+on:
+  schedule:
+    - cron: '7/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: vars.PRODUCTION_API_URL != ''
+    runs-on: ubuntu-latest
+    # Một lần thăm dò xong trong vài giây. Không đặt trần thì một lần treo mạng
+    # giữ runner tới 6 tiếng mặc định.
+    timeout-minutes: 5
+    steps:
+      - name: Kiểm tra API và PostgreSQL qua health endpoint
+        env:
+          PRODUCTION_API_URL: ${{ vars.PRODUCTION_API_URL }}
+        run: |
+          curl --fail --show-error --silent --retry 3 --connect-timeout 10 \
+            "$PRODUCTION_API_URL/health" | tee health.json
+          grep -q '"status":"ok"' health.json
+          # 🔒 Kiểm CẢ `db`: API sống mà database chết vẫn trả 200 ở nhiều
+          #    framework. Ở đây `/health` chạy một truy vấn thật, nên `db:ok`
+          #    là bằng chứng kết nối còn dùng được — không chỉ là tiến trình
+          #    còn chạy.
+          grep -q '"db":"ok"' health.json
