@@ -12,22 +12,44 @@
  * theo kiểu (2): cố vấn gửi link qua Zalo nhưng khách gõ lại địa chỉ thay
  * vì bấm, hoặc garage dán mã QR trên thẻ bàn giao.
  *
- * Mã truy cập KHÔNG phải mã đơn. Khách không nhớ được "RO-2026-00042" — họ
- * nhớ được đoạn mã ngắn mà garage đã in trên giấy. Comment ở đây để nhắc
- * nhở người đọc: ĐỪNG bao giờ thay ô nhập này bằng ô nhập mã đơn.
+ * Mã truy cập KHÔNG phải mã đơn, và cũng KHÔNG phải một đoạn mã ngắn dễ nhớ.
+ *
+ * ⚠️ Bản đầu của trang này ghi "Ví dụ: A1B2C3D4" và "Không phân biệt chữ
+ *    hoa/thường". Cả hai đều sai, và sai theo cách tệ nhất — chúng mô tả một
+ *    hệ thống KHÔNG TỒN TẠI:
+ *
+ *      · token thật do `randomBytes(32).toString('base64url')` sinh ra, dài 43
+ *        ký tự; `resolveToken` từ chối thẳng mọi chuỗi dưới 32. Ai gõ theo đúng
+ *        cái ví dụ 8 ký tự đó đều thất bại.
+ *      · `public_resolve_tracking_token` so khớp bằng `=`, tức PHÂN BIỆT hoa
+ *        thường. Khách gõ lại bằng chữ thường thì nhận "link không hợp lệ" mà
+ *        không hiểu vì sao.
+ *
+ * 💡 Một lời hứa trên giao diện là một hợp đồng. Hứa điều hệ thống không làm
+ *    thì người dùng không kết luận "trang này viết sai", họ kết luận "hệ thống
+ *    này hỏng".
  */
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { formatPlate } from '@garageos/domain';
 
 export default function TraCuuLanding() {
   const [ma, setMa] = useState('');
   const router = useRouter();
 
+  /*
+   * 🔒 Độ dài tối thiểu khớp với máy chủ, không phải một con số tự nghĩ ra.
+   *
+   * `PublicTrackingService.resolveToken` từ chối thẳng mọi chuỗi dưới 32 ký tự,
+   * và token thật do `randomBytes(32).toString('base64url')` sinh ra — 43 ký tự.
+   * Kiểm ở đây chỉ để nói sớm và nói rõ; chặn thật vẫn ở máy chủ.
+   */
+  const DAI_TOI_THIEU = 32;
+  const daSap = ma.trim();
+  const quaNgan = daSap !== '' && daSap.length < DAI_TOI_THIEU;
+
   function di(e: FormEvent): void {
     e.preventDefault();
-    const daSap = ma.trim();
-    if (daSap === '') return;
+    if (daSap === '' || quaNgan) return;
     router.push(`/tra-cuu/${encodeURIComponent(daSap)}`);
   }
 
@@ -58,15 +80,21 @@ export default function TraCuuLanding() {
               spellCheck={false}
               value={ma}
               onChange={(e) => setMa(e.target.value)}
-              placeholder="Ví dụ: A1B2C3D4"
+              placeholder="Dán mã từ tin nhắn hoặc giấy bàn giao"
               aria-describedby="ma-truy-cap-hint"
             />
             <span className="hint" id="ma-truy-cap-hint">
-              Gõ hoặc dán mã, rồi nhấn <span className="kbd">Enter</span>. Không phân biệt
-              chữ hoa/thường.
+              Mã dài, nên <strong>dán</strong> thay vì gõ tay. Phân biệt chữ hoa và chữ
+              thường.
             </span>
           </div>
-          <button className="lg" type="submit" disabled={ma.trim() === ''}>
+          {quaNgan && (
+            <p className="alert error">
+              Mã này quá ngắn — mã truy cập dài {DAI_TOI_THIEU} ký tự trở lên. Kiểm tra
+              xem đã dán thiếu phần đầu hoặc phần cuối chưa.
+            </p>
+          )}
+          <button className="lg" type="submit" disabled={daSap === '' || quaNgan}>
             Xem đơn
           </button>
         </form>
@@ -75,8 +103,8 @@ export default function TraCuuLanding() {
       <div className="card">
         <h3>Khách hàng đã từng vào xưởng?</h3>
         <p className="muted small">
-          Xe {formatPlate('30A-123.45')} vừa được tiếp nhận — theo dõi tiến độ, xem
-          báo giá và duyệt hạng mục ngay tại đây khi garage gửi.
+          Khi garage gửi link, bạn theo dõi được tiến độ sửa chữa, xem báo giá và
+          duyệt từng hạng mục ngay tại đây.
         </p>
         <p className="muted small">
           Nếu bạn là nhân viên garage, hãy <a href="/dang-nhap">đăng nhập</a> để dùng

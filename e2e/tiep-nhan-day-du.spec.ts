@@ -156,6 +156,12 @@ test('🔒 INV-V-04: số km lùi hiện cảnh báo NGAY khi gõ và bắt ch�
   await page.getByLabel('Số km hiện tại').fill('80000');
 
   // Cảnh báo hiện NGAY, không đợi bấm lưu — người dùng đang đứng cạnh đồng hồ
+  /*
+   * Ở đây `getByRole('alert')` DÙNG ĐƯỢC vì có `.filter()` đi kèm: nó tự khử
+   * `__next-route-announcer__` mà Next chèn sẵn vào mọi trang. Và cảnh báo km
+   * lùi là `.alert.warn`, không phải `.alert.error` — đây là cảnh báo bắt người
+   * dùng chọn lý do, không phải một lỗi.
+   */
   const warn = page.getByRole('alert').filter({ hasText: 'Số km nhỏ hơn lần trước' });
   await expect(warn).toBeVisible();
   await expect(page.getByLabel('Lý do')).toBeVisible();

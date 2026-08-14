@@ -644,7 +644,6 @@ td.am { color: var(--c-danger); }
  * thực của header là ~110–130px. Cố định `top: 80px` là TOC bị header che;
  * 120px đủ cho cả 1 dòng (~64px) lẫn 2 dòng mà không để khoảng trống lớn.
  */
- */
 .bao-cao-tieu-de-trang {
   margin-bottom: var(--sp-3);
 }

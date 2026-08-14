@@ -74,5 +74,5 @@ test('🔒 vai không được QC thì không thấy nút kiểm tra', async ({ 
   await expect(page.getByRole('link', { name: 'Lịch xưởng' })).toHaveCount(0);
 
   await page.goto('/lich-xuong');
-  await expect(page.locator('p.alert.error')).toContainText(/không được|quyền/i);
+  await expect(page.locator('.alert.error')).toContainText(/không được|quyền/i);
 });

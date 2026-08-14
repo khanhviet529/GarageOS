@@ -65,7 +65,28 @@ export function SkeletonCard({ rows = 3 }: { rows?: number }) {
 }
 
 export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+  /*
+   * 🔒 Khung xám phải nằm trong CÙNG hộp cuộn với bảng thật.
+   *
+   * Skeleton tồn tại để giữ chỗ đúng hình dạng nội dung sắp tới. Nhưng "hình
+   * dạng" gồm cả cách nội dung được GIỚI HẠN, không chỉ mấy ô xám.
+   *
+   * Bản trước trả về `<table>` trần trong khi bảng thật được `BangCuon` bọc.
+   * Với 7 cột ở 375px, bảng trần rộng hơn khung nhìn và đẩy CẢ TRANG trượt
+   * ngang — chỉ trong lúc đang tải, nên nhìn bằng mắt rất khó bắt: dữ liệu về
+   * là nó tự hết.
+   *
+   * Bài `responsive.spec.ts` bắt được vì nó đo NGAY khi tiêu đề hiện, tức là
+   * đúng lúc skeleton còn trên màn hình. Đo sau khi tải xong thì trang sạch và
+   * lỗi này vô hình.
+   *
+   * ⚠️ Dùng `div.table-scroll` chứ không dùng `BangCuon`: `BangCuon` thêm
+   *    `role="region"` + `tabIndex={0}`, tức là một điểm dừng Tab và một vùng
+   *    được xướng tên. Cho một khối giữ chỗ tạm thời thì đó là rác cho người
+   *    dùng bàn phím và trình đọc màn hình.
+   */
   return (
+    <div className="table-scroll" aria-hidden="true">
     <table aria-busy="true" aria-label="Đang tải dữ liệu">
       <thead>
         <tr>
@@ -92,5 +113,6 @@ export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

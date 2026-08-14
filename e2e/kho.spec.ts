@@ -91,7 +91,19 @@ test('🔒 vai không được xem kho: không có lối vào, gõ thẳng URL c
   // được xem".
   // Next.js chèn sẵn một `role="alert"` rỗng (route announcer) trên mọi trang,
   // nên phải nhắm vào thông báo CỦA TRANG.
-  await expect(page.locator('p.alert.error')).toContainText(/không được|quyền/i);
+  /*
+   * Bắt theo CLASS, không theo `getByRole('alert')`.
+   *
+   * ⚠️ Next.js chèn sẵn `<div id="__next-route-announcer__" role="alert">` ẩn
+   *    vào MỌI trang để xướng tên route cho trình đọc màn hình. Nên
+   *    `getByRole('alert')` luôn khớp ít nhất hai phần tử và Playwright báo
+   *    strict mode violation — thông báo lỗi nói về locator, không nói gì về
+   *    quyền, nên rất tốn thời gian để lần ra.
+   *
+   * `.alert.error` là class lỗi của chính dự án, khớp cả `<p>` ở trang cũ lẫn
+   * `<div>` mà `ErrorState` dựng — không bám vào tên thẻ.
+   */
+  await expect(page.locator('.alert.error')).toContainText(/không được|quyền/i);
 });
 
 test('🔒 giá vốn không rò ra ngoài vai được xem — kiểm cả JSON, không chỉ cột bảng', async ({
