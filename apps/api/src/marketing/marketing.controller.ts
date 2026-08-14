@@ -60,6 +60,16 @@ export class MarketingController {
     return this.svc.getProduct(actor, id);
   }
 
+  /** Nhân bản đang-publish thành bản nháp mới — đối xứng với experience. */
+  @Post('vehicle-products/:id/draft')
+  cloneProductDraft(
+    @Actor() actor: ActorContext,
+    @Param('id') id: string,
+  ): Promise<{ draftId: string }> {
+    assertCan(actor, 'marketing:catalogWrite');
+    return this.svc.cloneProductDraft(actor, id);
+  }
+
   @Patch('vehicle-products/:id/draft')
   patchProductDraft(
     @Actor() actor: ActorContext,

@@ -51,6 +51,12 @@ export class SalesService {
       const scope = scopeForAction(actor, 'sales:leadRead');
       const cond: string[] = [];
       const params: unknown[] = [];
+      /*
+       * ⚠️ `push` chỉ nhận MỘT tham số, và `String.replace` với mẫu là chuỗi chỉ
+       *    thay lần xuất hiện ĐẦU TIÊN. Đưa cho nó một câu có hai chỗ giữ thì
+       *    chỗ thứ hai đi thẳng vào PostgreSQL nguyên văn — xem điều kiện keyset
+       *    bên dưới. Chỉ dùng cho điều kiện một tham số.
+       */
       const push = (sql: string, value: unknown): void => {
         params.push(value);
         cond.push(sql.replace('$#', `$${params.length}`));
@@ -58,11 +64,42 @@ export class SalesService {
       if (scope === 'SELF') push('sl.assigned_to = $#', actor.userId);
       if (scope === 'BRANCH') push('sl.branch_id = ANY($#)', actor.branchIds);
       if (opts.status !== undefined && opts.status !== '') push('sl.status = $#', opts.status);
+      /*
+       * 🔒 Điều kiện keyset ghi thẳng hai tham số, không đi qua `push`.
+       *
+       * ─────────────────────────────────────────────────────────────────────
+       * ⚠️ Câu điều kiện cũ có HAI chỗ giữ nhưng `push` chỉ thay được một:
+       *
+       *      push('(sl.created_at, sl.id) < ($#::timestamptz, $#::uuid)', createdAt)
+       *                                       ↑ được thay        ↑ CÒN NGUYÊN
+       *
+       *    nên chuỗi `$#` đi thẳng vào PostgreSQL. Đo được trên nhánh này:
+       *
+       *      GET /api/v1/sales/leads?limit=2&cursor=…  ->  HTTP 500
+       *      error: syntax error at or near "$"
+       *
+       *    Trang một luôn chạy, nên lỗi chỉ hiện ra khi danh sách đủ dài để có
+       *    trang hai — tức ở nơi dữ liệu thật, không phải ở máy dev.
+       *
+       *    Dòng `sl.id < $#` đi kèm vừa thừa vừa sai: nó loại mọi lead có id lớn
+       *    hơn kể cả ở ngày cũ hơn, nên trang hai mất bản ghi ngay cả khi câu
+       *    lệnh chạy được.
+       *
+       * 💡 So sánh bộ giá trị `(a, b) < (x, y)` đúng ở ĐÂY vì ORDER BY giảm dần
+       *    trên CẢ HAI cột. Chỗ khác không chắc như vậy:
+       *    `PublicLandingService.listProducts` xếp `created_at DESC, id ASC`
+       *    nên phải viết tách ra. Cùng một bài toán, hai lời giải, vì hai thứ tự.
+       *
+       * `lastIndexOf('_')`: uuid không chứa `_`, nhưng chuỗi ISO thì có thể đổi
+       * dạng — cắt từ phải luôn lấy đúng phần id.
+       */
       if (opts.cursor !== undefined && opts.cursor !== '') {
-        const [createdAt, id] = opts.cursor.split('_');
-        if (createdAt !== undefined && id !== undefined) {
-          push('(sl.created_at, sl.id) < ($#::timestamptz, $#::uuid)', createdAt);
-          push('sl.id < $#::uuid', id);
+        const cat = opts.cursor.lastIndexOf('_');
+        if (cat > 0) {
+          params.push(opts.cursor.slice(0, cat), opts.cursor.slice(cat + 1));
+          cond.push(
+            `(sl.created_at, sl.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+          );
         }
       }
       const where = cond.length > 0 ? `WHERE ${cond.join(' AND ')}` : '';
@@ -76,10 +113,21 @@ export class SalesService {
           LIMIT $${params.length} + 1`,
         params,
       );
+      /*
+       * 🔒 Cùng một lỗi lệch-một với `PublicLandingService.listProducts`, cùng
+       *    một cách sửa: con trỏ là bản ghi CUỐI CÙNG ĐÃ TRẢ.
+       *
+       * ⚠️ `rows[limit]` là bản ghi đầu tiên BỊ LOẠI. Lấy nó làm con trỏ rồi lọc
+       *    trang sau bằng `<` ngặt thì chính nó không bao giờ được trả về — mỗi
+       *    ranh giới trang nuốt đúng một lead.
+       *
+       *    Với danh sách lead thì đây không phải lỗi hiển thị: một lead biến mất
+       *    là một khách hàng không ai gọi lại.
+       */
       let nextCursor: string | null = null;
       if (rows.length > limit) {
-        const extra = rows[limit]!;
-        nextCursor = `${(extra.created_at as Date).toISOString()}_${extra.id as string}`;
+        const cuoi = rows[limit - 1]!;
+        nextCursor = `${(cuoi.created_at as Date).toISOString()}_${cuoi.id as string}`;
       }
       return { items: rows.slice(0, limit).map((r) => this.toLeadView(r)), nextCursor };
     });
@@ -504,11 +552,34 @@ export class SalesService {
          JOIN vehicle_variant vv ON vv.id = vvr.variant_id
         WHERE p.id = $1 AND p.lifecycle_status = 'ACTIVE'
           AND ($2::uuid IS NULL OR vv.id = $2)
-        ORDER BY vvr.sort_order LIMIT 1`,
+        ORDER BY vvr.display_price_amount ASC NULLS LAST, vvr.sort_order LIMIT 1`,
       [productId, variantId],
     );
     const row = rows[0];
     if (row === undefined) return null;
+
+    /*
+     * 🔒 Chỉ ghi phiên bản xe khi khách THỰC SỰ chọn một phiên bản.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ⚠️ Trước bản sửa, khách để trống ô "phiên bản" vẫn bị gán một phiên bản
+     *    cụ thể — cái đứng đầu theo `sort_order` — kèm tên và giá của nó. Màn
+     *    chi tiết lead in thẳng ra:
+     *
+     *        Xe quan tâm: Toyota Vios · Bản cao cấp
+     *
+     *    Tư vấn gọi lại và chào đúng bản đó, đúng giá đó. Khách chưa từng nói
+     *    thế. Không ai trong chuỗi này biết con số ấy do máy tự điền.
+     *
+     * 💡 Snapshot tồn tại để ghi lại ĐIỀU KHÁCH ĐÃ THẤY, không phải để điền cho
+     *    đủ ô. Một ô trống trung thực hơn một ô được đoán.
+     *
+     * `priceFrom` là mức giá thật sự hiện trên thẻ xe — biến thể rẻ nhất, cùng
+     * phép chọn với `PublicLandingService.listProducts`. Ghi kèm cờ để người
+     * đọc snapshot biết đây là "giá từ", không phải giá của một bản cụ thể.
+     */
+    const daChon = variantId !== null;
+    const gia = row.display_price_amount === null ? null : Number(row.display_price_amount);
     return {
       productId: row.product_id,
       productStableKey: row.product_stable_key,
@@ -517,11 +588,11 @@ export class SalesService {
       revisionId: row.revision_id,
       revisionNumber: Number(row.revision_number),
       contentHash: row.content_hash,
-      variantId: (row.variant_id ?? null) as string | null,
-      variantStableKey: (row.variant_stable_key ?? null) as string | null,
-      variantName: (row.variant_name ?? null) as string | null,
-      displayPrice:
-        row.display_price_amount === null ? null : Number(row.display_price_amount),
+      variantId: daChon ? (row.variant_id as string) : null,
+      variantStableKey: daChon ? (row.variant_stable_key as string) : null,
+      variantName: daChon ? (row.variant_name as string) : null,
+      displayPrice: daChon ? gia : null,
+      priceFrom: daChon ? null : gia,
     };
   }
 

@@ -66,22 +66,43 @@ export class PublicLandingService {
     ctx: PublicTenantContext,
     opts: { cursor?: string; limit: number; powertrain?: string },
   ): Promise<{ items: PublicProductSummary[]; nextCursor: string | null }> {
+    /*
+     * 🔒 Giá VÀ loại động cơ trên thẻ xe phải đến từ CÙNG một phiên bản.
+     *
+     * ⚠️ Bản trước lấy `MIN(display_price_amount)` và `MIN(powertrain::text)`
+     *    trong cùng một khối tổng hợp — hai phép MIN độc lập, trên hai cột khác
+     *    nhau, nên chúng chỉ trỏ về cùng một chiếc xe khi may mắn. MIN trên text
+     *    xếp theo bảng chữ cái: BEV < HYBRID < ICE.
+     *
+     *    Một mẫu xe có bản điện 2 tỷ và bản xăng 500 triệu hiện lên thẻ là
+     *    "Xe điện · từ 500.000.000 ₫" — một chiếc xe không tồn tại, ở một mức
+     *    giá không tồn tại.
+     *
+     * 💡 "Từ X đồng" là một lời hứa về giá. Nó phải gắn với chiếc xe thật sự bán
+     *    ở giá đó, nếu không thì đó là quảng cáo sai — và đây là trang bán xe.
+     *
+     * `sales.service.ts` chọn biến thể theo ĐÚNG thứ tự này khi ghi snapshot
+     * lead, để con số tư vấn đọc lại đúng bằng con số khách đã nhìn thấy.
+     */
     const limit = Math.min(Math.max(opts.limit, 1), 50);
+    const moc = phanTichCursor(opts.cursor);
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT p.id, p.slug, r.name, r.make_name, r.model_name, r.summary,
                 p.created_at,
-                v.powertrain, v.display_price_amount, v.has_null_price,
+                v.powertrain, v.display_price_amount,
                 cover.public_storage_key AS cover_key, cover.alt_text AS cover_alt
            FROM vehicle_product p
            JOIN vehicle_product_revision r ON r.id = p.published_revision_id
+           -- Giá VÀ loại động cơ lấy từ CÙNG một hàng (xem chú thích phía trên).
+           -- NULLS LAST: bản "liên hệ để biết giá" không cướp chỗ giá có thật.
            JOIN LATERAL (
-             SELECT MIN(vvr.display_price_amount) AS display_price_amount,
-                    COUNT(*) FILTER (WHERE vvr.display_price_amount IS NULL) > 0 AS has_null_price,
-                    MIN(vvr.powertrain::text)::powertrain AS powertrain
+             SELECT vvr.display_price_amount, vvr.powertrain
                FROM vehicle_variant_revision vvr
               WHERE vvr.product_revision_id = r.id
                 AND vvr.inclusion_status = 'ACTIVE'
+              ORDER BY vvr.display_price_amount ASC NULLS LAST, vvr.sort_order
+              LIMIT 1
            ) v ON true
            LEFT JOIN LATERAL (
              SELECT mp.public_storage_key, vpm.alt_text
@@ -106,17 +127,39 @@ export class PublicLandingService {
                      AND vvr2.inclusion_status = 'ACTIVE'
                      AND vvr2.powertrain::text = $1
                 ))
+            -- Keyset khớp từng chiều với ORDER BY: created_at giảm, id tăng.
+            -- Viết gộp (created_at, id) < (...) là SAI — so sánh bộ giá trị của
+            -- SQL dùng cùng một chiều cho mọi thành phần.
+            AND ($3::timestamptz IS NULL OR (
+                  p.created_at < $3::timestamptz
+                  OR (p.created_at = $3::timestamptz AND p.id > $4::uuid)
+                ))
           ORDER BY p.created_at DESC, p.id
           LIMIT $2 + 1`,
-        [opts.powertrain ?? null, limit],
+        [opts.powertrain ?? null, limit, moc?.createdAt ?? null, moc?.id ?? null],
       );
 
+      /*
+       * 🔒 Con trỏ trỏ vào bản ghi CUỐI CÙNG ĐÃ TRẢ, không phải bản ghi kế tiếp.
+       *
+       * ⚠️ Bản trước lấy hàng ĐẦU TIÊN BỊ LOẠI làm con trỏ, rồi trang sau lọc
+       *    bằng phép so sánh NGẶT. Hai điều đó cộng lại bỏ rơi đúng một xe ở mỗi
+       *    ranh giới trang — âm thầm, vì mỗi trang vẫn đủ số lượng đã yêu cầu.
+       *
+       *    `PT-T01` bắt được ngay lượt chạy đầu: ba xe, `limit=1`, đi hết phân
+       *    trang chỉ thấy hai. Chiếc ở giữa không xuất hiện ở BẤT KỲ trang nào.
+       *
+       * 💡 "Cho tôi thứ đứng SAU cái cuối cùng tôi đã thấy" là câu hỏi mà phép
+       *    so sánh ngặt trả lời đúng. Con trỏ vì thế phải là cái cuối cùng ĐÃ
+       *    thấy, không phải cái đầu tiên CHƯA thấy.
+       */
+      const conNua = rows.length > limit;
       const items: PublicProductSummary[] = [];
       let nextCursor: string | null = null;
       for (const row of rows) {
-        if (items.length === limit) {
+        if (items.length === limit) break;
+        if (conNua && items.length === limit - 1) {
           nextCursor = `${(row.created_at as Date).toISOString()}_${row.id as string}`;
-          break;
         }
         items.push({
           id: row.id as string,
@@ -396,6 +439,38 @@ export class PublicLandingService {
       .replace(/\/+$/, '');
     return `${origin}/${storageKey}`;
   }
+}
+
+/**
+ * Tách `nextCursor` thành mốc keyset, hoặc `null` nếu không dùng được.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * ⚠️ Trước bản sửa, `opts.cursor` được nhận ở controller, truyền xuống service,
+ *    rồi KHÔNG BAO GIỜ đi vào câu SQL — truy vấn chỉ có hai tham số
+ *    (`powertrain`, `limit`). Mọi trang đều là trang một.
+ *
+ *    Hai hệ quả, cả hai đều im lặng:
+ *
+ *      · Khách bấm "Xem thêm" và nhận lại đúng những chiếc xe vừa xem.
+ *      · `apps/landing/src/app/sitemap.ts` đi theo `nextCursor` trong vòng lặp.
+ *        Vòng lặp đó chỉ dừng nhờ trần `TRAN_URL` — trước khi có trần, nó lặp
+ *        vô hạn trên cùng 50 chiếc xe.
+ *
+ * 💡 Một tham số được nhận nhưng không dùng thì tệ hơn một tham số không tồn
+ *    tại: API trả về `nextCursor`, tức là NÓI RẰNG phân trang hoạt động.
+ *
+ * Cursor sai định dạng thì coi như không có — dữ liệu này đến từ URL công khai,
+ * và một chuỗi hỏng không đáng để đổ lỗi 500 vào mặt khách.
+ */
+function phanTichCursor(cursor?: string): { createdAt: Date; id: string } | null {
+  if (cursor === undefined || cursor === '') return null;
+  const cat = cursor.lastIndexOf('_');
+  if (cat <= 0) return null;
+  const createdAt = new Date(cursor.slice(0, cat));
+  const id = cursor.slice(cat + 1);
+  if (Number.isNaN(createdAt.getTime())) return null;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+  return { createdAt, id };
 }
 
 /** kind đi kèm version — lấy từ config (schema versioned) để tránh enum drift */

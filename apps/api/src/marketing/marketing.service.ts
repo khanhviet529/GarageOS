@@ -262,6 +262,66 @@ export class MarketingService {
   }
 
   /**
+   * POST /vehicle-products/:id/draft — mở lại đường sửa sau khi đã publish.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * ⚠️ Vì sao route này phải tồn tại
+   *
+   * `marketing_promote_product_draft` đặt `draft_revision_id = NULL` sau khi
+   * publish — đúng, vì bản nháp đã trở thành bản publish. Nhưng nhánh này chưa
+   * bao giờ có đường dựng lại bản nháp cho SẢN PHẨM (trải nghiệm thì có).
+   * Hệ quả đo được, một sản phẩm sau lần publish đầu tiên:
+   *
+   *   PATCH /vehicle-products/:id/draft  -> 404 "Không có bản nháp, hãy tạo
+   *                                              bản nháp mới"   ← không có route nào tạo
+   *   POST  /vehicle-products/:id/publish -> 422 "Không có bản nháp để duyệt"
+   *   POST  /vehicle-products/:id/rollback -> 422 "Không có bản cũ để khôi phục"
+   *
+   * Bản `SUPERSEDED` đầu tiên chỉ sinh ra ở lần publish THỨ HAI, mà lần thứ hai
+   * thì không tới được. Nên `rollbackProduct` — cùng với nút "Rollback bản
+   * publish trước" trong sales-admin — chưa từng có khả năng chạy thành công.
+   *
+   * 💡 Một xe đã đăng là không sửa được nữa: sai chính tả trong mô tả, sai giá,
+   *    đổi ảnh — tất cả đều phải xoá sản phẩm và tạo lại từ đầu, mất luôn slug
+   *    (mà slug là URL công khai đã được đánh chỉ mục).
+   *
+   * Bản nháp mới nhân từ bản ĐANG PUBLISH, kèm variant và media — giống hệt
+   * `cloneExperienceDraft`. Đã có bản nháp thì trả về chính nó.
+   */
+  async cloneProductDraft(actor: ActorContext, id: string): Promise<{ draftId: string }> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT draft_revision_id, published_revision_id, lifecycle_status
+           FROM vehicle_product WHERE id = $1 FOR UPDATE`,
+        [id],
+      );
+      const prod = rows[0];
+      if (prod === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy sản phẩm');
+      }
+      const draftSan = (prod.draft_revision_id ?? null) as string | null;
+      if (draftSan !== null) return { draftId: draftSan };
+
+      if ((prod.lifecycle_status as string) !== 'ACTIVE') {
+        throw new BusinessError(
+          ErrorCode.PRODUCT_NOT_PUBLISHABLE,
+          'Sản phẩm đã lưu trữ — không soạn thảo tiếp được',
+        );
+      }
+      const published = (prod.published_revision_id ?? null) as string | null;
+      if (published === null) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Chưa có phiên bản nào để nhân bản');
+      }
+
+      const draftId = await this.cloneRevisionAsDraft(tx, actor, published);
+      await tx.query('SELECT marketing_set_product_draft($1,$2,$3)', [
+        actor.tenantId, id, draftId,
+      ]);
+      return { draftId };
+    });
+  }
+
+  /**
    * Publish — SRS mục 6.4: khoá product, kiểm expectedVersion, validate, ghi
    * content_hash canonical rồi swap nguyên tử qua hàm SECURITY DEFINER.
    */
@@ -322,11 +382,20 @@ export class MarketingService {
   async rollbackProduct(actor: ActorContext, id: string): Promise<{ revisionId: string }> {
     return this.db.withTenant(actor, async (tx) => {
       const { rows: prodRows } = await tx.query<Record<string, unknown>>(
-        `SELECT id, version FROM vehicle_product WHERE id = $1`,
+        `SELECT id, version, draft_revision_id FROM vehicle_product WHERE id = $1 FOR UPDATE`,
         [id],
       );
       const prod = prodRows[0];
       if (prod === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy sản phẩm');
+
+      // Cùng lập luận với `rollbackExperience`: `uq_product_revision_one_draft`
+      // chỉ cho một bản nháp, và bản nháp đang có là việc dở của người khác.
+      if (prod.draft_revision_id !== null) {
+        throw new BusinessError(
+          ErrorCode.PRODUCT_NOT_PUBLISHABLE,
+          'Đang có bản nháp chưa duyệt — hãy duyệt hoặc bỏ bản nháp trước khi khôi phục bản cũ',
+        );
+      }
 
       const { rows: oldRows } = await tx.query<Record<string, unknown>>(
         `SELECT id FROM vehicle_product_revision
@@ -431,8 +500,23 @@ export class MarketingService {
         [id, actor.tenantId, productId, input.kind, stableKey, actor.userId],
       );
       const versionId = await this.insertExperienceVersion(
-        tx, actor, id, 1, input.label,
-        { kind: input.kind, ...(input.config ?? {}) },
+        tx, actor, id, input.label,
+        /*
+         * 🔒 `kind` đặt SAU phần rải của `input.config` — nói cách khác, cột
+         * `kind` thắng.
+         *
+         * ⚠️ Trước bản sửa, `{ kind: input.kind, ...input.config }` để client
+         *    ghi đè `kind` bằng cách nhét `kind` vào `config`. Khi đó cột
+         *    `vehicle_experience.kind` và `config.kind` nói hai điều khác nhau,
+         *    và hệ thống đọc chúng ở hai nơi khác nhau:
+         *
+         *      · `experiencesOf()` (danh sách trên trang xe) đọc CỘT
+         *      · `experienceManifest()` (trình xem) đọc CONFIG
+         *
+         *    Kết quả: danh sách ghi "ảnh 360 ngoại thất", nhưng khách bấm vào
+         *    thì trình xem panorama nội thất mở ra.
+         */
+        { ...(input.config ?? {}), kind: input.kind },
       );
       await tx.query('SELECT marketing_set_experience_draft($1,$2,$3)', [
         actor.tenantId, id, versionId,
@@ -445,28 +529,50 @@ export class MarketingService {
   /** POST /vehicle-experiences/:id/draft — clone current publication thành draft mới. */
   async cloneExperienceDraft(actor: ActorContext, id: string): Promise<{ draftId: string }> {
     return this.db.withTenant(actor, async (tx) => {
+      // FOR UPDATE: hai cú bấm SONG SONG cũng phải xếp hàng, nếu không cả hai
+      // cùng thấy `draft_version_id IS NULL` rồi cùng dựng một bản nháp.
       const { rows: expRows } = await tx.query<Record<string, unknown>>(
         `SELECT id, published_version_id, draft_version_id
-           FROM vehicle_experience WHERE id = $1`,
+           FROM vehicle_experience WHERE id = $1 FOR UPDATE`,
         [id],
       );
       const exp = expRows[0];
       if (exp === undefined) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy trải nghiệm');
       }
-      const sourceId = (exp.published_version_id ?? exp.draft_version_id) as string | null;
+
+      /*
+       * 🔒 Đã có bản nháp thì TRẢ VỀ bản nháp đó, không dựng thêm cái nữa.
+       *
+       * ⚠️ Trước bản sửa, bấm "Tạo bản nháp" lần thứ hai trả HTTP 500. Đo được:
+       *
+       *      clone lần 1: 201 {"draftId":"aaddd64d-…"}
+       *      clone lần 2: 500 {"code":"INTERNAL_ERROR"}
+       *
+       *    Hai ràng buộc cùng chặn — `UNIQUE (…, revision_number)` và chỉ mục
+       *    riêng phần `uq_experience_version_one_draft` — nên DB vẫn giữ được sự
+       *    thật. Nhưng người dùng chỉ thấy "Đã có lỗi xảy ra", trong khi bản
+       *    nháp họ muốn ĐANG CÓ SẴN.
+       *
+       * 💡 Nút này về bản chất là "cho tôi một bản nháp để sửa". Nếu bản nháp đã
+       *    tồn tại thì yêu cầu đó đã được thoả — trả về nó là câu trả lời đúng,
+       *    không phải một lỗi.
+       */
+      const draftSan = (exp.draft_version_id ?? null) as string | null;
+      if (draftSan !== null) return { draftId: draftSan };
+
+      const sourceId = (exp.published_version_id ?? null) as string | null;
       if (sourceId === null) {
         throw new BusinessError(ErrorCode.NOT_FOUND, 'Chưa có phiên bản nào để nhân bản');
       }
       const { rows: srcRows } = await tx.query<Record<string, unknown>>(
-        `SELECT label, config, schema_version, content_hash, revision_number
+        `SELECT label, config, schema_version, content_hash
            FROM vehicle_experience_version WHERE id = $1`,
         [sourceId],
       );
       const src = srcRows[0]!;
-      const nextNumber = Number(src.revision_number) + 1;
       const newVersionId = await this.insertExperienceVersion(
-        tx, actor, id, nextNumber, src.label as string,
+        tx, actor, id, src.label as string,
         src.config as Record<string, unknown>,
       );
       await tx.query('SELECT marketing_set_experience_draft($1,$2,$3)', [
@@ -490,7 +596,25 @@ export class MarketingService {
         sets.push(`label = $${params.length}`);
       }
       if (input.config !== undefined) {
-        params.push(JSON.stringify(input.config));
+        /*
+         * 🔒 `kind` KHÔNG sửa được qua `config` — nó là cột, và cột là gốc.
+         *
+         * ⚠️ PATCH thay nguyên cục `config`. Không chốt lại `kind` ở đây thì
+         *    một PATCH thường (đổi số khung hình) mà quên chép `kind` sẽ XOÁ
+         *    `kind` khỏi config, và `publishExperience` chặn ngay với "kind
+         *    không hợp lệ" — bản nháp kẹt cứng, không hiểu vì sao.
+         *
+         *    Còn nếu PATCH gửi `kind` KHÁC cột thì tệ hơn: publish qua được, và
+         *    từ đó danh sách với trình xem mô tả hai thứ khác nhau.
+         *
+         * Đổi loại trải nghiệm là tạo trải nghiệm mới, không phải sửa tại chỗ:
+         * media đã gắn theo binding của loại cũ sẽ không còn nghĩa gì.
+         */
+        const { rows: kindRows } = await tx.query<{ kind: string }>(
+          'SELECT kind FROM vehicle_experience WHERE id = $1',
+          [id],
+        );
+        params.push(JSON.stringify({ ...input.config, kind: kindRows[0]?.kind }));
         sets.push(`config = $${params.length}::jsonb`);
       }
       if (sets.length > 0) {
@@ -583,11 +707,30 @@ export class MarketingService {
   async rollbackExperience(actor: ActorContext, id: string): Promise<{ versionId: string }> {
     return this.db.withTenant(actor, async (tx) => {
       const { rows: expRows } = await tx.query<Record<string, unknown>>(
-        `SELECT id, version FROM vehicle_experience WHERE id = $1`,
+        `SELECT id, version, draft_version_id FROM vehicle_experience WHERE id = $1 FOR UPDATE`,
         [id],
       );
       const exp = expRows[0];
       if (exp === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy trải nghiệm');
+
+      /*
+       * 🔒 Đang có bản nháp thì từ chối, và nói rõ vì sao.
+       *
+       * Rollback dựng một bản nháp mới rồi publish ngay. `uq_experience_version_
+       * one_draft` chỉ cho phép một bản nháp mỗi trải nghiệm, nên nếu ai đó đang
+       * soạn dở thì lệnh INSERT vỡ ngay ở tầng DB — và người dùng nhận 500.
+       *
+       * 💡 Không tự ý huỷ bản nháp đang soạn để lấy chỗ: đó là công việc chưa
+       *    lưu của một người khác. Ràng buộc thật ở đây là nghiệp vụ chứ không
+       *    phải kỹ thuật — "khôi phục bản cũ" và "đang sửa bản mới" là hai ý
+       *    định trái nhau, và chỉ người dùng mới quyết được bỏ cái nào.
+       */
+      if (exp.draft_version_id !== null) {
+        throw new BusinessError(
+          ErrorCode.EXPERIENCE_NOT_PUBLISHABLE,
+          'Đang có bản nháp chưa duyệt — hãy duyệt hoặc bỏ bản nháp trước khi khôi phục bản cũ',
+        );
+      }
 
       const { rows: oldRows } = await tx.query<Record<string, unknown>>(
         `SELECT id, label, config, revision_number
@@ -601,8 +744,7 @@ export class MarketingService {
         throw new BusinessError(ErrorCode.EXPERIENCE_NOT_PUBLISHABLE, 'Không có bản cũ để khôi phục');
       }
       const newVersionId = await this.insertExperienceVersion(
-        tx, actor, id, Number(oldVer.revision_number) + 1,
-        oldVer.label as string, oldVer.config as Record<string, unknown>,
+        tx, actor, id, oldVer.label as string, oldVer.config as Record<string, unknown>,
       );
       await tx.query('SELECT marketing_set_experience_draft($1,$2,$3)', [
         actor.tenantId, id, newVersionId,
@@ -945,17 +1087,64 @@ export class MarketingService {
     );
   }
 
+  /**
+   * Số revision kế tiếp = MAX + 1 trên TOÀN BỘ lịch sử, không phải "bản nguồn + 1".
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * 🔒 Vì sao khác biệt này quan trọng
+   *
+   * Cả hai bảng revision đều có `UNIQUE (tenant_id, <cha>, revision_number)`
+   * (migration 0056). Lấy số từ BẢN NGUỒN chỉ đúng khi bản nguồn tình cờ là bản
+   * mới nhất — mà rollback thì theo định nghĩa KHÔNG PHẢI vậy: nó nhân bản một
+   * bản `SUPERSEDED`, tức một bản cũ.
+   *
+   * ⚠️ Dấu vết đo được trước bản sửa, trên trải nghiệm đã publish hai lần:
+   *
+   *     rev 1 SUPERSEDED · rev 2 PUBLISHED
+   *     rollback -> nhân bản rev 1 -> xin số 1+1 = 2 -> đã có
+   *
+   *     ERROR: duplicate key value violates unique constraint
+   *            "vehicle_experience_version_tenant_id_experience_id_revision_key"
+   *
+   *    Người dùng nhận HTTP 500 "Đã có lỗi xảy ra". Không phải một trường hợp
+   *    biên: rollback ĐẦU TIÊN của MỌI trải nghiệm đều rơi đúng vào đây, vì
+   *    rollback cần ít nhất một bản SUPERSEDED, và bản SUPERSEDED đầu tiên chỉ
+   *    xuất hiện khi đã có bản PUBLISHED số cao hơn nó.
+   *
+   * 💡 Cùng khuôn với ba lần "check-then-act" đã ghi ở `STATUS.md`: một giá trị
+   *    được suy ra từ một hàng đọc trước đó, trong khi sự thật nằm ở tập hợp.
+   *
+   * Khoá hàng cha TRƯỚC khi đếm — hai người bấm cùng lúc thì đọc cùng một MAX
+   * và lại đụng nhau, lần này vì đua chứ không vì tính sai.
+   */
+  private async soRevisionKeTiep(
+    tx: PoolClient,
+    bang: 'vehicle_product_revision' | 'vehicle_experience_version',
+    cotCha: 'product_id' | 'experience_id',
+    idCha: string,
+  ): Promise<number> {
+    const { rows } = await tx.query<{ n: string }>(
+      `SELECT COALESCE(MAX(revision_number), 0)::text AS n
+         FROM ${bang} WHERE ${cotCha} = $1`,
+      [idCha],
+    );
+    return Number(rows[0]?.n ?? 0) + 1;
+  }
+
   private async cloneRevisionAsDraft(
     tx: PoolClient,
     actor: ActorContext,
     sourceRevisionId: string,
   ): Promise<string> {
     const { rows: srcRows } = await tx.query<Record<string, unknown>>(
-      `SELECT revision_number FROM vehicle_product_revision WHERE id = $1`,
+      `SELECT product_id FROM vehicle_product_revision WHERE id = $1`,
       [sourceRevisionId],
     );
     const src = srcRows[0];
     if (src === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy bản cũ');
+    const soMoi = await this.soRevisionKeTiep(
+      tx, 'vehicle_product_revision', 'product_id', src.product_id as string,
+    );
 
     const newId = randomUUID();
     await tx.query(
@@ -965,7 +1154,7 @@ export class MarketingService {
        SELECT $1, tenant_id, product_id, $2, name, make_name, model_name,
               summary, description, seo_title, seo_description, content_hash, $3, $3
          FROM vehicle_product_revision WHERE id = $4`,
-      [newId, Number(src.revision_number) + 1, actor.userId, sourceRevisionId],
+      [newId, soMoi, actor.userId, sourceRevisionId],
     );
 
     // Sao chép variant + media sang draft mới (clone-to-draft, không mutate lịch sử)
@@ -992,14 +1181,23 @@ export class MarketingService {
     return newId;
   }
 
+  /**
+   * Số revision do CHÍNH hàm này tính, không nhận từ nơi gọi.
+   *
+   * Trước đây mỗi nơi gọi tự tính một kiểu — `1`, `src + 1`, `oldVer + 1` — và
+   * hai trong ba kiểu đó sai. Khi một giá trị phải tuân theo một ràng buộc DB,
+   * để nơi gọi tự tính là mời mỗi nơi gọi sai một cách khác nhau.
+   */
   private async insertExperienceVersion(
     tx: PoolClient,
     actor: ActorContext,
     experienceId: string,
-    revisionNumber: number,
     label: string,
     config: Record<string, unknown>,
   ): Promise<string> {
+    const revisionNumber = await this.soRevisionKeTiep(
+      tx, 'vehicle_experience_version', 'experience_id', experienceId,
+    );
     const id = randomUUID();
     const contentHash = contentHashOf(
       JSON.stringify({ schemaVersion: 1, label, config }),

@@ -145,7 +145,35 @@ export default function VehicleEditorPage({
               <button className="btn" type="submit" disabled={busy || !canWrite}>Lưu bản nháp</button>
             </form>
           ) : (
-            <p className="note">Chưa có bản nháp — publish lần đầu bằng dữ liệu hiện tại.</p>
+            /*
+             * ⚠️ Câu cũ ở đây là "Chưa có bản nháp — publish lần đầu bằng dữ
+             *    liệu hiện tại", và nó SAI với xe đã publish: không có bản nháp
+             *    thì `POST /publish` trả 422 "Không có bản nháp để duyệt".
+             *    Người dùng đọc hướng dẫn, làm theo, và nhận lỗi.
+             *
+             * Giờ chỗ này là một nút thật, và nó nói đúng việc nó làm.
+             */
+            <>
+              <p className="note">
+                {product.published === null
+                  ? 'Chưa có bản nháp nào.'
+                  : 'Nội dung đang hiển thị công khai. Muốn sửa thì tạo một bản nháp mới từ bản đang đăng — trang công khai không đổi cho tới khi bạn publish.'}
+              </p>
+              {canWrite && product.published !== null && (
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void run(async () => {
+                    await api(`/api/v1/marketing/vehicle-products/${id}/draft`, {
+                      method: 'POST',
+                    });
+                  }, 'Đã tạo bản nháp từ bản đang đăng')}
+                >
+                  Tạo bản nháp để sửa
+                </button>
+              )}
+            </>
           )}
 
           <h3>Phiên bản xe</h3>
