@@ -2,7 +2,10 @@
 
 **Trạng thái:** Đề xuất đã chốt hướng sản phẩm, chưa triển khai mã nguồn<br>
 **Ngày:** 2026-08-12<br>
-**Phạm vi:** showroom/đại lý bán xe có xưởng hậu mãi
+**Phạm vi:** showroom/đại lý bán xe có xưởng hậu mãi<br>
+**SRS tổng thể:** [Landing và Sales Admin](2026-08-12-landing-sales-srs.md)<br>
+**SEO:** [SRS SEO Landing](2026-08-12-landing-seo-srs.md)<br>
+**Trải nghiệm xe:** [Hybrid Digital Showroom](2026-08-12-automotive-landing-experience-design.md)
 
 > Đặc tả triển khai: [SRS tổng thể](2026-08-12-landing-sales-srs.md) ·
 > [SRS chi tiết Phase 1](2026-08-12-phase-1-landing-sales-srs.md)
@@ -24,7 +27,8 @@ Landing marketing
 
 Mục tiêu MVP là giúp showroom tạo và xử lý lead, bàn giao xe đã mua sang
 GarageOS đúng một lần, có khả năng truy vết. MVP không phải hệ thống quản trị
-đại lý hoàn chỉnh.
+đại lý hoàn chỉnh. Trong bộ tài liệu này, Product MVP kết thúc ở P3; P1 là
+Foundation, P2 hoàn tất sales/delivery continuity và P4 là tăng trưởng tùy chọn.
 
 ## 2. Kiến trúc monorepo
 
@@ -55,7 +59,8 @@ Tất cả dữ liệu vẫn bị giới hạn bằng `tenant_id` và RLS như G
 
 - Trang chủ theo các block: Hero, điểm mạnh, xe nổi bật, ưu đãi, quy trình mua,
   đánh giá, câu hỏi thường gặp, CTA và chân trang.
-- Danh sách xe, lọc cơ bản theo hãng/dòng xe/giá/nhiên liệu/tình trạng.
+- Danh sách xe mới, lọc cơ bản theo hãng/dòng xe/giá/powertrain. Xe cũ chờ mô
+  hình VIN/tồn vật lý/availability riêng, không quảng cáo bằng catalog mơ hồ.
 - Trang chi tiết xe: ảnh, thông số, giá niêm yết hoặc "liên hệ", ưu đãi, CTA
   đăng ký lái thử hoặc nhận báo giá.
 - Trang ưu đãi và bài viết/kiến thức cơ bản cho SEO.
@@ -63,6 +68,10 @@ Tất cả dữ liệu vẫn bị giới hạn bằng `tenant_id` và RLS như G
   thời gian liên hệ. Có đồng ý liên hệ và chống spam.
 - CTA cho khách đã có xe: đặt lịch dịch vụ; đây là luồng sau bán, không thay
   thế luồng tiếp nhận xe hiện có.
+- Trên trang xe, `ImmersiveShowroom` là progressive enhancement tùy asset:
+  exterior spin 360°, interior panorama, hotspot có hướng dẫn và gallery fallback.
+- Cấu hình màu/mâm/nội thất chỉ hiển thị khi có mapping/asset thật; lựa chọn được
+  gửi kèm lead bằng stable ID để sales tiếp tục tư vấn.
 
 ### 3.2 Sales Admin
 
@@ -153,8 +162,8 @@ script, style inline hay event handler.
 
 | Nhóm | Thực thể chính | Ghi chú |
 |---|---|---|
-| Catalog marketing | `VehicleProduct`, `VehicleVariant`, `VehicleMedia`, `Promotion` | Là mẫu xe để quảng bá; không phải xe thực đã giao. |
-| Nội dung | `LandingPage`, `LandingPageVersion`, `LandingBlock`, `MediaAsset` | Chỉ một version được publish cho mỗi slug/tenant. |
+| Catalog marketing | `VehicleProduct`, immutable `VehicleProductRevision`, `VehicleVariant`, `MediaAsset`, `MediaRendition`, `Promotion` | Là mẫu xe để quảng bá; không phải xe thực đã giao. Public chỉ đọc current publication. |
+| Nội dung | `LandingPage`, `LandingPageVersion`, `LandingBlock`, `MediaAsset` | Chỉ một version được publish cho mỗi slug/tenant; dùng chung media model. |
 | Sales | `SalesLead`, `LeadActivity`, `TestDriveAppointment`, `SalesOpportunity` | Lead có thể mất/chuyển đổi, không phải Customer mặc định. |
 | Giao xe | `VehicleDelivery`, `DeliveryWarranty` | Cầu nối duy nhất từ sales sang GarageOS. |
 | GarageOS hiện hữu | `Customer`, `Vehicle`, ownership, warranty, appointment | Chỉ tạo/cập nhật qua service có kiểm soát. |
@@ -186,10 +195,14 @@ không nhận URL tùy ý làm nguồn ảnh.
 
 ## 7. SEO, hiệu năng và vận hành
 
+- Yêu cầu chi tiết nằm trong [SRS SEO](2026-08-12-landing-seo-srs.md); mọi phase
+  phải giữ canonical/indexability/structured data nhất quán theo tenant/domain.
 - `apps/landing` render server/static cho trang xe, ưu đãi và bài viết;
   revalidate sau publish.
 - Metadata, Open Graph, sitemap, robots và canonical URL là yêu cầu MVP.
 - Ảnh qua CDN/storage, có kích thước khai báo và alt text bắt buộc.
+- Viewer 360°/panorama không tải trước tương tác, có poster/text/gallery fallback
+  và không được là nguồn duy nhất của nội dung SEO.
 - Analytics chỉ ghi nhận consent; event tối thiểu: xem xe, mở form, gửi lead,
   click gọi điện/Zalo, đặt lái thử.
 - Landing không dùng cookie phiên GarageOS. Sales-admin dùng session HttpOnly,
@@ -210,7 +223,11 @@ không nhận URL tùy ý làm nguồn ảnh.
 ### P1 — nền tảng sales và landing tĩnh
 
 Tạo apps mới, roles, module API, sản phẩm xe, landing templates, form lead,
-sales-admin list/kanban, RBAC/RLS, audit log, unit/integration/E2E nền tảng.
+sales-admin list/kanban, RBAC/RLS, audit log, SEO foundation và unit/integration/E2E.
+Template xe có slot Hybrid Showroom optional; ít nhất một flagship demo dùng
+exterior spin + interior panorama + hotspot, các xe khác dùng gallery fallback.
+Asset đi qua operator import manifest idempotent, checksum/license validation và
+storage adapter; P1 chưa có browser media library/upload UI.
 
 ### P2 — giao xe sang GarageOS
 
@@ -219,13 +236,15 @@ nhắc bảo dưỡng đầu tiên, regression test đa tenant và kiểm tra kh
 
 ### P3 — CMS block builder
 
-Thêm draft/version/publish/rollback, block schemas, media storage adapter,
-preview, cache invalidation, accessibility/SEO test.
+Thêm draft/version/publish/rollback, block schemas, media library/signed-upload
+UI trên storage adapter P1, preview, `ImmersiveShowroomBlock`, SEO Control Center, redirect manager, cache
+invalidation và accessibility/SEO test.
 
 ### P4 — tối ưu tăng trưởng
 
 Test-drive appointment, phân nguồn lead, analytics theo consent, import lead,
-gói dịch vụ sau bán và tích hợp quảng cáo khi có kênh cụ thể.
+gói dịch vụ sau bán và tích hợp quảng cáo khi có kênh cụ thể. Realtime glTF/AR
+chỉ thí điểm trên xe flagship có model được cấp quyền và performance budget riêng.
 
 Mỗi pha phải giữ CI hiện có xanh: lint, typecheck, API tests với Postgres/RLS,
 invariant tests và production E2E. Các thay đổi liên quan đến tiền, bảo hành,
@@ -244,3 +263,5 @@ quyền hoặc dữ liệu GarageOS phải có review độc lập theo quy ư�
    phạm vi của mình, kể cả khi gọi trực tiếp API.
 6. Landing đạt kiểm tra SEO cơ bản, responsive và accessibility không có lỗi
    nghiêm trọng.
+7. Trải nghiệm 360°/panorama không chặn LCP/main content; khi JavaScript hoặc
+   media lỗi, khách vẫn xem gallery, đọc nội dung và gửi lead được.
