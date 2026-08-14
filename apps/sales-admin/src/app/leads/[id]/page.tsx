@@ -65,8 +65,35 @@ export default function LeadDetailPage({
   return (
     <main className="container">
       <div className="detail-header"><p className="eyebrow">Lead / hồ sơ khách hàng</p><h1>{lead.fullName} <span className="note">({lead.reference})</span></h1>
-      <p className="note">{LEAD_STATUS_LABEL[lead.status]} · {lead.phoneNormalized} · {lead.email ?? 'không có email'}</p>
+      <p className="note">
+        {LEAD_STATUS_LABEL[lead.status]}
+        {lead.redactedAt === null && ` · ${lead.phoneNormalized} · ${lead.email ?? 'không có email'}`}
+      </p>
       </div>
+      {/*
+        * 🔒 Nói RA rằng dữ liệu đã bị xoá, thay vì để lại một chỗ trống.
+        *
+        * `redact_expired_sales_leads` ghi `phone_normalized = ''` và
+        * `email = NULL` khi lead quá thời hạn lưu. Bản trước vẫn in nguyên hai
+        * trường đó, nên màn hình hiện:
+        *
+        *     Đã liên hệ ·  · không có email
+        *
+        * Một dấu chấm giữa hai khoảng trắng. Tư vấn bán hàng đọc dòng đó sẽ kết
+        * luận "hệ thống mất dữ liệu" và đi tìm số điện thoại ở nơi khác — tức là
+        * đúng cái mà việc xoá theo thời hạn sinh ra để ngăn.
+        *
+        * Contract đã khai `redactedAt` kèm chú thích "khác null = PII đã bị ghi
+        * đè; fullName/phoneNormalized là tombstone". Dữ liệu có sẵn, giao diện
+        * chỉ chưa đọc.
+        */}
+      {lead.redactedAt !== null && (
+        <p className="note" role="status">
+          🔒 Dữ liệu cá nhân của lead này đã được xoá theo thời hạn lưu trữ
+          ({new Date(lead.redactedAt).toLocaleDateString('vi-VN')}). Tên và số điện
+          thoại chỉ còn là dấu vết để đối chiếu, không liên hệ lại được.
+        </p>
+      )}
       {message !== null && <p className="subtle-success" role="status">{message}</p>}
       {error !== null && <p className="error" role="alert">{error}</p>}
 
