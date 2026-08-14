@@ -8,7 +8,7 @@
  * 🔒 Tạo 2 tenant để kiểm chứng cô lập bằng mắt, không chỉ bằng test.
  */
 import { Client } from 'pg';
-import { scryptSync, randomBytes } from 'node:crypto';
+import { scryptSync, randomBytes, createHash, randomUUID } from 'node:crypto';
 
 const ADMIN_URL =
   process.env.DATABASE_ADMIN_URL ??
@@ -54,6 +54,11 @@ const USERS_A: SeedUser[] = [
    * vậy — nó chỉ xanh nhờ rác trạng thái của lần chạy trước.
    */
   { phone: '0901000007', fullName: 'Vũ Đình Thợ Mới', roles: ['TECHNICIAN'] },
+  // Landing / Sales (SRS Phase 1) — vai mới chỉ có quyền mới
+  { phone: '0901000010', fullName: 'Nguyễn Thị Marketing', roles: ['MARKETING_EDITOR'] },
+  { phone: '0901000011', fullName: 'Trần Văn Duyệt Nội Dung', roles: ['MARKETING_PUBLISHER'] },
+  { phone: '0901000012', fullName: 'Lê Thị Tư Vấn', roles: ['SALES_ADVISOR'] },
+  { phone: '0901000013', fullName: 'Phạm Văn Quản Lý Sales', roles: ['SALES_MANAGER'] },
 ];
 
 const USERS_B: SeedUser[] = [
@@ -214,6 +219,14 @@ async function main(): Promise<void> {
     repair_order_asset, repair_order_photo, repair_order, doc_counter,
     price_list_item, price_list, part, service_item,
     vehicle_ownership, vehicle, customer,
+    lead_activity, sales_lead,
+    media_import_item, media_import_job,
+    vehicle_product_media, vehicle_experience_version_media,
+    vehicle_experience_version, vehicle_experience,
+    vehicle_variant_revision, vehicle_variant,
+    vehicle_product_revision, vehicle_product,
+    media_publication, media_rendition, media_asset,
+    branch_public_profile, site_profile, site_domain,
     user_branch, refresh_token, audit_log, app_user, branch, tenant
     RESTART IDENTITY`);
 
@@ -1206,6 +1219,268 @@ async function main(): Promise<void> {
       [TENANT_A, hdNhap[0]!.id, i + 1, d.moTa, d.gia, d.nguon ?? null],
     );
   }
+
+  // ===========================================================================
+  // Landing / Sales seed (SRS Phase 1) — site domain, profile, catalog, media.
+  // Demo media dùng key `demo/…` do API sinh placeholder SVG (chỉ cho dev/demo).
+  // ===========================================================================
+  console.log('Tạo landing/sales seed...');
+  const { rows: pubRows } = await db.query<{ id: string }>(
+    "SELECT id FROM app_user WHERE phone = '0901000011'",
+  );
+  const publisherId = pubRows[0]!.id;
+  const { rows: ownerBRows } = await db.query<{ id: string }>(
+    "SELECT id FROM app_user WHERE phone = '0902000001'",
+  );
+  const ownerBId = ownerBRows[0]!.id;
+
+  const createMedia = async (
+    tenantId: string,
+    stableKey: string,
+    profile: string,
+    key: string,
+  ): Promise<string> => {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO media_asset (tenant_id, stable_key, kind, status, source_storage_key,
+                                source_sha256, source_mime, byte_size, provenance, license, license_owner, created_by)
+       VALUES ($1,$2,'IMAGE','READY',$3,$3,'image/svg+xml',1024,'{}','DEMO','GarageOS', $4)
+       RETURNING id`,
+      [tenantId, stableKey, key, publisherId],
+    );
+    const assetId = rows[0]!.id;
+    await db.query(
+      `INSERT INTO media_rendition (tenant_id, asset_id, profile, format, mime, storage_key, content_sha256, byte_size, visibility)
+       VALUES ($1,$2,$3,'svg','image/svg+xml',$4,$4,1024,'PUBLIC')`,
+      [tenantId, assetId, profile, key],
+    );
+    await db.query(
+      `INSERT INTO media_publication (tenant_id, rendition_id, public_storage_key, public_content_sha256, status, verified_at)
+       SELECT $1, id, $2, $2, 'READY', now() FROM media_rendition WHERE asset_id = $3 AND profile = $4`,
+      [tenantId, key, assetId, profile],
+    );
+    return assetId;
+  };
+
+  await db.query(
+    `INSERT INTO site_domain (tenant_id, hostname, status, is_primary)
+     VALUES ($1,'localhost','ACTIVE',true),
+            ($2,'garage-b.localhost','ACTIVE',true)`,
+    [TENANT_A, TENANT_B],
+  );
+
+  await db.query(
+    `INSERT INTO site_profile (tenant_id, version_number, status, brand_name, legal_name,
+                               default_title_suffix, default_description, phone, address,
+                               created_by, updated_by, published_by, published_at)
+     VALUES
+       ($1, 1, 'PUBLISHED', 'Garage Thành Công Showroom', 'Công ty TNHH Garage Thành Công',
+        'Garage Thành Công',
+        'Showroom ô tô chính hãng tại Hà Nội và TP.HCM. Đăng ký lái thử miễn phí, nhận báo giá trong ngày và hưởng hậu mãi trọn đời tại xưởng.',
+        '02411110001', '{"line1":"12 Giải Phóng, Hà Nội"}', $2, $2, $2, now()),
+       ($1, 2, 'DRAFT', 'Garage Thành Công Showroom', 'Công ty TNHH Garage Thành Công',
+        'Garage Thành Công',
+        'Showroom ô tô chính hãng tại Hà Nội và TP.HCM. Đăng ký lái thử miễn phí, nhận báo giá trong ngày và hưởng hậu mãi trọn đời tại xưởng.',
+        '02411110001', '{"line1":"12 Giải Phóng, Hà Nội"}', $2, $2, NULL, NULL)`,
+    [TENANT_A, publisherId],
+  );
+  await db.query(
+    `INSERT INTO site_profile (tenant_id, version_number, status, brand_name, legal_name,
+                               default_title_suffix, default_description, created_by, updated_by,
+                               published_by, published_at)
+     VALUES ($1, 1, 'PUBLISHED', 'Garage Đối Chứng Showroom', 'Công ty Garage Đối Chứng',
+             'Garage Đối Chứng',
+             'Showroom đối chứng để kiểm chứng cô lập tenant trong kiểm thử landing end-to-end.',
+             $2, $2, $2, now())`,
+    [TENANT_B, ownerBId],
+  );
+
+  for (const b of branchesA) {
+    await db.query(
+      `INSERT INTO branch_public_profile (tenant_id, branch_id, version_number, status,
+                                          stable_key, public_name, public_phone, public_address,
+                                          created_by, updated_by, published_by, published_at)
+       SELECT $1, id, 1, 'PUBLISHED', code, name, phone, address, $2, $2, $2, now()
+         FROM branch WHERE id = $3`,
+      [TENANT_A, publisherId, b.id],
+    );
+  }
+
+  // --- Flagship product: có spin 360° + panorama + hotspot ------------------
+  const coverId = await createMedia(TENANT_A, 'vf3-cover', 'POSTER', 'demo/vf3-cover.svg');
+  const gal1Id = await createMedia(TENANT_A, 'vf3-gallery-1', 'GALLERY', 'demo/vf3-gallery-1.svg');
+  const gal2Id = await createMedia(TENANT_A, 'vf3-gallery-2', 'GALLERY', 'demo/vf3-gallery-2.svg');
+
+  const spinAssetIds: string[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    spinAssetIds.push(
+      await createMedia(TENANT_A, `vf3-spin-${i}`, 'GALLERY', `demo/vf3-spin-${i}.svg`),
+    );
+  }
+  const driverId = await createMedia(TENANT_A, 'vf3-int-driver', 'PANORAMA', 'demo/vf3-int-driver.svg');
+  const rearId = await createMedia(TENANT_A, 'vf3-int-rear', 'PANORAMA', 'demo/vf3-int-rear.svg');
+
+  const hashOf = (s: string): string => createHash('sha256').update(s).digest('hex');
+
+  const productId = randomUUID();
+  const revisionId = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_product (id, tenant_id, stable_key, slug, created_by, updated_by)
+     VALUES ($1,$2,'product-vf3','vinfast-vf-3',$3,$3)`,
+    [productId, TENANT_A, publisherId],
+  );
+  await db.query(
+    `INSERT INTO vehicle_product_revision (id, tenant_id, product_id, revision_number, status,
+                                           name, make_name, model_name, summary, description,
+                                           seo_title, seo_description, content_hash,
+                                           published_by, published_at, created_by, updated_by)
+     VALUES ($1,$2,$3,1,'PUBLISHED','VinFast VF 3','VinFast','VF 3',
+             'Xe điện đô thị nhỏ gọn, phù hợp gia đình trẻ.',
+             'VinFast VF 3 là mẫu SUV điện đô thị nhỏ gọn, linh hoạt trong phố và tiết kiệm chi phí vận hành.',
+             'VinFast VF 3 — giá niêm yết', 'Mua VinFast VF 3 chính hãng, đăng ký lái thử miễn phí.',
+             $4, $5, now(), $5, $5)`,
+    [revisionId, TENANT_A, productId, hashOf('vf3-rev-1'), publisherId],
+  );
+  await db.query(
+    `UPDATE vehicle_product SET published_revision_id = $1, first_published_at = now()
+      WHERE id = $2`,
+    [revisionId, productId],
+  );
+
+  for (const [i, v] of [
+    { name: 'VF 3 Eco', price: 315_000_000, key: 'vf3-eco' },
+    { name: 'VF 3 Plus', price: 349_000_000, key: 'vf3-plus' },
+  ].entries()) {
+    const variantId = randomUUID();
+    await db.query(
+      `INSERT INTO vehicle_variant (id, tenant_id, product_id, stable_key, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$5)`,
+      [variantId, TENANT_A, productId, v.key, publisherId],
+    );
+    await db.query(
+      `INSERT INTO vehicle_variant_revision (id, tenant_id, product_revision_id, variant_id,
+                                             name, powertrain, model_year, display_price_amount,
+                                             specifications, is_featured, sort_order)
+       VALUES ($1,$2,$3,$4,$5,'BEV',2026,$6,'{"rangeKm":210,"seats":4}'::jsonb,$7,$8)`,
+      [randomUUID(), TENANT_A, revisionId, variantId, v.name, v.price, i === 0, i],
+    );
+  }
+
+  for (const [i, m] of [
+    { asset: coverId, role: 'POSTER', alt: 'VinFast VF 3 màu vàng', cover: true },
+    { asset: gal1Id, role: 'GALLERY', alt: 'VinFast VF 3 nhìn nghiêng', cover: false },
+    { asset: gal2Id, role: 'GALLERY', alt: 'VinFast VF 3 nội thất', cover: false },
+  ].entries()) {
+    await db.query(
+      `INSERT INTO vehicle_product_media (tenant_id, product_revision_id, media_asset_id, role,
+                                          alt_text, sort_order, is_cover)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [TENANT_A, revisionId, m.asset, m.role, m.alt, i, m.cover],
+    );
+  }
+
+  // Experience: exterior spin (8 khung + hotspot) + interior panorama (2 viewpoint)
+  const spinExpId = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_experience (id, tenant_id, product_id, kind, stable_key, created_by, updated_by)
+     VALUES ($1,$2,$3,'EXTERIOR_SPIN','exterior-360',$4,$4)`,
+    [spinExpId, TENANT_A, productId, publisherId],
+  );
+  const spinVerId = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_experience_version (id, tenant_id, experience_id, revision_number, status,
+                                             label, config, content_hash, published_by, published_at,
+                                             created_by, updated_by)
+     VALUES ($1,$2,$3,1,'PUBLISHED','Ngoại thất 360°',
+             '{"kind":"EXTERIOR_SPIN","startYawDegrees":0,"hotspots":[{"id":"h1","yawDegrees":0,"title":"Đèn LED định vị ban ngày","description":"Thiết kế trẻ trung, nhận diện tốt ban ngày."},{"id":"h2","yawDegrees":90,"title":"Mâm hợp kim 16 inch","description":"Mâm 5 chấu kép thể thao."},{"id":"h3","yawDegrees":180,"title":"Cụm đèn hậu LED","description":"Dải LED hiện đại, dễ nhận diện ban đêm."},{"id":"h4","yawDegrees":270,"title":"Tay nắm cửa ẩn","description":"Mặt ngoài liền mạch, giảm nhiễu khí động."},{"id":"h5","yawDegrees":45,"title":"Cổng sạc nhanh","description":"Sạc 10-70% trong khoảng 36 phút."}]}'::jsonb,
+             $4, $5, now(), $5, $5)`,
+    [spinVerId, TENANT_A, spinExpId, hashOf('vf3-spin-1'), publisherId],
+  );
+  await db.query(
+    `UPDATE vehicle_experience SET published_version_id = $1 WHERE id = $2`,
+    [spinVerId, spinExpId],
+  );
+  for (let i = 0; i < 8; i += 1) {
+    await db.query(
+      `INSERT INTO vehicle_experience_version_media (tenant_id, experience_version_id, media_asset_id,
+                                                    binding_key, role, logical_yaw, sort_order,
+                                                    accessible_label, description)
+       VALUES ($1,$2,$3,$4,'SPIN_FRAME',$5,$6,$7,$8)`,
+      [TENANT_A, spinVerId, spinAssetIds[i]!, `frame-${i}`, i * 45, i, `Góc ${i * 45}°`, `Ngoại thất góc ${i * 45} độ`],
+    );
+  }
+
+  const intExpId = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_experience (id, tenant_id, product_id, kind, stable_key, created_by, updated_by)
+     VALUES ($1,$2,$3,'INTERIOR_PANORAMA','interior-panorama',$4,$4)`,
+    [intExpId, TENANT_A, productId, publisherId],
+  );
+  const intVerId = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_experience_version (id, tenant_id, experience_id, revision_number, status,
+                                             label, config, content_hash, published_by, published_at,
+                                             created_by, updated_by)
+     VALUES ($1,$2,$3,1,'PUBLISHED','Tham quan nội thất',
+             '{"kind":"INTERIOR_PANORAMA","initialViewpointKey":"driver","viewpoints":[{"key":"driver","name":"Ghế lái","description":"Khoang lái tối giản với màn hình trung tâm cảm ứng.","initialYaw":0,"initialPitch":0,"hotspots":[{"id":"d1","title":"Màn hình 10 inch","description":"Điều khiển giải trí và điều hoà."}]},{"key":"rear","name":"Hàng ghế sau","description":"Không gian đủ cho 4 người lớn, gập phẳng tăng khoang hành lý.","initialYaw":180,"initialPitch":0,"hotspots":[]}]}'::jsonb,
+             $4, $5, now(), $5, $5)`,
+    [intVerId, TENANT_A, intExpId, hashOf('vf3-int-1'), publisherId],
+  );
+  await db.query(
+    `UPDATE vehicle_experience SET published_version_id = $1 WHERE id = $2`,
+    [intVerId, intExpId],
+  );
+  await db.query(
+    `INSERT INTO vehicle_experience_version_media (tenant_id, experience_version_id, media_asset_id,
+                                                  binding_key, role, scene_key, sort_order, accessible_label)
+     VALUES ($1,$2,$3,'pano-driver','PANORAMA','driver',0,'Toàn cảnh ghế lái'),
+            ($1,$2,$4,'pano-rear','PANORAMA','rear',1,'Toàn cảnh hàng ghế sau')`,
+    [TENANT_A, intVerId, driverId, rearId],
+  );
+
+  // --- Product thứ hai: chỉ gallery, KHÔNG có experience (fallback) ----------
+  const cover6Id = await createMedia(TENANT_A, 'vf6-cover', 'POSTER', 'demo/vf6-cover.svg');
+  const product6Id = randomUUID();
+  const revision6Id = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_product (id, tenant_id, stable_key, slug, created_by, updated_by)
+     VALUES ($1,$2,'product-vf6','vinfast-vf-6',$3,$3)`,
+    [product6Id, TENANT_A, publisherId],
+  );
+  await db.query(
+    `INSERT INTO vehicle_product_revision (id, tenant_id, product_id, revision_number, status,
+                                           name, make_name, model_name, summary, description,
+                                           seo_title, seo_description, content_hash,
+                                           published_by, published_at, created_by, updated_by)
+     VALUES ($1,$2,$3,1,'PUBLISHED','VinFast VF 6','VinFast','VF 6',
+             'SUV điện hạng B cho gia đình.',
+             'VinFast VF 6 là mẫu SUV điện hạng B, không gian rộng và vận hành êm ái.',
+             'VinFast VF 6 — giá niêm yết', 'Mua VinFast VF 6 chính hãng, nhận tư vấn miễn phí.',
+             $4, $5, now(), $5, $5)`,
+    [revision6Id, TENANT_A, product6Id, hashOf('vf6-rev-1'), publisherId],
+  );
+  await db.query(
+    `UPDATE vehicle_product SET published_revision_id = $1, first_published_at = now() WHERE id = $2`,
+    [revision6Id, product6Id],
+  );
+  const variant6Id = randomUUID();
+  await db.query(
+    `INSERT INTO vehicle_variant (id, tenant_id, product_id, stable_key, created_by, updated_by)
+     VALUES ($1,$2,$3,'vf6-base',$4,$4)`,
+    [variant6Id, TENANT_A, product6Id, publisherId],
+  );
+  await db.query(
+    `INSERT INTO vehicle_variant_revision (id, tenant_id, product_revision_id, variant_id, name,
+                                           powertrain, model_year, display_price_amount, specifications,
+                                           is_featured, sort_order)
+     VALUES ($1,$2,$3,$4,'VF 6 Base','BEV',2026,$5,'{"rangeKm":399,"seats":5}'::jsonb,false,0)`,
+    [randomUUID(), TENANT_A, revision6Id, variant6Id, 675_000_000],
+  );
+  await db.query(
+    `INSERT INTO vehicle_product_media (tenant_id, product_revision_id, media_asset_id, role,
+                                        alt_text, sort_order, is_cover)
+     VALUES ($1,$2,$3,'POSTER','VinFast VF 6',0,true)`,
+    [TENANT_A, revision6Id, cover6Id],
+  );
 
   await db.query('COMMIT');
 

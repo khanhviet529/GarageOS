@@ -13,10 +13,14 @@ import { ReportsModule } from './reports/reports.module';
 import { AiModule } from './ai/ai.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { PublicTrackingModule } from './public/public-tracking.module';
+import { MarketingModule } from './marketing/marketing.module';
+import { SalesModule } from './sales/sales.module';
+import { PublicLandingModule } from './public-landing/public-landing.module';
+import { MediaModule } from './media/media.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
-  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, AiModule, InvoiceModule, PublicTrackingModule],
+  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, AiModule, InvoiceModule, PublicTrackingModule, MarketingModule, SalesModule, PublicLandingModule, MediaModule],
   controllers: [HealthController],
 })
 export class AppModule {}
