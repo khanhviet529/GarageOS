@@ -69,8 +69,37 @@ export function contentHashOf(canonicalJson: string): string {
  */
 export type SalesScope = 'TENANT' | 'BRANCH' | 'SELF';
 
-export function scopeForAction(actor: ActorContext, action: string): SalesScope {
-  if (!action.startsWith('sales:')) return 'TENANT';
+/**
+ * 🔒 Kiểu chặn typo ở thời điểm biên dịch.
+ *
+ * Hàm này quyết định NGƯỜI DÙNG NHÌN THẤY BAO NHIÊU DỮ LIỆU. Nhận `string` thì
+ * `'sale:leadRead'` (thiếu chữ s) là một chuỗi hợp lệ về mặt kiểu — và nó rơi
+ * vào nhánh mặc định, nhận TENANT. Một lỗi gõ phím biến tư vấn bán hàng chỉ
+ * được xem lead của mình thành xem được lead của cả tenant.
+ */
+export type ScopedAction = `sales:${string}` | `marketing:${string}`;
+
+export function scopeForAction(actor: ActorContext, action: ScopedAction): SalesScope {
+  /*
+   * Catalog marketing là dữ liệu TOÀN TENANT: một mẫu xe không thuộc chi nhánh
+   * nào, và biên tập viên soạn một lần cho cả hệ thống.
+   */
+  if (action.startsWith('marketing:')) return 'TENANT';
+
+  /*
+   * 🔒 Mặc định là HẸP NHẤT, không phải rộng nhất.
+   *
+   * Bản trước viết `if (!action.startsWith('sales:')) return 'TENANT'` — nghĩa
+   * là mọi thứ KHÔNG nhận ra đều được phạm vi rộng nhất. Đó là fail-open ở
+   * đúng nơi không được phép fail-open.
+   *
+   * Hôm nay chưa với tới được vì call site khai kiểu union các literal
+   * `sales:*`. Nhưng an toàn đó nằm ở KỶ LUẬT CỦA NGƯỜI GỌI, không nằm ở hàm —
+   * và `CLAUDE.md` nguyên tắc 1 nói bất biến phải enforce ở tầng thấp nhất có
+   * thể. Ở đây tầng thấp nhất chính là hàm này.
+   */
+  if (!action.startsWith('sales:')) return 'SELF';
+
   if (actor.roles.includes('OWNER')) return 'TENANT';
   if (actor.roles.includes('SALES_MANAGER')) return 'BRANCH';
   return 'SELF';

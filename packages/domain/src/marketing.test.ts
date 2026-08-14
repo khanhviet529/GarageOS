@@ -61,4 +61,22 @@ describe('P1-UT-007 — scopeForAction (SRS 5.1)', () => {
   test('action marketing luôn TENANT (tenant-wide catalog)', () => {
     assert.equal(scopeForAction(actor(['SALES_ADVISOR']), 'marketing:catalogRead'), 'TENANT');
   });
+
+  test('🔒 action không nhận ra rơi về SELF, không phải TENANT', () => {
+    /*
+     * Fail-closed. Bản trước trả TENANT cho mọi thứ không bắt đầu bằng
+     * `sales:` — nên một lỗi gõ phím ở tên action mở toàn bộ lead của tenant
+     * cho một tư vấn bán hàng.
+     *
+     * Kiểu `ScopedAction` chặn được ở thời điểm biên dịch; bài này canh hành vi
+     * lúc chạy, cho trường hợp giá trị đến từ nơi TypeScript không nhìn thấy
+     * (cấu hình, JSON, một lời gọi ép kiểu).
+     */
+    assert.equal(
+      scopeForAction(actor(['SALES_ADVISOR']), 'sale:leadRead' as never),
+      'SELF',
+      'action gõ sai lại được phạm vi rộng nhất',
+    );
+    assert.equal(scopeForAction(actor(['OWNER']), 'khong-biet:gi' as never), 'SELF');
+  });
 });

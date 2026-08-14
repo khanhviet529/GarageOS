@@ -6,6 +6,7 @@ import { Header, Footer } from '@/components/chrome';
 import { DetailActions } from '@/components/detail-actions';
 import type { PublicProductDetail, PublicSiteView } from '@garageos/contracts';
 import type { Metadata } from 'next';
+import { buildPageTitle } from '@garageos/domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -177,8 +178,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const detail = await fetchPublic<PublicProductDetail>(host, `/vehicle-products/${encodeURIComponent(slug)}`);
     site = await loadSite();
     const suffix = site?.brandName ?? 'Showroom ô tô';
-    title = detail.seoTitle ?? `${detail.name} — giá niêm yết`;
-    if (!title.includes(suffix)) title = `${title} | ${suffix}`;
+    /*
+     * 🔒 Cùng một hàm với mọi trang khác — SEO-META-002 chỉ có MỘT quy tắc.
+     *
+     * Bản trước dùng `if (!title.includes(suffix))`, và nó KHÁC hai trang còn
+     * lại ở một chỗ đo được: tên hãng nằm giữa tiêu đề SEO do biên tập viên
+     * đặt (vd "Ưu đãi Toyota Vios tháng 8") thì trang này bỏ hậu tố, còn trang
+     * chủ vẫn thêm. Tiêu đề của cùng một site trông khác nhau tuỳ trang — đúng
+     * thứ mà một template dùng chung sinh ra để tránh.
+     *
+     * 💡 Và `includes('')` luôn đúng, nên khi tên hãng rỗng thì nhánh kia
+     *    không bao giờ chạy — bản cũ "đúng" ở tình huống đó vì tình cờ, không
+     *    phải vì có ai nghĩ tới.
+     */
+    title = buildPageTitle(detail.seoTitle ?? `${detail.name} — giá niêm yết`, suffix);
     description =
       detail.seoDescription ??
       `${detail.name} — ${detail.summary}`.slice(0, 300);

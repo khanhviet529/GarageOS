@@ -5,6 +5,7 @@ import { buildMetadata } from '@/lib/seo';
 import { Header, Footer } from '@/components/chrome';
 import type { PublicProductSummary } from '@garageos/contracts';
 import type { Metadata } from 'next';
+import { buildPageTitle } from '@garageos/domain';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,7 +107,7 @@ export async function generateMetadata({
 
   return buildMetadata({
     site,
-    title: `Danh sách xe | ${brand}`,
+    title: buildPageTitle('Danh sách xe', brand),
     description: `Danh sách xe mới chính hãng tại ${brand} — giá niêm yết, đăng ký lái thử.`,
     path: '/xe',
     image,
