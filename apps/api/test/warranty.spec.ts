@@ -109,10 +109,17 @@ async function donDaBanGiao(opts: {
   });
   assert.equal(phuTung.status, 201, JSON.stringify(phuTung.body));
 
+  // Constraint qline_child_follows_parent kiểm tra theo từng dòng; duyệt dòng
+  // công cha trước, rồi mới duyệt phụ tùng con để không phụ thuộc thứ tự UPDATE.
   await pool.query(
     `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'COUNTER'
-      WHERE quotation_id = $1`,
-    [q.body.id],
+      WHERE id = $1`,
+    [cong.body.id],
+  );
+  await pool.query(
+    `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'COUNTER'
+      WHERE quotation_id = $1 AND id <> $2`,
+    [q.body.id, cong.body.id],
   );
   /*
    * Ghi số km ra TRƯỚC khi chuyển sang DELIVERED.

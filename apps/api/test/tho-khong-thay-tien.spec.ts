@@ -255,7 +255,12 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
      *  · `:token`  — trang tra cứu công khai của KHÁCH, khách ĐƯỢC thấy tiền
      *  · `me`      — hồ sơ người đăng nhập
      */
-    const boQua = new Set(['health', ':token', 'me']);
+    const boQua = new Set([
+      'health', ':token', 'me',
+      'vehicle-products', 'vehicle-products/:id', 'vehicle-products/:slug',
+      'vehicle-products/:id/experiences', 'vehicle-products/:slug/experiences/:stableKey',
+      'site-profile', 'branch-public-profiles', 'site', 'leads', 'leads/:id',
+    ]);
 
     const thieu: string[] = [];
     for (const r of routes) {

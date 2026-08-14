@@ -133,11 +133,19 @@ async function donDaXongViec(opts: {
   });
   assert.equal(pt.status, 201, JSON.stringify(pt.body));
 
-  await pool.query(
-    `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'COUNTER'
-      WHERE quotation_id = $1`,
-    [q.body.id],
-  );
+  /*
+   * 🔒 Cha trước, con sau — `trg_qline_child_follows_parent` là trigger BEFORE
+   * UPDATE FOR EACH ROW đọc trạng thái hiện tại của dòng cha. Gộp một câu
+   * UPDATE cho cả báo giá thì thứ tự xử lý do Postgres quyết định, và trúng
+   * thứ tự "con trước" là đỏ với thông báo `INV-Q-02`.
+   */
+  for (const dieuKien of ['parent_line_id IS NULL', 'parent_line_id IS NOT NULL']) {
+    await pool.query(
+      `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'COUNTER'
+        WHERE quotation_id = $1 AND ${dieuKien}`,
+      [q.body.id],
+    );
+  }
 
   // Kho: nhập rồi xuất đúng số lượng THỰC TẾ (có thể khác báo giá)
   const { rows: u } = await pool.query<{ id: string }>(
