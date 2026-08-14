@@ -246,6 +246,7 @@ export class RepairOrderService {
   }
 
   async getById(actor: ActorContext, id: string): Promise<RepairOrderDetail> {
+    assertCan(actor, 'repairOrder:read');
     return this.db.withTenant(actor, async (tx) => {
       const scope = branchScope(actor);
       const scopeSql =
@@ -330,6 +331,16 @@ export class RepairOrderService {
     actor: ActorContext,
     filter: { open?: boolean; branchId?: string },
   ): Promise<RepairOrderListItem[]> {
+    /*
+     * 🔒 Vai phải được kiểm TRƯỚC phạm vi chi nhánh.
+     *
+     * Phạm vi chi nhánh trả lời "được thấy dữ liệu của chi nhánh nào"; nó
+     * không trả lời "có được thấy loại dữ liệu này không". Dựa vào một mình
+     * `branchScope()` nghĩa là bất kỳ ai có tài khoản và thuộc một chi nhánh
+     * đều đọc được đơn sửa chữa của chi nhánh đó — kể cả người làm nội dung
+     * marketing (`INV-LS-14`, `LS-T13`).
+     */
+    assertCan(actor, 'repairOrder:read');
     return this.db.withTenant(actor, async (tx) => {
       const params: unknown[] = [];
       const where: string[] = [];

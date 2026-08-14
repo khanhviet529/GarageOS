@@ -16,6 +16,42 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
 
+  /*
+   * 🔒 Tin `X-Forwarded-For` đúng số hop của hạ tầng đứng trước — LS-002.
+   *
+   * Landing công khai chạy sau edge/CDN. Không có cấu hình này, `req.ip` là IP
+   * của edge và giống hệt nhau cho MỌI khách: giới hạn tần suất form lead trở
+   * thành một hạn mức dùng chung cho toàn bộ người dùng của toàn bộ tenant.
+   * Đó không phải "chặn chưa đủ chặt" — đó là tự chặn mình ở đúng điểm chuyển
+   * đổi duy nhất của trang.
+   *
+   * ⚠️ KHÔNG đặt `true`. `trust proxy: true` tin toàn bộ chuỗi
+   * `X-Forwarded-For`, nên client tự khai một IP bất kỳ ở đầu chuỗi là thoát
+   * mọi giới hạn — đổi một hạn mức chung lấy một hạn mức không tồn tại.
+   * `TRUST_PROXY_HOPS` phải bằng số proxy THẬT (một CDN = 1, CDN + load
+   * balancer = 2). Mặc định 0: chạy trần, dùng IP của kết nối.
+   */
+  const soHop = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .set('trust proxy', Number.isFinite(soHop) && soHop > 0 ? soHop : false);
+
+  /*
+   * 🔒 Chế độ `signed` mà thiếu bí mật thì mọi chữ ký đều sai và toàn bộ
+   * landing trả 404 — fail-closed, đúng hướng, nhưng triệu chứng ("trang trắng
+   * ở staging") không hề gợi ra nguyên nhân. Nói thẳng ra lúc khởi động.
+   */
+  if (
+    (process.env.EDGE_HOST_TRUST ?? 'signed') !== 'host' &&
+    (process.env.EDGE_SIGNING_SECRET ?? '') === ''
+  ) {
+    new Logger('bootstrap').warn(
+      'EDGE_HOST_TRUST=signed nhưng EDGE_SIGNING_SECRET rỗng — mọi request landing ' +
+        'sẽ trả 404. Đặt bí mật, hoặc đặt EDGE_HOST_TRUST=host trên máy phát triển.',
+    );
+  }
+
   // 🔒 Chốt chặn cuối: từ chối khởi động nếu role DB có đặc quyền bỏ qua RLS.
   //    Superuser bỏ qua Row-Level Security kể cả khi bảng đã bật FORCE, khiến
   //    cô lập tenant vô hiệu ÂM THẦM. Thà không chạy còn hơn chạy sai.
@@ -47,7 +83,8 @@ async function bootstrap(): Promise<void> {
    * chạy test.
    */
   const nguonChoPhep = (
-    process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3002'
+    process.env.WEB_ORIGIN ??
+    'http://localhost:3000,http://localhost:3002,http://localhost:3003,http://localhost:3004'
   )
     .split(',')
     .map((o) => o.trim())
