@@ -11,6 +11,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Pool } from 'pg';
+import { donDoanGioBoQuen } from './_don-doan-gio.js';
 
 const API = process.env.API_URL ?? 'http://localhost:3001';
 const ADMIN_URL =
@@ -159,37 +160,10 @@ async function donGio(assignmentId: string): Promise<void> {
   ]);
 }
 
-/**
- * 🔒 Dọn đoạn giờ CÒN MỞ trước khi bắt đầu — bộ này không được phụ thuộc vào
- *    việc lượt chạy trước có kết thúc sạch sẽ hay không.
- *
- * Một `time_log` chưa đóng có khoảng thời gian kéo tới VÔ CÙNG, nên nó chồng
- * lên mọi đoạn khác của cùng người thợ — kể cả đoạn nằm sau nó.
- * `no_timelog_overlap` từ chối, và thông báo ("conflicting key value violates
- * exclusion constraint") không hé lộ gì về nguyên nhân thật.
- *
- * Hậu quả trước khi có bước này: một lượt chạy hỏng giữa chừng để lại đoạn mở,
- * rồi MỌI lượt sau đều đỏ — ở những bài chẳng liên quan gì tới thứ vừa sửa.
- * Đã báo động nhầm hai lần trong một ngày.
- *
- * 💡 Đây đúng việc mà `dong_ho_gio_bo_quen()` làm trong đời thật, nên bộ test
- *    dọn theo đúng cách đó chứ không xoá thẳng: xoá thì che mất dữ liệu mà một
- *    lượt chạy trước có thể đang cần để chẩn đoán.
- */
-async function dongDoanGioBoQuen(p: Pool): Promise<void> {
-  await p.query(
-    `UPDATE time_log SET ended_at = started_at + interval '1 hour',
-                         auto_closed = true, pause_reason = 'SHIFT_END'
-      WHERE ended_at IS NULL`,
-  );
-  await p.query(
-    `UPDATE work_assignment SET status = 'PAUSED' WHERE status = 'IN_PROGRESS'`,
-  );
-}
 
 before(async () => {
   pool = new Pool({ connectionString: ADMIN_URL });
-  await dongDoanGioBoQuen(pool);
+  await donDoanGioBoQuen(pool);
   const me = await call('POST', '/api/v1/auth/login', {
     phone: '0901000002',
     password: 'demo1234',
