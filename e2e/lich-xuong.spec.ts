@@ -63,7 +63,7 @@ test('🔒 vai không được xem lịch thì không có lối vào', async ({ 
   await expect(page.getByRole('link', { name: 'Lịch xưởng' })).toHaveCount(0);
 
   await page.goto('/lich-xuong');
-  await expect(page.locator('p.alert.error')).toContainText(/không được|quyền/i);
+  await expect(page.locator('.alert.error')).toContainText(/không được|quyền/i);
 });
 
 test('thợ xem được lịch nhưng không xếp được việc cho mình', async ({ page }) => {
@@ -76,5 +76,5 @@ test('thợ xem được lịch nhưng không xếp được việc cho mình', 
   // Danh sách việc chờ là API riêng và thợ ĐƯỢC đọc; điều thợ không làm được là
   // bấm nút xếp. Kiểm ở tầng API (assignment.spec.ts) vì đó mới là chốt chặn
   // thật — ở đây chỉ khẳng định màn hình không sập với vai này.
-  await expect(page.locator('p.alert.error')).toHaveCount(0);
+  await expect(page.locator('.alert.error')).toHaveCount(0);
 });

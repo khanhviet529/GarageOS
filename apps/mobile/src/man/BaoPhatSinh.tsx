@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { api, ApiCallError, type JobCard } from '../lib/api';
+import { Loi } from '../lib/trang-thai';
 import { co, mau } from '../theme';
 
 /**
@@ -79,11 +80,7 @@ export function BaoPhatSinh({
         {viec.plateNumber} · {viec.description}
       </Text>
 
-      {loi !== null && (
-        <View style={kieu.hopLoi} accessibilityRole="alert">
-          <Text style={kieu.chuLoi}>{loi}</Text>
-        </View>
-      )}
+      {loi !== null && <Loi message={loi} />}
 
       <Text style={kieu.nhan}>Cần làm thêm gì</Text>
       {dsHangMuc === null ? (
@@ -210,12 +207,4 @@ const kieu = StyleSheet.create({
   nutXam: { backgroundColor: mau.nen, borderWidth: 1, borderColor: mau.vien },
   nutTat: { backgroundColor: mau.chuMo },
   chuNut: { color: '#fff', fontSize: co.chuThuong, fontWeight: '600' },
-  hopLoi: {
-    backgroundColor: mau.loiNhat,
-    borderColor: mau.loi,
-    borderWidth: 1,
-    borderRadius: co.bo,
-    padding: co.dem3,
-  },
-  chuLoi: { color: mau.loi, fontSize: co.chuNho },
 });

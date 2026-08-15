@@ -19,6 +19,8 @@ import {
   type VehicleLookup,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorState } from '@/components/ErrorState';
+import { SkeletonTable } from '@/components/Skeleton';
 import { IconBo } from '@/components/Icon';
 import { normalizePlate, formatPlate } from '@garageos/domain';
 
@@ -85,9 +87,19 @@ export default function IntakePage() {
             </button>
           </div>
           {error !== null && (
-            <div className="alert error" style={{ marginTop: 12 }} role="alert">{error}</div>
+            <ErrorState message={error} onRetry={() => void runLookup(plate)} />
           )}
         </form>
+
+        {/*
+          Skeleton xuất hiện trong lúc chờ TRA CỨU, không phải lúc chờ form.
+          Trước component này, người dùng thấy nút "Đang tra…" và một khoảng
+          trống bên dưới — dễ tưởng app đứng. Khung bảng giữ chỗ nên mắt đã
+          thấy hình dạng kết quả trước khi dữ liệu tới.
+        */}
+        {busy && result === null && error === null && (
+          <SkeletonTable rows={4} cols={4} />
+        )}
 
         {result?.exact != null && (
           <>

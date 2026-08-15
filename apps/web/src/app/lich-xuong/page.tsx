@@ -2,11 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorState } from '@/components/ErrorState';
+import { EmptyState } from '@/components/EmptyState';
+import { useToast } from '@/components/Toast';
 import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
 import { BangCuon } from '@/components/BangCuon';
 import { BangGioCong } from '@/components/BangGioCong';
 import { HopQc } from '@/components/HopQc';
+import { SkeletonTable } from '@/components/Skeleton';
 import { auth } from '@/lib/api';
 import {
   api,
@@ -47,7 +51,7 @@ export default function TrangLichXuong() {
   const [thoList, setThoList] = useState<TechnicianOption[]>([]);
   const [thoId, setThoId] = useState('');
   const [dangXep, setDangXep] = useState(false);
-  const [ketQua, setKetQua] = useState<string | null>(null);
+  const toast = useToast();
 
   /** Việc đang mở bảng giờ công. `null` = không mở cái nào. */
   const [xemGio, setXemGio] = useState<WorkAssignmentItem | null>(null);
@@ -98,7 +102,6 @@ export default function TrangLichXuong() {
 
   async function xepLich(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    setKetQua(null);
     setLoi(null);
     setDangXep(true);
     try {
@@ -111,11 +114,13 @@ export default function TrangLichXuong() {
         //    mới bình thường, và chi phí của nó bị tính vào doanh thu.
         ...(viec?.reworkOfId == null ? {} : { reworkOfId: viec.reworkOfId }),
       });
-      setKetQua(`Đã xếp lịch, dự kiến xong lúc ${hhmm(r.plannedEnd)}.`);
+      toast.thanhCong(`Đã xếp lịch, dự kiến xong lúc ${hhmm(r.plannedEnd)}.`);
       setViecId('');
       tai();
     } catch (err) {
-      setLoi(err instanceof ApiCallError ? err.api.message : 'Xếp lịch thất bại');
+      const msg = err instanceof ApiCallError ? err.api.message : 'Xếp lịch thất bại';
+      setLoi(msg);
+      toast.loi(msg);
     } finally {
       setDangXep(false);
     }
@@ -127,7 +132,9 @@ export default function TrangLichXuong() {
       await api.changeAssignmentStatus(id, { to });
       tai();
     } catch (err) {
-      setLoi(err instanceof ApiCallError ? err.api.message : 'Không đổi được trạng thái');
+      const msg = err instanceof ApiCallError ? err.api.message : 'Không đổi được trạng thái';
+      setLoi(msg);
+      toast.loi(msg, () => void doiTrangThai(id, to));
     }
   }
 
@@ -152,34 +159,30 @@ export default function TrangLichXuong() {
             </div>
           </div>
 
-          {loi !== null && (
-            <p className="alert error" role="alert" style={{ marginTop: 12 }}>
-              {loi}
-            </p>
-          )}
+          <div className="card-section">
+            {loi !== null && <ErrorState message={loi} onRetry={tai} />}
 
-          <div className="row" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label htmlFor="ngay-lich">Ngày</label>
-              <input
-                id="ngay-lich"
-                type="date"
-                value={ngay}
-                onChange={(e) => setNgay(e.target.value)}
-              />
+            <div className="row">
+              <div className="field">
+                <label htmlFor="ngay-lich">Ngày</label>
+                <input
+                  id="ngay-lich"
+                  type="date"
+                  value={ngay}
+                  onChange={(e) => setNgay(e.target.value)}
+                />
+              </div>
             </div>
-          </div>
 
-          {lich === null ? (
-            <p className="muted" style={{ marginTop: 12 }}>
-              Đang tải…
-            </p>
-          ) : bays.length === 0 ? (
-            <p className="alert info" style={{ marginTop: 12 }}>
-              Chi nhánh chưa khai báo khoang nào.
-            </p>
-          ) : (
-            <BangCuon moTa="Lịch xưởng theo khoang và giờ" style={{ marginTop: 12 }}>
+            {lich === null ? (
+              <SkeletonTable rows={6} cols={6} />
+            ) : bays.length === 0 ? (
+              <EmptyState
+                title="Chi nhánh chưa khai báo khoang nào"
+                description="Mời quản lý chi nhánh vào phần cấu hình để tạo khoang sửa chữa trước khi xếp lịch."
+              />
+            ) : (
+              <BangCuon moTa="Lịch xưởng theo khoang và giờ">
               <table className="lich">
                 <caption className="sr-only">
                   Lịch xưởng theo khoang và giờ. Mỗi hàng là một khoang.
@@ -291,7 +294,8 @@ export default function TrangLichXuong() {
                 </tbody>
               </table>
             </BangCuon>
-          )}
+            )}
+          </div>
         </div>
 
         {xemGio !== null && (
@@ -329,12 +333,7 @@ export default function TrangLichXuong() {
             <p className="alert info">Không còn hạng mục nào chờ phân công.</p>
           ) : (
             <>
-              {ketQua !== null && (
-                <p className="alert success" role="status">
-                  {ketQua}
-                </p>
-              )}
-              <form onSubmit={xepLich} className="row top" style={{ marginTop: 12 }}>
+              <form onSubmit={xepLich} className="row top">
                 <div className="field">
                   <label htmlFor="chon-viec">Hạng mục chờ</label>
                   <select

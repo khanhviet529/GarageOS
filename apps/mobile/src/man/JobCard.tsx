@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import { api, ApiCallError, type GioCong, type JobCard as TJobCard } from '../lib/api';
+import { KhungDangTai, Trong } from '../lib/trang-thai';
+import { useThongBao } from '../lib/thong-bao';
 import { BaoPhatSinh } from './BaoPhatSinh';
 import { co, mau } from '../theme';
 
@@ -46,14 +47,16 @@ function homNay(): string {
 export function ManJobCard({
   tenNguoi,
   onDangXuat,
+  onXemLichSu,
 }: {
   tenNguoi: string;
   onDangXuat: () => void;
+  onXemLichSu: () => void;
 }) {
   const [viec, setViec] = useState<TJobCard[] | null>(null);
   const [gio, setGio] = useState<Record<string, GioCong>>({});
-  const [loi, setLoi] = useState<string | null>(null);
   const [dangTai, setDangTai] = useState(false);
+  const thongBao = useThongBao();
   /** Việc đang mở bảng chọn lý do tạm dừng */
   const [chonLyDo, setChonLyDo] = useState<string | null>(null);
   /** Việc đang mở màn báo phát sinh — `null` = không mở */
@@ -64,7 +67,6 @@ export function ManJobCard({
     try {
       const ds = await api.lichHomNay(homNay());
       setViec(ds);
-      setLoi(null);
 
       // Giờ công lấy song song — mỗi thẻ cần con số của riêng nó, và chờ tuần
       // tự N lời gọi làm màn hình đứng vài giây trên mạng 3G ở xưởng.
@@ -75,34 +77,34 @@ export function ManJobCard({
       for (const [id, g] of cap) if (g !== null) m[id] = g;
       setGio(m);
     } catch (e) {
-      setLoi(e instanceof ApiCallError ? e.api.message : 'Không tải được lịch hôm nay');
+      thongBao.loi(e instanceof ApiCallError ? e.api.message : 'Không tải được lịch hôm nay');
     } finally {
       setDangTai(false);
     }
-  }, []);
+  }, [thongBao]);
 
   useEffect(() => {
     void tai();
   }, [tai]);
 
   async function batDau(id: string): Promise<void> {
-    setLoi(null);
     try {
       await api.batDau(id);
       await tai();
+      thongBao.thanhCong('Đã bắt đầu');
     } catch (e) {
-      setLoi(e instanceof ApiCallError ? e.api.message : 'Không bấm giờ được');
+      thongBao.loi(e instanceof ApiCallError ? e.api.message : 'Không bấm giờ được');
     }
   }
 
   async function ketThuc(id: string, lyDo?: string): Promise<void> {
-    setLoi(null);
     setChonLyDo(null);
     try {
       await api.ketThuc(id, lyDo);
       await tai();
+      thongBao.thanhCong(lyDo === undefined ? 'Đã hoàn thành' : 'Đã tạm dừng');
     } catch (e) {
-      setLoi(e instanceof ApiCallError ? e.api.message : 'Không kết thúc được');
+      thongBao.loi(e instanceof ApiCallError ? e.api.message : 'Không kết thúc được');
     }
   }
 
@@ -131,27 +133,34 @@ export function ManJobCard({
           <Text style={kieu.tenApp}>Việc hôm nay</Text>
           <Text style={kieu.tenNguoi}>{tenNguoi}</Text>
         </View>
+        <Pressable
+          style={kieu.nutPhu}
+          onPress={onXemLichSu}
+          accessibilityRole="button"
+          accessibilityLabel="Mở lịch sử 30 ngày"
+        >
+          <Text style={kieu.chuNutPhu}>Lịch sử</Text>
+        </Pressable>
         <Pressable style={kieu.nutPhu} onPress={onDangXuat} accessibilityRole="button">
           <Text style={kieu.chuNutPhu}>Đăng xuất</Text>
         </Pressable>
       </View>
 
-      {loi !== null && (
-        <View style={kieu.hopLoi} accessibilityRole="alert">
-          <Text style={kieu.chuLoi}>{loi}</Text>
-        </View>
-      )}
-
+      {/*
+        Lỗi tải lịch thì toast đã hiện ở tầng trên — không hiện lại trong khung
+        cuộn. Người dùng kéo xuống để gọi lại (`RefreshControl` bên dưới).
+      */}
       <ScrollView
         contentContainerStyle={kieu.cuon}
         refreshControl={<RefreshControl refreshing={dangTai} onRefresh={() => void tai()} />}
       >
         {viec === null ? (
-          <ActivityIndicator size="large" color={mau.chinh} style={{ marginTop: co.dem5 }} />
+          <KhungDangTai />
         ) : viec.length === 0 ? (
-          <View style={kieu.trong}>
-            <Text style={kieu.chuTrong}>Hôm nay chưa có việc nào được giao cho bạn.</Text>
-          </View>
+          <Trong
+            title="Hôm nay chưa có việc nào được giao cho bạn."
+            moTa="Kéo xuống để tải lại, hoặc liên hệ cố vấn dịch vụ nếu bạn vừa được phân công."
+          />
         ) : (
           viec.map((v) => {
             const g = gio[v.id];
@@ -324,15 +333,4 @@ const kieu = StyleSheet.create({
     backgroundColor: mau.the,
   },
   chuLyDo: { fontSize: co.chuThuong, color: mau.chu },
-  trong: { padding: co.dem5, alignItems: 'center' },
-  chuTrong: { fontSize: co.chuThuong, color: mau.chuMo, textAlign: 'center' },
-  hopLoi: {
-    backgroundColor: mau.loiNhat,
-    borderColor: mau.loi,
-    borderWidth: 1,
-    margin: co.dem3,
-    borderRadius: co.bo,
-    padding: co.dem3,
-  },
-  chuLoi: { color: mau.loi, fontSize: co.chuNho },
 });

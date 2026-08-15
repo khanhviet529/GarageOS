@@ -15,10 +15,12 @@ import {
   type RepairOrderListItem,
 } from '@/lib/api';
 import { AppHeader } from '@/components/AppHeader';
-import { ErrorState, Loading } from '@/components/ErrorState';
+import { ErrorState } from '@/components/ErrorState';
+import { EmptyState } from '@/components/EmptyState';
 import { IconLamMoi } from '@/components/Icon';
 import { formatPlate } from '@garageos/domain';
 import { BangCuon } from '@/components/BangCuon';
+import { SkeletonTable } from '@/components/Skeleton';
 
 export default function WorkshopPage() {
   const [orders, setOrders] = useState<RepairOrderListItem[] | null>(null);
@@ -83,56 +85,58 @@ export default function WorkshopPage() {
             </div>
           </div>
 
-          {error !== null && (
-            <div style={{ marginTop: 12 }}>
-              <ErrorState message={error} onRetry={taiLai} />
-            </div>
-          )}
+          <div className="card-section">
+            {error !== null && <ErrorState message={error} onRetry={taiLai} />}
 
-          {orders === null && error === null && (
-            <div style={{ marginTop: 12 }}><Loading what="danh sách xe" /></div>
-          )}
+            {orders === null && error === null && <SkeletonTable rows={6} cols={7} />}
 
-          {orders !== null && orders.length === 0 && error === null && (
-            <div className="alert info" style={{ marginTop: 12 }}>
-              Chưa có xe nào đang trong xưởng. Bắt đầu bằng <Link href="/tiep-nhan">tiếp nhận xe</Link>.
-            </div>
-          )}
+            {orders !== null && orders.length === 0 && error === null && (
+              <EmptyState
+                title="Chưa có xe nào đang trong xưởng"
+                description="Bắt đầu bằng cách tiếp nhận một chiếc xe."
+                action={
+                  <Link href="/tiep-nhan">
+                    <button>Tiếp nhận xe mới</button>
+                  </Link>
+                }
+              />
+            )}
 
-          {orders !== null && orders.length > 0 && (
-            <BangCuon moTa="Danh sách xe đang trong xưởng" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th style={{ width: 150 }}>Mã đơn</th>
-                    <th style={{ width: 130 }}>Biển số</th>
-                    <th style={{ width: 80 }}>Động cơ</th>
-                    <th className="nowrap">Khách hàng</th>
-                    <th>Lời khách mô tả</th>
-                    <th style={{ width: 140 }}>Trạng thái</th>
-                    <th style={{ width: 140 }}>Tiếp nhận lúc</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id}>
-                      <td className="mono nowrap"><Link href={`/don/${o.id}`}>{o.code}</Link></td>
-                      <td className="mono">{formatPlate(o.plateNumber)}</td>
-                      <td>
-                        <span className={`tag ${POWERTRAIN_CLASS[o.powertrain]}`}>
-                          {POWERTRAIN_LABEL[o.powertrain]}
-                        </span>
-                      </td>
-                      <td className="nowrap">{o.customerName}</td>
-                      <td className="truncate" title={o.customerComplaint}>{o.customerComplaint}</td>
-                      <td>{ORDER_STATUS_LABEL[o.status] ?? o.status}</td>
-                      <td className="small muted">{formatDateTime(o.receivedAt)}</td>
+            {orders !== null && orders.length > 0 && (
+              <BangCuon moTa="Danh sách xe đang trong xưởng">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 150 }}>Mã đơn</th>
+                      <th style={{ width: 130 }}>Biển số</th>
+                      <th style={{ width: 80 }}>Động cơ</th>
+                      <th className="nowrap">Khách hàng</th>
+                      <th>Lời khách mô tả</th>
+                      <th style={{ width: 140 }}>Trạng thái</th>
+                      <th style={{ width: 140 }}>Tiếp nhận lúc</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </BangCuon>
-          )}
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => (
+                      <tr key={o.id}>
+                        <td className="mono nowrap"><Link href={`/don/${o.id}`}>{o.code}</Link></td>
+                        <td className="mono">{formatPlate(o.plateNumber)}</td>
+                        <td>
+                          <span className={`tag ${POWERTRAIN_CLASS[o.powertrain]}`}>
+                            {POWERTRAIN_LABEL[o.powertrain]}
+                          </span>
+                        </td>
+                        <td className="nowrap">{o.customerName}</td>
+                        <td className="truncate" title={o.customerComplaint}>{o.customerComplaint}</td>
+                        <td>{ORDER_STATUS_LABEL[o.status] ?? o.status}</td>
+                        <td className="small muted">{formatDateTime(o.receivedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </BangCuon>
+            )}
+          </div>
         </div>
       </main>
     </>

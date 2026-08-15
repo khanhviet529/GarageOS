@@ -18,6 +18,21 @@ import { ROLE_LABEL } from '@garageos/contracts';
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 const USER_KEY = 'garageos.user';
 
+/**
+ * Tạo chuỗi query từ object `{ from?, to? }`. Bỏ qua giá trị undefined.
+ * Trả về chuỗi rỗng nếu không có tham số nào, để ghép `${qs}` không sinh
+ * dấu `?` thừa.
+ */
+function qs(params: Record<string, string | undefined> | undefined): string {
+  if (params === undefined) return '';
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') p.set(k, v);
+  }
+  const s = p.toString();
+  return s === '' ? '' : `?${s}`;
+}
+
 export interface ApiError {
   code: string;
   message: string;
@@ -664,12 +679,21 @@ export const api = {
   receiveStock: (input: unknown) =>
     call<{ id: string; onHand: number; avgCost: number }>('POST', '/api/v1/stock/receipts', input),
 
-  reportProfit: () => call<ProfitReport>('GET', '/api/v1/reports/profit'),
-  reportWaitTime: () => call<WaitTimeReport>('GET', '/api/v1/reports/wait-time'),
+  reportProfit: (loc?: { from?: string; to?: string }) =>
+    call<ProfitReport>(
+      'GET',
+      `/api/v1/reports/profit${qs(loc)}`,
+    ),
+  reportWaitTime: (loc?: { from?: string; to?: string }) =>
+    call<WaitTimeReport>(
+      'GET',
+      `/api/v1/reports/wait-time${qs(loc)}`,
+    ),
   reportProductivity: () =>
     call<TechnicianProductivity[]>('GET', '/api/v1/reports/productivity'),
   reportStock: () => call<StockReportLine[]>('GET', '/api/v1/reports/stock'),
-  reportOnTime: () => call<OnTimeReport>('GET', '/api/v1/reports/on-time'),
+  reportOnTime: (loc?: { from?: string; to?: string }) =>
+    call<OnTimeReport>('GET', `/api/v1/reports/on-time${qs(loc)}`),
 
   invoicesForOrder: (orderId: string) =>
     call<InvoiceView[]>('GET', `/api/v1/repair-orders/${orderId}/invoices`),

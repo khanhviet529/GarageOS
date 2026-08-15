@@ -19,6 +19,8 @@ import { AppHeader } from '@/components/AppHeader';
 import { CatalogSection } from '@/components/CatalogSection';
 import { StatusActions } from '@/components/StatusActions';
 import { HopHoaDon } from '@/components/HopHoaDon';
+import { ErrorState } from '@/components/ErrorState';
+import { SkeletonCard } from '@/components/Skeleton';
 import { HopBaoHiem } from '@/components/HopBaoHiem';
 import { HopHuyDon } from '@/components/HopHuyDon';
 import { formatPlate } from '@garageos/domain';
@@ -46,8 +48,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       <AppHeader current="don" />
 
       <main id="noi-dung" className="container stack">
-        {error !== null && <div className="alert error" role="alert">{error}</div>}
-        {order === null && error === null && <p className="muted">Đang tải…</p>}
+        {error !== null && (
+          <ErrorState message={error} onRetry={() => location.reload()} />
+        )}
+        {order === null && error === null && <SkeletonCard rows={4} />}
 
         {order !== null && (
           <>

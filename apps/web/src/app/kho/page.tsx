@@ -2,8 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AppHeader } from '@/components/AppHeader';
+import { ErrorState } from '@/components/ErrorState';
+import { EmptyState } from '@/components/EmptyState';
+import { useToast } from '@/components/Toast';
 import { IconLamMoi } from '@/components/Icon';
 import { BangCuon } from '@/components/BangCuon';
+import { SkeletonTable } from '@/components/Skeleton';
 import {
   api,
   ApiCallError,
@@ -43,7 +47,7 @@ export default function TrangKho() {
   const [giaVon, setGiaVon] = useState('');
   const [soPhieu, setSoPhieu] = useState('');
   const [dangGui, setDangGui] = useState(false);
-  const [ketQua, setKetQua] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     Promise.all([api.listWarehouses(), api.listStockParts()])
@@ -81,20 +85,22 @@ export default function TrangKho() {
   useEffect(taiTon, [taiTon]);
 
   async function xuatKho(gc: PendingIssue): Promise<void> {
-    setKetQua(null);
     setLoi(null);
     try {
       const r = await api.issueStock({ reservationId: gc.reservationId });
-      setKetQua(`Đã xuất ${r.quantity} ${gc.unit} ${gc.partName} cho đơn ${gc.repairOrderCode}.`);
+      toast.thanhCong(
+        `Đã xuất ${r.quantity} ${gc.unit} ${gc.partName} cho đơn ${gc.repairOrderCode}.`,
+      );
       taiTon();
     } catch (err) {
-      setLoi(err instanceof ApiCallError ? err.api.message : 'Xuất kho thất bại');
+      const msg = err instanceof ApiCallError ? err.api.message : 'Xuất kho thất bại';
+      setLoi(msg);
+      toast.loi(msg, () => void xuatKho(gc));
     }
   }
 
   async function nhapKho(e: React.FormEvent): Promise<void> {
     e.preventDefault();
-    setKetQua(null);
     setLoi(null);
     setDangGui(true);
     try {
@@ -106,7 +112,7 @@ export default function TrangKho() {
         ...(soPhieu.trim() === '' ? {} : { reference: soPhieu.trim() }),
       });
       const p = parts.find((x) => x.id === partId);
-      setKetQua(
+      toast.thanhCong(
         `Đã nhập ${soLuong} ${p?.unit ?? ''} ${p?.name ?? ''}. ` +
           `Tồn mới ${r.onHand}, giá vốn bình quân ${formatMoney(r.avgCost)}.`,
       );
@@ -115,7 +121,9 @@ export default function TrangKho() {
       setSoPhieu('');
       taiTon();
     } catch (err) {
-      setLoi(err instanceof ApiCallError ? err.api.message : 'Nhập kho thất bại');
+      const msg = err instanceof ApiCallError ? err.api.message : 'Nhập kho thất bại';
+      setLoi(msg);
+      toast.loi(msg);
     } finally {
       setDangGui(false);
     }
@@ -145,93 +153,98 @@ export default function TrangKho() {
             </div>
           </div>
 
-          {loi !== null && (
-            <p className="alert error" role="alert">
-              {loi}
-            </p>
-          )}
+          <div className="card-section">
+            {loi !== null && <ErrorState message={loi} onRetry={taiTon} />}
 
-          <div className="row" style={{ marginTop: 12 }}>
-            <div className="field">
-              <label htmlFor="chon-kho">Kho</label>
-              <select id="chon-kho" value={khoId} onChange={(e) => setKhoId(e.target.value)}>
-                {khoList.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.code} — {w.name}
-                    {w.isDefault ? ' (mặc định)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="tim-ma">Tìm mã hoặc tên</label>
-              <input
-                id="tim-ma"
-                value={tim}
-                onChange={(e) => setTim(e.target.value)}
-                placeholder="PT-OIL, má phanh…"
-              />
-            </div>
-            <label className="hop-kiem">
-              <input
-                type="checkbox"
-                checked={chiSapHet}
-                onChange={(e) => setChiSapHet(e.target.checked)}
-              />
-              Chỉ hiện món sắp hết
-            </label>
-          </div>
-
-          {sapHet > 0 && !chiSapHet && (
-            <p className="alert warn" role="status" style={{ marginTop: 12 }}>
-              {sapHet} mã hàng đang dưới mức tồn tối thiểu.
-            </p>
-          )}
-
-          {ton === null ? (
-            <p className="muted">Đang tải…</p>
-          ) : ton.length === 0 ? (
-            <p className="alert info">Không có mã hàng nào khớp bộ lọc.</p>
-          ) : (
-            <BangCuon moTa="Tồn kho theo mã phụ tùng" style={{ marginTop: 12 }}>
-              <table>
-                <caption className="sr-only">Tồn kho theo mã phụ tùng</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Mã</th>
-                    <th scope="col">Tên phụ tùng</th>
-                    <th scope="col" className="phai">Tồn thực tế</th>
-                    <th scope="col" className="phai">Đã giữ chỗ</th>
-                    <th scope="col" className="phai">Khả dụng</th>
-                    {xemGiaVon && <th scope="col" className="phai">Giá vốn bình quân</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {ton.map((b) => (
-                    <tr key={`${b.warehouseId}-${b.partId}`}>
-                      <td className="mono">{b.sku}</td>
-                      <td>
-                        {b.partName}
-                        {b.belowMinimum && (
-                          <span className="tag canh-bao" title={`Tối thiểu ${b.minStockLevel}`}>
-                            sắp hết
-                          </span>
-                        )}
-                      </td>
-                      <td className="phai mono">
-                        {b.onHand} {b.unit}
-                      </td>
-                      <td className="phai mono">{b.reserved === 0 ? '—' : b.reserved}</td>
-                      <td className="phai mono">{b.available}</td>
-                      {xemGiaVon && (
-                        <td className="phai mono">{formatMoney(b.avgCost ?? 0)}</td>
-                      )}
-                    </tr>
+            <div className="row">
+              <div className="field">
+                <label htmlFor="chon-kho">Kho</label>
+                <select id="chon-kho" value={khoId} onChange={(e) => setKhoId(e.target.value)}>
+                  {khoList.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.code} — {w.name}
+                      {w.isDefault ? ' (mặc định)' : ''}
+                    </option>
                   ))}
-                </tbody>
-              </table>
-            </BangCuon>
-          )}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="tim-ma">Tìm mã hoặc tên</label>
+                <input
+                  id="tim-ma"
+                  value={tim}
+                  onChange={(e) => setTim(e.target.value)}
+                  placeholder="PT-OIL, má phanh…"
+                />
+              </div>
+              <label className="hop-kiem">
+                <input
+                  type="checkbox"
+                  checked={chiSapHet}
+                  onChange={(e) => setChiSapHet(e.target.checked)}
+                />
+                Chỉ hiện món sắp hết
+              </label>
+            </div>
+
+            {sapHet > 0 && !chiSapHet && (
+              <p className="alert warn" role="status">
+                {sapHet} mã hàng đang dưới mức tồn tối thiểu.
+              </p>
+            )}
+
+            {ton === null ? (
+              <SkeletonTable rows={6} cols={xemGiaVon ? 6 : 5} />
+            ) : ton.length === 0 ? (
+              <EmptyState
+                title="Không có mã hàng nào khớp bộ lọc"
+                description={
+                  chiSapHet
+                    ? 'Tất cả mã hàng đang ở trên mức tồn tối thiểu. Bỏ tick "chỉ hiện món sắp hết" để xem toàn bộ.'
+                    : 'Thử tìm theo mã khác, hoặc nhập kho mới ở biểu mẫu bên dưới.'
+                }
+              />
+            ) : (
+              <BangCuon moTa="Tồn kho theo mã phụ tùng">
+                <table>
+                  <caption className="sr-only">Tồn kho theo mã phụ tùng</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Mã</th>
+                      <th scope="col">Tên phụ tùng</th>
+                      <th scope="col" className="phai">Tồn thực tế</th>
+                      <th scope="col" className="phai">Đã giữ chỗ</th>
+                      <th scope="col" className="phai">Khả dụng</th>
+                      {xemGiaVon && <th scope="col" className="phai">Giá vốn bình quân</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ton.map((b) => (
+                      <tr key={`${b.warehouseId}-${b.partId}`}>
+                        <td className="mono">{b.sku}</td>
+                        <td>
+                          {b.partName}
+                          {b.belowMinimum && (
+                            <span className="tag canh-bao" title={`Tối thiểu ${b.minStockLevel}`}>
+                              sắp hết
+                            </span>
+                          )}
+                        </td>
+                        <td className="phai mono">
+                          {b.onHand} {b.unit}
+                        </td>
+                        <td className="phai mono">{b.reserved === 0 ? '—' : b.reserved}</td>
+                        <td className="phai mono">{b.available}</td>
+                        {xemGiaVon && (
+                          <td className="phai mono">{formatMoney(b.avgCost ?? 0)}</td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </BangCuon>
+            )}
+          </div>
         </div>
 
         <div className="card">
@@ -243,7 +256,7 @@ export default function TrangKho() {
           {choXuat.length === 0 ? (
             <p className="alert info">Không có phiếu nào chờ xuất.</p>
           ) : (
-            <BangCuon moTa="Các phiếu giữ chỗ đang chờ xuất kho" style={{ marginTop: 12 }}>
+            <BangCuon moTa="Các phiếu giữ chỗ đang chờ xuất kho">
               <table>
                 <thead>
                   <tr>
@@ -296,13 +309,7 @@ export default function TrangKho() {
             sổ kho không sửa được, ghi sai thì ghi phiếu điều chỉnh.
           </p>
 
-          {ketQua !== null && (
-            <p className="alert success" role="status">
-              {ketQua}
-            </p>
-          )}
-
-          <form onSubmit={nhapKho} className="row top" style={{ marginTop: 12 }}>
+          <form onSubmit={nhapKho} className="row top">
             <div className="field">
               <label htmlFor="nk-part">Phụ tùng</label>
               <select id="nk-part" required value={partId} onChange={(e) => setPartId(e.target.value)}>
