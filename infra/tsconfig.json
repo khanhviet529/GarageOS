@@ -1,0 +1,24 @@
+// 🔒 `infra/` cũng phải được kiểm kiểu.
+//
+// Bốn script ở đây — `migrate`, `seed`, `media-import`, `site-domain-apply` —
+// cộng lại 1.856 dòng, và KHÔNG dòng nào từng đi qua `tsc`. `turbo run
+// typecheck` chỉ chạm chín gói trong `apps/*` và `packages/*`; `infra/` không
+// phải workspace nên nó nằm ngoài. Còn `tsx` thì XOÁ kiểu chứ không kiểm kiểu.
+//
+// ⚠️ Đây là những script chạy bằng `DATABASE_ADMIN_URL` — quyền cao nhất trong
+//    hệ thống, bỏ qua RLS. Chúng lại đúng là phần duy nhất không có lưới an
+//    toàn nào của công cụ.
+//
+// `noEmit` vì không có gì cần build: `tsx` chạy thẳng từ nguồn.
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    // `tsx` chạy thẳng file nguồn, nên import giữa các file ở đây ghi đuôi
+    // `.ts` thật. Không có cờ này thì `tsc` từ chối chính cái đường dẫn mà
+    // runtime đang dùng — kiểm kiểu sẽ mâu thuẫn với thứ đang chạy.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["*.ts"]
+}

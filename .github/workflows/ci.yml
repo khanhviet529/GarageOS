@@ -98,6 +98,14 @@ jobs:
       - name: Kiểm tra bất biến kiến trúc
         run: pnpm test:invariants
 
+      # 🔒 Script vận hành cũng phải có bài kiểm.
+      #    `infra/` chạy bằng DATABASE_ADMIN_URL — quyền cao nhất, bỏ qua RLS —
+      #    và cho tới đợt này nó chưa từng đi qua `tsc` lẫn một bài kiểm nào.
+      #    Không nối vào `turbo run test` được vì `infra/` không phải workspace;
+      #    chạy thẳng để không lệ thuộc vào việc ai đó nhớ thêm nó vào danh sách.
+      - name: Kiểm tra script vận hành
+        run: pnpm test:infra
+
       # Seed phải chạy lại được SAU KHI test đã sinh dữ liệu.
       # CI trước luôn seed trên database rỗng, nên không bao giờ phát hiện việc
       # danh sách bảng cần dọn bị thiếu — lỗi chỉ xuất hiện ở máy dev.

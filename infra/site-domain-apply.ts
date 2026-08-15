@@ -27,8 +27,9 @@ const ADMIN_URL =
 
 function parseArgs(argv: string[]): { manifest: string } {
   const i = argv.indexOf('--manifest');
-  if (i === -1 || argv[i + 1] === undefined) throw new Error('Thiếu --manifest <đường dẫn>');
-  return { manifest: argv[i + 1] };
+  const duongDan = i === -1 ? undefined : argv[i + 1];
+  if (duongDan === undefined) throw new Error('Thiếu --manifest <đường dẫn>');
+  return { manifest: duongDan };
 }
 
 function normalizeHostname(raw: string): string {
