@@ -164,8 +164,79 @@ h1, h2, h3 { letter-spacing: -0.035em; }
  *    ngoài một gradient nhẹ để bảo đảm tương phản chữ ở mọi kích thước màn.
  */
 .hero { position: relative; overflow: hidden; background: var(--surface-0); isolation: isolate; }
-.hero-media { position: absolute; inset: 0; z-index: -2; }
-.hero-media img { width: 100%; height: 100%; object-fit: cover; object-position: 68% 52%; opacity: 0.95; }
+
+/*
+ * 🔒 Khung ảnh giữ ĐÚNG tỉ lệ ảnh gốc, rồi mới phóng to để phủ kín hero.
+ *
+ * ⚠️ Đây là điều kiện để vệt sáng đèn nằm đúng chỗ. Với `object-fit: cover`
+ *    thông thường, phần ảnh bị cắt thay đổi theo tỉ lệ khung hình của màn — nên
+ *    một điểm ở 31% chiều ngang của ẢNH GỐC không còn ở 31% của THẺ ẢNH nữa.
+ *    Đặt vệt sáng theo phần trăm của thẻ thì nó TRÔI khỏi bóng đèn ngay khi ai
+ *    đó đổi kích thước cửa sổ.
+ *
+ * 💡 Cách sửa: dựng một hộp có `aspect-ratio` bằng đúng tỉ lệ ảnh gốc (3:2), cho
+ *    ảnh lấp đầy hộp đó (không cắt bên trong), rồi phóng hộp lên đủ phủ hero và
+ *    để phần thừa tràn ra ngoài. Ảnh và vệt sáng khi đó bị cắt CÙNG một cách,
+ *    nên toạ độ tương đối giữa chúng không bao giờ đổi.
+ *
+ * `cqw`/`cqh` là đơn vị theo kích thước container — thứ cho phép tính "rộng
+ * bằng 100% khung HOẶC 150% chiều cao khung, lấy cái lớn hơn", điều mà `%` đơn
+ * thuần không làm được.
+ */
+.hero-media { position: absolute; inset: 0; z-index: -2; overflow: hidden; container-type: size; }
+.hero-photo {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 100%; aspect-ratio: 3 / 2;
+}
+@supports (width: 1cqw) {
+  /* 150cqh = chiều cao khung × 3/2 — vừa đủ phủ khi hero cao hơn là rộng. */
+  .hero-photo { width: max(100cqw, 150cqh); }
+}
+.hero-photo img { width: 100%; height: 100%; object-fit: cover; opacity: 0.95; }
+
+/*
+ * Vệt sáng đèn pha — toạ độ theo phần trăm của KHUNG ẢNH, không theo viewport.
+ *
+ * Hai bóng đèn của `xe-den-pha.jpg` nằm ở khoảng 31% và 66% chiều ngang, 57%
+ * chiều cao. Vệt sáng là radial-gradient đặt đúng đó, cộng một quầng rộng hơn
+ * rất mờ để ánh sáng "ăn" ra không khí xung quanh thay vì dừng gắt ở mép.
+ */
+.hero-den {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    /* Lõi nhỏ và sáng: đây mới là thứ đọc thành BÓNG ĐÈN. */
+    radial-gradient(3.4% 5% at 31% 57%, rgb(236 246 255 / 95%), rgb(176 214 255 / 55%) 55%, transparent 78%),
+    radial-gradient(3.4% 5% at 66% 57%, rgb(236 246 255 / 95%), rgb(176 214 255 / 55%) 55%, transparent 78%),
+    /* Quầng vừa: ánh sáng hắt lên thân xe quanh đèn. */
+    radial-gradient(11% 15% at 31% 57%, rgb(150 196 255 / 30%), transparent 72%),
+    radial-gradient(11% 15% at 66% 57%, rgb(150 196 255 / 30%), transparent 72%),
+    /* Quầng rộng rất mờ: ánh sáng ăn ra không khí, để vệt sáng không dừng gắt. */
+    radial-gradient(34% 40% at 49% 60%, rgb(88 140 225 / 14%), transparent 72%);
+  mix-blend-mode: screen;
+  animation: den-tho 4.5s ease-in-out infinite;
+}
+
+/*
+ * Nhịp thở rất nhẹ: 0.88 → 1.0 → 0.88. Đủ để mắt nhận ra đèn đang BẬT, không đủ
+ * để trở thành thứ nhấp nháy làm phiền người đọc chữ bên cạnh.
+ *
+ * ⚠️ Chỉ đổi `opacity` — không đổi `background` hay kích thước. Hai thứ đó buộc
+ *    trình duyệt vẽ lại cả lớp mỗi khung hình, và với một gradient lớn nằm dưới
+ *    toàn bộ hero thì đó là cách chắc chắn làm tụt hiệu năng cuộn trang.
+ */
+@keyframes den-tho {
+  0%, 100% { opacity: 0.88; }
+  50% { opacity: 1; }
+}
+
+/*
+ * 🔒 `prefers-reduced-motion` KHÔNG chỉ tắt animation — nó giữ đèn ở mức sáng
+ *    nhất. Tắt hẳn vệt sáng nghĩa là người bật tuỳ chọn đó nhìn thấy một chiếc
+ *    xe tắt đèn, tức một trang KHÁC, chứ không phải trang ít chuyển động hơn.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .hero-den { animation: none; opacity: 1; }
+}
 .hero-media__empty { width: 100%; height: 100%; background: radial-gradient(120% 90% at 70% 45%, #16233b 0%, var(--surface-0) 62%); }
 /* Gradient bảo đảm tương phản chữ — không phải hiệu ứng trang trí. */
 .hero::before {

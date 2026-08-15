@@ -1462,8 +1462,8 @@ async function main(): Promise<void> {
   }
 
   for (const [i, m] of [
-    { asset: coverId, role: 'POSTER', alt: 'Aurora E1 nhìn nghiêng, chụp ngược sáng trên nền tối', cover: true },
-    { asset: gal1Id, role: 'GALLERY', alt: 'Aurora E1 nhìn từ phía trước trong bóng tối, đèn pha bật sáng', cover: false },
+    { asset: coverId, role: 'POSTER', alt: 'Aurora E1 nhìn nghiêng, viền sáng trên nền tối', cover: true },
+    { asset: gal1Id, role: 'GALLERY', alt: 'Aurora E1 nhìn nghiêng, viền sáng trên nền tối', cover: false },
     { asset: gal2Id, role: 'GALLERY', alt: 'Khoang lái Aurora E1', cover: false },
   ].entries()) {
     await db.query(
@@ -1534,6 +1534,17 @@ async function main(): Promise<void> {
   );
 
   // --- Product thứ hai: chỉ gallery, KHÔNG có experience (fallback) ----------
+  /*
+   * ⚠️ Xe này lên HERO của trang chủ, nên nó nhận tấm có đèn pha.
+   *
+   * `PublicLandingService.listProducts` xếp `ORDER BY created_at DESC`, nên
+   * `products[0]` là xe được tạo SAU CÙNG — tức Meridian X5, không phải Aurora
+   * E1 như thứ tự đọc trong file này gợi ý.
+   *
+   * 💡 Đã đổi nhầm chiều một lần vì tưởng xe khai báo trước thì đứng trước. Thứ
+   *    tự trong seed KHÔNG phải thứ tự hiển thị — cái sau do câu ORDER BY quyết
+   *    định, và nó nằm ở một file khác.
+   */
   const coverX5Id = await themAnhThat(TENANT_A, 'x5-cover', 'POSTER', 'xe-den-pha.jpg', 'Graham Pengelly');
   const productX5Id = randomUUID();
   const revisionX5Id = randomUUID();
@@ -1574,7 +1585,7 @@ async function main(): Promise<void> {
   await db.query(
     `INSERT INTO vehicle_product_media (tenant_id, product_revision_id, media_asset_id, role,
                                         alt_text, sort_order, is_cover)
-     VALUES ($1,$2,$3,'POSTER','Meridian X5 nhìn nghiêng trên nền tối',0,true)`,
+     VALUES ($1,$2,$3,'POSTER','Meridian X5 nhìn từ phía trước trong bóng tối, đèn pha bật sáng',0,true)`,
     [TENANT_A, revisionX5Id, coverX5Id],
   );
 

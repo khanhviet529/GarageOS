@@ -59,7 +59,15 @@ export default async function HomePage(): Promise<React.ReactElement> {
         <section className="hero">
           <div className="hero-media" aria-hidden="true">
             {noiBat?.coverUrl !== null && noiBat?.coverUrl !== undefined ? (
-              <img src={noiBat.coverUrl} alt="" width={1800} height={1013} fetchPriority="high" />
+              <div className="hero-photo">
+                <img src={noiBat.coverUrl} alt="" width={1800} height={1200} fetchPriority="high" />
+                {/*
+                  Vệt sáng đèn nằm TRONG khung ảnh, không phải trong hero — nhờ
+                  vậy nó bị cắt cùng một cách với ảnh và không bao giờ trôi khỏi
+                  bóng đèn khi đổi kích thước cửa sổ.
+                */}
+                <span className="hero-den" />
+              </div>
             ) : (
               <div className="hero-media__empty" />
             )}
