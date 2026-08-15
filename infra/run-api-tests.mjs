@@ -32,7 +32,21 @@ process.env.EDGE_SIGNING_SECRET = process.env.EDGE_SIGNING_SECRET ?? 'test-edge-
 /* Một hop: bài kiểm giới hạn tần suất gửi `X-Forwarded-For` như edge thật. */
 process.env.TRUST_PROXY_HOPS = '1';
 
-const api = spawn(process.execPath, [tsxCli, `--env-file=${join(repoRoot, '.env')}`, 'src/main.ts'], {
+/*
+ * ⚠️ `--env-file-if-exists`, KHÔNG phải `--env-file`.
+ *
+ * Máy dev có `.env`; CI truyền cấu hình bằng biến môi trường và không có file
+ * nào. `--env-file` của Node NÉM LỖI khi thiếu file, nên trên CI runner chết
+ * trước cả khi API kịp khởi động:
+ *
+ *     API test đã dừng sớm.
+ *     node: /home/runner/work/GarageOS/GarageOS/.env: not found
+ *
+ * Cùng một lỗi có ở `db:migrate`, `db:seed`, `media:import` và
+ * `site-domain:apply`. Bốn chỗ kia nằm trong `package.json` nên sửa cùng lượt;
+ * chỗ này sót lại đúng vì nó KHÔNG nằm ở đó — và một lượt CI nữa mới lộ ra.
+ */
+const api = spawn(process.execPath, [tsxCli, `--env-file-if-exists=${join(repoRoot, '.env')}`, 'src/main.ts'], {
   cwd: apiRoot,
   env: {
     ...process.env,
