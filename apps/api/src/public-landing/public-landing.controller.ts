@@ -1,0 +1,128 @@
+import { Body, Controller, Get, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import {
+  ErrorCode,
+  LeadCreateInput,
+  type ExperienceManifest,
+  type LeadCreateResult,
+  type PublicProductDetail,
+  type PublicProductSummary,
+} from '@garageos/contracts';
+import { BusinessError } from '../common/errors';
+import { LeadRateLimitGuard } from '../common/lead-rate-limit.guard';
+import { ZodPipe } from '../common/zod.pipe';
+import { SalesService } from '../sales/sales.service';
+import { TenantContextService, type TenantResolution } from './tenant-context.service';
+import { PublicLandingService } from './public-landing.service';
+
+/**
+ * Public API cho landing — SRS Phase 1 mục 11.1.
+ *
+ * 🔒 Không có JwtGuard, không nhận tenantId từ client. Tenant chỉ đến từ host
+ * đã được edge ký (INV-LS-01). Alias ACTIVE redirect 308 một bước về primary.
+ */
+@Controller('api/v1/public')
+export class PublicLandingController {
+  constructor(
+    @Inject(PublicLandingService) private readonly svc: PublicLandingService,
+    @Inject(SalesService) private readonly sales: SalesService,
+    @Inject(TenantContextService) private readonly tenantCtx: TenantContextService,
+  ) {}
+
+  @Get('site')
+  async site(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+    res.json(await this.svc.site(ctx, this.tenantCtx.scheme()));
+  }
+
+  @Get('vehicle-products')
+  async list(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('powertrain') powertrain?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limitRaw?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+    const limit = Number(limitRaw ?? 20);
+    const result: { items: PublicProductSummary[]; nextCursor: string | null } =
+      await this.svc.listProducts(ctx, { cursor, limit: Number.isFinite(limit) ? limit : 20, powertrain });
+    res.json(result);
+  }
+
+  @Get('vehicle-products/:slug')
+  async detail(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('slug') slug: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+    const detail: PublicProductDetail = await this.svc.productDetail(ctx, slug);
+    res.json(detail);
+  }
+
+  @Get('vehicle-products/:slug/experiences/:stableKey')
+  async experience(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('slug') slug: string,
+    @Param('stableKey') stableKey: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+    const manifest: ExperienceManifest = await this.svc.experienceManifest(ctx, slug, stableKey);
+    res.json(manifest);
+  }
+
+  /**
+   * POST lead — P1-API-004, FR-LEAD-001/002.
+   * Rate limit riêng cho lead (P1-API-T07); honeypot/consent trong service.
+   * Không cache response form POST (edge không cache POST).
+   */
+  @Post('leads')
+  @UseGuards(LeadRateLimitGuard)
+  async createLead(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Body(new ZodPipe(LeadCreateInput)) input: LeadCreateInput,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+    const result: LeadCreateResult = await this.sales.createPublicLead(ctx, input, {
+      landingPath: this.sanitizeLandingPath(input.landingPath),
+    });
+    res.status(201).json(result);
+  }
+
+  /** Landing path chỉ giữ relative path đã normalize (SRS 6.9) */
+  private sanitizeLandingPath(raw: string | undefined): string {
+    if (raw === undefined) return '/';
+    const path = raw.split('?')[0] ?? '';
+    return path.startsWith('/') ? path : '/';
+  }
+
+  /** Alias ACTIVE: 308 một bước về primary, giữ path/query. Trả false nếu đã redirect. */
+  private applyAliasRedirect(r: TenantResolution, req: Request, res: Response): boolean {
+    if (r.context !== null && r.redirectTo !== null) {
+      res.redirect(308, `${r.redirectTo}${req.originalUrl}`);
+      return false;
+    }
+    return true;
+  }
+
+  /** 404 chung cho domain không hợp lệ — không tiết lộ tenant (FR-TEN-003) */
+  private requireContext(r: TenantResolution): NonNullable<TenantResolution['context']> {
+    if (r.context === null) {
+      throw new BusinessError(ErrorCode.SITE_NOT_FOUND, 'Không tìm thấy trang');
+    }
+    return r.context;
+  }
+}

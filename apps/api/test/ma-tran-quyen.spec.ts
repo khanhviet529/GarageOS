@@ -43,7 +43,17 @@ const ADMIN_URL =
 
 const TENANT_A = '11111111-1111-1111-1111-111111111111';
 
-/** Sáu vai của hệ thống, mỗi vai một tài khoản seed */
+/**
+ * Mỗi vai một tài khoản seed.
+ *
+ * 🔒 Bốn vai của nhánh landing/bán xe nằm chung danh sách này CÓ CHỦ Ý. Bài
+ * kiểm suy tập vai-bị-cấm bằng `MOI_VAI \ ACTION_ROLES[quyền]`, nên chỉ cần
+ * thêm chúng vào đây là toàn bộ kịch bản CŨ — kho, tiền, đơn sửa chữa — tự
+ * động được kiểm thêm với vai marketing và sales.
+ *
+ * Đó chính là `INV-LS-14`: vai mới chỉ có quyền mới, không kế thừa gì của
+ * vận hành xưởng. Tách chúng ra một bài riêng sẽ bỏ lọt đúng thứ cần canh.
+ */
 const TAI_KHOAN = {
   OWNER: '0901000001',
   BRANCH_MANAGER: '0901000002',
@@ -51,6 +61,10 @@ const TAI_KHOAN = {
   TECHNICIAN: '0901000004',
   STORE_KEEPER: '0901000005',
   CASHIER: '0901000006',
+  MARKETING_EDITOR: '0901000010',
+  MARKETING_PUBLISHER: '0901000011',
+  SALES_ADVISOR: '0901000012',
+  SALES_MANAGER: '0901000013',
 } as const;
 type Vai = keyof typeof TAI_KHOAN;
 const MOI_VAI = Object.keys(TAI_KHOAN) as Vai[];
@@ -142,6 +156,11 @@ const KICH_BAN: KichBan[] = [
         customerComplaint: 'Thử hàng rào quyền tiếp nhận',
         odometerIn: 100,
       }, v),
+  },
+  {
+    quyen: 'repairOrder:read',
+    ten: 'Xem danh sách xe trong xưởng',
+    goi: (v) => call('GET', '/api/v1/repair-orders', undefined, v),
   },
   {
     quyen: 'quotation:write',
@@ -354,6 +373,136 @@ const KICH_BAN: KichBan[] = [
         insurerName: 'Bảo hiểm thử hàng rào',
         policyNumber: `HR-${uniq}`,
       }, v),
+  },
+
+  /* ================= Landing bán xe và Sales (INV-LS-14) =================
+   *
+   * Mọi kịch bản dưới đây cố ý gọi vào `UUID_GIA` — một id không tồn tại.
+   *
+   * Bài này phân biệt 403 với không-403, nên đối tượng có thật hay không là
+   * chuyện không liên quan; dùng id giả thì không phải dựng dữ liệu, và quan
+   * trọng hơn: không để lại rác cho những bài chạy sau.
+   *
+   * Chọn endpoint KHÔNG có `ZodPipe` khi có thể. Pipe chạy TRƯỚC `assertCan`,
+   * nên body sai schema trả 400 và làm cả hai vế của bài kiểm vô nghĩa — vai
+   * bị cấm cũng nhận 400 chứ không phải 403.
+   */
+  {
+    quyen: 'marketing:catalogRead',
+    ten: 'Xem catalog xe',
+    goi: (v) => call('GET', '/api/v1/marketing/vehicle-products', undefined, v),
+  },
+  {
+    quyen: 'marketing:catalogWrite',
+    ten: 'Sửa bản nháp catalog xe',
+    goi: (v) =>
+      call('PATCH', `/api/v1/marketing/vehicle-products/${UUID_GIA}/draft`, { version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:catalogPublish',
+    ten: 'Rollback catalog xe',
+    goi: (v) =>
+      call('POST', `/api/v1/marketing/vehicle-products/${UUID_GIA}/rollback`, undefined, v),
+  },
+  {
+    quyen: 'marketing:experienceRead',
+    ten: 'Xem trải nghiệm xe',
+    goi: (v) =>
+      call('GET', `/api/v1/marketing/vehicle-products/${UUID_GIA}/experiences`, undefined, v),
+  },
+  {
+    quyen: 'marketing:experienceWrite',
+    ten: 'Tạo bản nháp trải nghiệm xe',
+    goi: (v) =>
+      call('POST', `/api/v1/marketing/vehicle-experiences/${UUID_GIA}/draft`, undefined, v),
+  },
+  {
+    quyen: 'marketing:experiencePublish',
+    ten: 'Rollback trải nghiệm xe',
+    goi: (v) =>
+      call('POST', `/api/v1/marketing/vehicle-experiences/${UUID_GIA}/rollback`, undefined, v),
+  },
+  {
+    quyen: 'marketing:seoRead',
+    ten: 'Xem hồ sơ trang',
+    goi: (v) => call('GET', '/api/v1/marketing/site-profile', undefined, v),
+  },
+  {
+    quyen: 'marketing:seoWrite',
+    ten: 'Sửa bản nháp hồ sơ chi nhánh công khai',
+    goi: (v) =>
+      call(
+        'PATCH',
+        `/api/v1/marketing/branch-public-profiles/${UUID_GIA}/draft`,
+        { version: 0 },
+        v,
+      ),
+  },
+  {
+    quyen: 'marketing:seoPublish',
+    ten: 'Publish hồ sơ trang',
+    goi: (v) =>
+      call('POST', `/api/v1/marketing/site-profile/${UUID_GIA}/publish`, undefined, v),
+  },
+  {
+    quyen: 'sales:leadRead',
+    ten: 'Xem lead',
+    goi: (v) => call('GET', `/api/v1/sales/leads/${UUID_GIA}`, undefined, v),
+  },
+  {
+    quyen: 'sales:leadReadAllBranch',
+    ten: 'Xem lead của mọi chi nhánh',
+    kieu: 'luoc',
+    kiemODau:
+      'landing-tenant-cong-khai.spec.ts và scopeForAction() — quyền này KHÔNG chặn ' +
+      'endpoint nào, nó quyết định phạm vi truy vấn là BRANCH hay SELF. Một vai ' +
+      'thiếu nó vẫn gọi được GET /sales/leads, chỉ thấy ít dòng hơn — nên 403 ' +
+      'không phải là thứ quan sát được. ⚠️ NỢ: bài quét phạm vi chi nhánh chưa ' +
+      'dựng lead ở chi nhánh khác nên chưa canh được vế "thấy ít dòng hơn".',
+  },
+  {
+    quyen: 'sales:leadAssign',
+    ten: 'Gán lead cho tư vấn',
+    goi: (v) =>
+      call(
+        'POST',
+        `/api/v1/sales/leads/${UUID_GIA}/assign`,
+        { assigneeId: UUID_GIA, version: 0 },
+        v,
+      ),
+  },
+  {
+    quyen: 'sales:leadTransition',
+    ten: 'Chuyển trạng thái lead',
+    goi: (v) =>
+      call(
+        'POST',
+        `/api/v1/sales/leads/${UUID_GIA}/transition`,
+        { to: 'CONTACTED', version: 0 },
+        v,
+      ),
+  },
+  {
+    quyen: 'sales:leadAddActivity',
+    ten: 'Ghi hoạt động lên lead',
+    goi: (v) =>
+      call(
+        'POST',
+        `/api/v1/sales/leads/${UUID_GIA}/activities`,
+        { type: 'NOTE', note: 'Thử hàng rào quyền' },
+        v,
+      ),
+  },
+  {
+    quyen: 'sales:leadRedact',
+    ten: 'Xoá dữ liệu cá nhân của lead',
+    goi: (v) =>
+      call(
+        'POST',
+        `/api/v1/sales/leads/${UUID_GIA}/redact`,
+        { reason: 'SUBJECT_REQUEST' },
+        v,
+      ),
   },
 ];
 

@@ -503,7 +503,156 @@ RepairOrder.warrantyClaimOfRepairOrderId IS NOT NULL
 
 ---
 
-## 9. Bảng tổng hợp
+## 9. Landing bán xe, catalog marketing và lead
+
+> Nguồn yêu cầu: [SRS Landing và Sales Admin](superpowers/specs/2026-08-12-landing-sales-srs.md).
+> Migration: `0055`–`0058`. Nhóm này khác các nhóm trên ở một điểm quan trọng:
+> **có bề mặt công khai không cần đăng nhập**, nên biên giới tenant không còn
+> dựa vào JWT.
+
+### `INV-LS-01` — Public request không tự chọn tenant 🔒 service 🧪
+
+```
+tenant của request public = resolve_site_domain(hostname đã được edge ký)
+```
+
+Không có tham số request nào — query, body, path — được phép ảnh hưởng tới
+`tenant_id`. Đây là biến thể của [`INV-T-02`](#inv-t-02--tenantid-không-bao-giờ-đến-từ-tham-số-request)
+cho luồng không có JWT: "thứ đã được xác thực" ở đây là **chữ ký HMAC của edge
+trên hostname**, không phải token người dùng.
+
+Enforce ở `TenantContextService.trustedHost()`. Lookup đi qua
+`resolve_site_domain()` — hàm `SECURITY DEFINER` hẹp, owner là role
+`site_domain_resolver` (`NOSUPERUSER`, `NOBYPASSRLS`), `search_path` cố định,
+chỉ trả đúng năm cột. Mọi truy vấn nội dung sau đó chạy trong
+`withTenantId()` nên vẫn qua RLS.
+
+🔒 Ranh giới tin cậy do biến `EDGE_HOST_TRUST` quyết định, **không** do
+`NODE_ENV`. Mặc định `signed`: header không kèm chữ ký HMAC hợp lệ bị bỏ qua.
+Chế độ `host` chỉ dành cho máy phát triển.
+
+⚠️ Trước 2026-08-14, ranh giới này dựa vào `NODE_ENV` — nghĩa là ở staging và
+preview, một header duy nhất đủ để chọn tenant bất kỳ **và ghi lead vào đó**.
+Xem [LS-001](reviews/2026-08-14-luong-tenant-public-landing.md).
+
+### `INV-LS-02` — Mọi bảng landing/sales bị giới hạn bằng RLS 🔒 DB 🧪
+
+Mọi bảng mới ở `0055`–`0057` đều `ENABLE` **và** `FORCE ROW LEVEL SECURITY`
+với policy `tenant_id = current_setting('app.tenant_id', true)::uuid`.
+`site_domain` là ngoại lệ có kiểm soát: `garageos_app` bị `REVOKE ALL`, chỉ
+role resolver đọc được qua policy riêng.
+
+### `INV-LS-03` — Lead công khai không tạo `Customer` hay `Vehicle` 🔒 DB 🧪
+
+`sales_lead` **không có** `customer_id`/`vehicle_id`. Người lạ điền form không
+được sinh hồ sơ khách hàng thật. Hồ sơ hậu mãi chỉ ra đời ở bước bàn giao xe
+(`INV-LS-08`), do người có quyền xác nhận.
+
+### `INV-LS-04` — Một hostname đang hoạt động chỉ thuộc một tenant 🔒 DB 🧪
+
+```sql
+CREATE UNIQUE INDEX uq_site_domain_hostname_active
+  ON site_domain (hostname) WHERE status <> 'DISABLED';
+```
+
+### `INV-LS-05` — Chỉ sản phẩm `ACTIVE` có publication hiển thị 🔒 DB 🧪
+
+Landing chỉ đọc qua `published_revision_id`/`published_version_id`. Bản nháp
+không bao giờ rò ra công khai; sản phẩm `ARCHIVED` trả `410`, chưa từng publish
+trả `404`.
+
+### `INV-LS-06` — Phân công lead không vượt phạm vi chi nhánh 🔒 service 🧪
+
+Cùng cơ chế phạm vi chi nhánh của [`02-actors-and-permissions.md`](02-actors-and-permissions.md).
+RLS chỉ chặn tenant, **không** chặn chi nhánh.
+
+### `INV-LS-07` — Bản nội dung đã publish là bất biến 🔒 DB 🧪
+
+```sql
+IF OLD.status <> 'DRAFT' AND current_user <> 'garageos' THEN
+  RAISE EXCEPTION 'Version đã publish/archive là bất biến (INV-LS-07)';
+```
+
+Cùng tinh thần với [`INV-M-03`](#inv-m-03--hoá-đơn-đã-phát-hành-là-bất-biến-)
+và [`INV-S-03`](#inv-s-03--sổ-kho-là-chỉ-thêm-): sửa nội dung đã publish bằng
+**bản mới**, không bằng `UPDATE`. `DRAFT → PUBLISHED → ARCHIVED` là một chiều,
+chỉ đi qua hàm `SECURITY DEFINER`.
+
+### `INV-LS-08` — Bàn giao xe là idempotent 🔒 service — ⏳ Phase 2
+
+Gọi lại cùng `delivery_id` không được tạo trùng `Customer`, `Vehicle`,
+`WarrantyCoverage` hay mốc chăm sóc. Một giao dịch nguyên tử, không tạo
+`RepairOrder`.
+
+### `INV-LS-09` — Một xe không có hai kỳ sở hữu chồng nhau 🔒 DB — ⏳ Phase 2
+
+`EXCLUDE USING gist` trên `vehicle_ownership`, cùng kiểu với
+[`INV-W-01`](#inv-w-01--một-khoang-không-phục-vụ-hai-xe-cùng-lúc-).
+
+⚠️ Phase 2 phải xử lý việc `vehicle.customer_id` và `vehicle_ownership` cùng
+tồn tại — hai nguồn sự thật về chủ xe phải được cập nhật trong **một**
+transaction, có regression test.
+
+### `INV-LS-10` — Nội dung do marketing nhập không chứa CSS/JS tuỳ ý 🔒 service 🧪
+
+Trang là danh sách block, mỗi block là schema Zod có version. Không có ô nhập
+HTML/CSS/JS tự do — đó là bề mặt XSS chạy trên chính domain của tenant.
+
+### `INV-LS-11` — Mỗi tenant có đúng một domain canonical 🔒 DB 🧪
+
+```sql
+CREATE UNIQUE INDEX uq_site_domain_one_primary
+  ON site_domain (tenant_id) WHERE status = 'ACTIVE' AND is_primary;
+```
+
+kèm constraint trigger `DEFERRABLE INITIALLY DEFERRED` trên
+`INSERT OR UPDATE OR DELETE` để đổi primary nguyên tử mà không mở đường xoá.
+
+⚠️ Trước migration `0059`, trigger không bắt `DELETE`: xoá domain primary để
+lại alias mồ côi, `LEFT JOIN` trả `NULL`, và tầng service nội suy nó thành chuỗi
+`https://null` cho **cả redirect lẫn canonical của mọi trang**. Hỏng toàn bộ
+SEO của một tenant mà không có lỗi nào được ghi ra. Xem
+[LS-003](reviews/2026-08-14-luong-tenant-public-landing.md).
+
+### `INV-LS-12` — Trải nghiệm 360°/panorama không phải nguồn duy nhất 🔒 service 🧪
+
+Mọi thông tin và CTA trong viewer phải tồn tại ở dạng HTML tĩnh có thể index và
+đọc được bằng trình đọc màn hình. Viewer là progressive enhancement.
+
+### `INV-LS-13` — Nội dung public của một trang đến từ cùng một publication 🔒 DB 🧪
+
+Thông số, ảnh, giá và SEO metadata hiển thị cùng lúc phải thuộc cùng một
+`revision`. Không được ghép nửa bản cũ nửa bản mới.
+
+### `INV-LS-14` — Vai marketing/sales không kế thừa quyền vận hành xưởng 🔒 service 🧪
+
+`ACTION_ROLES` là allow-list. Vai mới chỉ có đúng những action được khai báo
+tường minh: `MARKETING_EDITOR` không xem được hoá đơn sửa chữa, `SALES_ADVISOR`
+không xuất kho, `TECHNICIAN` không xem lead hay giá bán xe.
+
+### `INV-LS-15` — Đánh dấu đã xoá thì dữ liệu cá nhân phải thật sự biến mất 🔒 DB 🧪
+
+```
+sales_lead.redacted_at IS NOT NULL
+  ⟹ full_name = '(đã xoá theo yêu cầu)' ∧ phone_normalized = '' ∧ email IS NULL
+```
+
+Lead bị xoá bằng **redaction**, không bằng `DELETE`: dòng ở lại để giữ truy vết
+chuyển đổi, chỉ phần nhận dạng một con người bị ghi đè. Chính sách chốt
+2026-08-14: thời hạn lưu **24 tháng** cho lead không chuyển đổi.
+
+Không có ràng buộc này, `redacted_at` chỉ là một lời hứa: một lỗi ở tầng ứng
+dụng khiến hệ thống **báo cáo** đã thực hiện quyền của chủ thể dữ liệu trong khi
+số điện thoại vẫn nằm nguyên trong bảng. Với nghĩa vụ dữ liệu cá nhân, một lời
+hứa sai còn tệ hơn không hứa — không ai đi kiểm lại một việc đã được báo là xong.
+
+🔒 `garageos_app` không có `UPDATE` trên `full_name`/`phone_normalized`/`email`
+(migration `0062`): chỉ `redact_sales_lead()` ghi đè được, và nó không nhận điều
+kiện lọc tuỳ ý.
+
+---
+
+## 10. Bảng tổng hợp
 
 > 🔧 Cập nhật sau vòng review ([16-review.md](16-review.md)): `INV-Q-01` và
 > `INV-S-04` đã có trigger ở DB (F-03); `INV-V-04` chuyển sang service (F-09).
@@ -518,13 +667,37 @@ RepairOrder.warrantyClaimOfRepairOrderId IS NOT NULL
 | Nhật ký | 3 | 3 | — | ✅ |
 | Phương tiện | 4 | 2 | 2 | ✅ |
 | Bảo hành | 4 | 3 | 1 | ✅ |
-| **Tổng** | **41** | **34 (83%)** | **7** | |
+| **Lõi vận hành xưởng** | **41** | **34 (83%)** | **7** | ✅ |
+| Landing & bán xe | 15 | 8 | 5 | ✅ 13/15 |
+| — trong đó chờ Phase 2 | 2 | 1 | 1 | ⏳ |
+| **Tổng** | **56** | **42** | **12** | |
 
-💡 **83% bất biến được enforce ở tầng database.** Đây là con số đáng nói trong
-phỏng vấn: nó có nghĩa là kể cả khi tầng ứng dụng có bug, dữ liệu vẫn không hỏng.
+💡 **83% bất biến của lõi vận hành được enforce ở tầng database.** Đây là con số
+đáng nói trong phỏng vấn: nó có nghĩa là kể cả khi tầng ứng dụng có bug, dữ liệu
+vẫn không hỏng.
 
 ⚠️ 7 bất biến còn lại buộc phải ở tầng service vì chúng so sánh **giữa nhiều
 bảng** hoặc cần gọi ra ngoài — `CHECK` constraint không diễn đạt được. Chúng phải
 được bù bằng test tích hợp bắt buộc ([14-testing-strategy.md](14-testing-strategy.md)).
+
+🧪 **Nhóm Landing & bán xe:** 13/15 bất biến có test tích hợp — 27 ca ở
+[`landing-tenant-cong-khai`](../apps/api/test/landing-tenant-cong-khai.spec.ts),
+[`lead-luu-tru`](../apps/api/test/lead-luu-tru.spec.ts) và
+[`lead-thao-tac-ghi`](../apps/api/test/lead-thao-tac-ghi.spec.ts). Hai cái còn
+lại là `INV-LS-08` và `INV-LS-09` — chúng mô tả bước bàn giao xe, chưa được
+triển khai (Phase L2).
+
+💡 Bộ test này được viết **sau** mã nguồn, và nó tìm ra hai lỗi mà việc đọc mã
+không tìm ra:
+
+- `GET /api/v1/repair-orders` trả 200 với 100 bản ghi cho `MARKETING_EDITOR` —
+  chỗ sai là một `assertCan` **không được viết**.
+- Cả ba thao tác ghi của Kanban lead trả 500, mọi lần, từ khi được viết ra.
+
+Đó là lập luận cụ thể cho quy tắc "bất biến mới phải có test trước khi merge"
+trong [CLAUDE.md](../CLAUDE.md): đọc mã bắt được dòng sai, chỉ có chạy mới bắt
+được dòng không được viết.
+
+Chi tiết: [rà soát 2026-08-14](reviews/2026-08-14-luong-tenant-public-landing.md).
 
 Chiến lược test cho từng bất biến: [14-testing-strategy.md](14-testing-strategy.md).

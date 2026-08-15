@@ -20,3 +20,5 @@ export * from './stock-take.js';
 export * from './abandonment.js';
 export * from './reports.js';
 export * from './invoice.js';
+export * from './marketing.js';
+export * from './sales.js';

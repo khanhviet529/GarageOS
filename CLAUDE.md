@@ -27,8 +27,9 @@ Stack: **NestJS + Next.js + Expo + PostgreSQL 16**, monorepo pnpm.
 
 ### Bất biến
 
-- 🔒 Trước khi sửa gì chạm **kho, tiền, phân quyền** → đọc
-  [`docs/05-invariants.md`](docs/05-invariants.md) (41 bất biến)
+- 🔒 Trước khi sửa gì chạm **kho, tiền, phân quyền, tenant công khai** → đọc
+  [`docs/05-invariants.md`](docs/05-invariants.md) (41 bất biến lõi + 14 `INV-LS-*`
+  cho landing/bán xe)
 - 🔒 Thêm bất biến mới → **phải có test** trước khi merge
 - 🔒 Commit chạm bất biến → ghi mã (`INV-S-01`) ở chân commit
 
@@ -75,11 +76,19 @@ let total = 0.0; for (const l of lines) total += l.qty * l.price * 1.1;
 apps/api        NestJS   — controller → service (nghiệp vụ+quyền) → repository → DB
 apps/web        Next.js  — nhân viên + trang tra cứu công khai
 apps/mobile     Expo     — app thợ
+apps/landing    Next.js  — landing bán xe CÔNG KHAI, tenant theo domain
+apps/sales-admin Next.js — quản trị catalog marketing và lead
 packages/contracts  DỮ LIỆU: Zod schema, type, enum, bảng hằng (state machine)
 packages/domain     HÀM:    logic thuần, không import framework
 packages/config     eslint, tsconfig, prettier
 infra/migrations    SQL viết tay — 🔒 nguồn sự thật của schema
 ```
+
+🔒 **`apps/landing` là bề mặt công khai duy nhất chọn được tenant mà không cần
+đăng nhập.** Sửa gì chạm luồng này → đọc
+[`docs/reviews/2026-08-14-luong-tenant-public-landing.md`](docs/reviews/2026-08-14-luong-tenant-public-landing.md)
+trước. Tenant **chỉ** đến từ hostname đã được edge ký, không bao giờ từ tham số
+request (`INV-LS-01`).
 
 🔒 **Chiều phụ thuộc một hướng:** `domain` → `contracts`. Không có vòng.
 
@@ -114,6 +123,13 @@ Tiếng Việt cho người dùng, tiếng Anh cho code. **Không đặt tên ng
 | Tồn thực tế / đã giữ / khả dụng | `onHand` / `reserved` / `available` |
 | Khoang sửa chữa / thợ | `Bay` / `Technician` |
 | Loại động cơ | `powertrain` (`ICE`\|`HYBRID`\|`BEV`) |
+| Mẫu xe chào bán / phiên bản | `VehicleProduct` / `VehicleVariant` |
+| Nhu cầu khách (landing) | `SalesLead` |
+| Hồ sơ giao xe | `VehicleDelivery` |
+| Tên miền của trang | `SiteDomain` |
+
+🔒 `VehicleProduct` là **mẫu xe trên catalog**, `Vehicle` là **chiếc xe cụ thể
+của một khách**. `SalesLead` **chưa phải** `Customer`. Đừng trộn hai từ vựng.
 
 DB dùng `snake_case`, **số ít** (`repair_order`).
 
@@ -147,6 +163,13 @@ Dứt khoát ngoài phạm vi ([`docs/00-vision.md`](docs/00-vision.md)):
 kế toán đầy đủ · tính lương · mua hàng/PO · đồng sơn · cứu hộ · đa ngôn ngữ ·
 đa tiền tệ · tích hợp hoá đơn điện tử thật (chỉ adapter + mock)
 
+Riêng nhánh landing bán xe ([`docs/superpowers/specs/`](docs/superpowers/specs/)):
+
+checkout/thanh toán xe online · hợp đồng điện tử · trả góp · tồn xe vật lý theo
+VIN · xe cũ trên landing · hoa hồng sales · DMS đầy đủ ·
+🔒 **nhập HTML/CSS/JS tự do trong trình soạn trang** (`INV-LS-10` — bề mặt XSS
+chạy trên chính domain của khách)
+
 Kiến trúc **cố ý loại bỏ** ([`docs/12-architecture.md`](docs/12-architecture.md) mục 12):
 
 microservices · event sourcing toàn hệ thống · CQRS đầy đủ · GraphQL · Kubernetes
@@ -165,6 +188,8 @@ microservices · event sourcing toàn hệ thống · CQRS đầy đủ · Graph
 | Schema, ràng buộc, trigger | [`10-data-model.md`](docs/10-data-model.md) |
 | Vì sao chọn thế này | [`adr/`](docs/adr/) |
 | Làm gì tiếp theo | [`15-roadmap.md`](docs/15-roadmap.md) |
+| Landing bán xe, catalog, lead | [`superpowers/specs/`](docs/superpowers/specs/) |
+| Lỗi đã tìm ra, chưa sửa | [`reviews/`](docs/reviews/) |
 
 ## Ngôn ngữ
 

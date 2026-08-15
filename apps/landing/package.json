@@ -1,0 +1,27 @@
+{
+  "name": "@garageos/landing",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3003",
+    "build": "next build",
+    "start": "node ../../infra/chay-standalone.mjs landing 3003",
+    "lint": "eslint src --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'landing: E2E chay rieng bang playwright'"
+  },
+  "dependencies": {
+    "@garageos/contracts": "workspace:*",
+    "@garageos/domain": "workspace:*",
+    "next": "^15.1.6",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.3"
+  }
+}

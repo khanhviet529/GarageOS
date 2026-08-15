@@ -206,6 +206,61 @@ Ký hiệu: ✅ được · ❌ không · 🔶 có điều kiện (xem mục 4) 
 
 | Mã | Quy tắc | Lý do nghiệp vụ | Enforce ở đâu |
 |---|---|---|---|
+
+---
+
+## 5. Vai trò Landing / Sales (Phase 1)
+
+Nguồn: [SRS Phase 1](superpowers/specs/2026-08-12-phase-1-landing-sales-srs.md) mục 5.1/5.2.
+
+### 5.1 Vai mới và phạm vi
+
+| Vai | Phạm vi | Mục tiêu |
+|---|---|---|
+| `MARKETING_EDITOR` | TENANT (content) | Soạn nội dung, catalog, draft. |
+| `MARKETING_PUBLISHER` | TENANT (content) | Duyệt, publish và rollback. |
+| `SALES_ADVISOR` | SELF (lead được gán) | Xử lý lead được phân công. |
+| `SALES_MANAGER` | BRANCH | Điều phối lead, gán tư vấn viên. |
+
+⚠️ **Scope tính theo ACTION/domain**, không lấy phạm vi rộng nhất của mọi vai:
+người vừa `MARKETING_EDITOR` vừa `SALES_ADVISOR` vẫn chỉ đọc lead được gán, không
+được TENANT-scope sales nhờ role marketing. Cài đặt: `scopeForAction()` trong
+`@garageos/domain` (test P1-UT-007).
+
+🔒 **Bốn vai này KHÔNG có quyền vận hành xưởng nào** — không đơn sửa chữa, không
+kho, không hoá đơn (`INV-LS-14`). Điều đó không tự đúng chỉ vì không ai cấp
+quyền cho chúng: phạm vi chi nhánh **không** thay được việc kiểm vai. Người làm
+marketing cũng thuộc một chi nhánh, nên `branchScope()` không lọc họ ra — và
+suốt một thời gian, `GET /api/v1/repair-orders` trả về đủ 100 đơn của chi nhánh
+đó cho `MARKETING_EDITOR`, chỉ vì endpoint ấy chưa từng cần khai báo quyền nào.
+
+Từ đó hàng "Đơn sửa chữa / Xem" ở mục 3 có một action tường minh:
+`repairOrder:read`, cấp cho sáu vai vận hành xưởng và không cấp cho ai khác.
+Xem [rà soát 2026-08-14](reviews/2026-08-14-luong-tenant-public-landing.md)
+mục LS-007.
+
+### 5.2 Ma trận quyền (allow-list, enforce tại API)
+
+| Action | Editor | Publisher | Advisor | Manager | Owner |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Catalog đọc | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Catalog ghi | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Catalog publish/rollback | ❌ | ✅ | ❌ | ✅ | ✅ |
+| Experience đọc | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Experience ghi | ✅ | ✅ | ❌ | ✅ | ✅ |
+| Experience publish/rollback | ❌ | ✅ | ❌ | ✅ | ✅ |
+| SEO đọc | ✅ | ✅ | ❌ | ❌ | ✅ |
+| SEO ghi (draft) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| SEO/site profile publish | ❌ | ✅ | ❌ | ❌ | ✅ |
+| Lead đọc (được gán) | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Lead đọc (toàn chi nhánh) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Gán lead | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Chuyển trạng thái lead | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Ghi hoạt động lead | ❌ | ❌ | ✅ | ✅ | ✅ |
+
+Vai cũ không tự có action mới (ngoại trừ `OWNER` được liệt kê tường minh); vai
+mới cũng không nhận action cũ của xưởng (marketing/sales không đọc báo giá,
+xuất kho, hoá đơn…).
 | `PR-01` | 🔒 Người thực hiện QC **phải khác** người đã thi công hạng mục đó | Tách biệt trách nhiệm — tự kiểm tra việc mình làm là vô nghĩa | Service + ràng buộc DB |
 | `PR-02` | 🔒 Không được xuất kho cho đơn chưa có `Quotation` ở trạng thái `APPROVED` phủ món đó | Tránh lắp phụ tùng khách chưa đồng ý trả tiền | Service |
 | `PR-03` | Chiết khấu > `tenant.discountThreshold` (mặc định 10%) cần `BRANCH_MANAGER` duyệt | Kiểm soát nội bộ chống thất thoát | Service |

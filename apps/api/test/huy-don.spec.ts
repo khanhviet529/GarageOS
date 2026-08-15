@@ -102,6 +102,32 @@ interface Canh {
 }
 
 /**
+ * Duyệt mọi dòng của một báo giá — DÒNG CHA TRƯỚC, dòng con sau.
+ *
+ * 🔒 Không gộp thành một `UPDATE … WHERE quotation_id = $1`.
+ *
+ * `trg_qline_child_follows_parent` là trigger BEFORE UPDATE FOR EACH ROW, và
+ * nó đọc trạng thái HIỆN TẠI của dòng cha. Một câu UPDATE chạm cả cha lẫn con
+ * sẽ xử lý từng dòng theo thứ tự Postgres trả về — thứ tự đó không được đảm
+ * bảo và thay đổi theo lịch sử ghi/xoá của bảng. Trúng thứ tự "con trước" thì
+ * cha vẫn còn PENDING và trigger chặn.
+ *
+ * Đó là một bài kiểm đỏ ngẫu nhiên vài tháng một lần với thông báo trỏ vào
+ * `INV-Q-02` — nghe như một bất biến nghiệp vụ bị vi phạm, trong khi thực ra
+ * chỉ là cách bài kiểm dựng dữ liệu. Loại đỏ này tốn nhiều giờ để lần ra và
+ * dạy người đọc thói quen chạy lại cho tới khi xanh.
+ */
+async function duyetDongCuaBaoGia(quotationId: string): Promise<void> {
+  for (const dieuKien of ['parent_line_id IS NULL', 'parent_line_id IS NOT NULL']) {
+    await pool.query(
+      `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'COUNTER'
+        WHERE quotation_id = $1 AND ${dieuKien}`,
+      [quotationId],
+    );
+  }
+}
+
+/**
  * Dựng một đơn đang sửa dở, với hạng mục công + phụ tùng ĐÃ DUYỆT.
  *
  * Phụ tùng là một mã RIÊNG cho từng kịch bản, không dùng chung với seed: các
@@ -198,11 +224,7 @@ async function donDangSua(opts: { giuCho?: number; tonBanDau?: number } = {}): P
   });
   assert.equal(phuTung.status, 201, JSON.stringify(phuTung.body));
 
-  await pool.query(
-    `UPDATE quotation_line SET status = 'APPROVED', approval_source = 'COUNTER'
-      WHERE quotation_id = $1`,
-    [q.body.id],
-  );
+  await duyetDongCuaBaoGia(q.body.id);
   // Báo giá giữ nguyên DRAFT: bài này chỉ cần các DÒNG đã duyệt. Đẩy cả tờ báo
   // giá sang APPROVED sẽ đòi `valid_until` (`quotation_sent_needs_validity`),
   // và đường đi thật của việc đó là luồng duyệt của khách, đã có test riêng.

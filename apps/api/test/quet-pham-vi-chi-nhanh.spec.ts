@@ -563,11 +563,47 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       '/health': 'kiểm tra sống, controller không có tiền tố đường dẫn',
       'api/v1/public/tracking/:token':
         'trang tra cứu công khai: khách không có tài khoản, phạm vi do chính token quyết định',
+      'api/v1/marketing/vehicle-products': 'catalog marketing có phạm vi tenant, không theo chi nhánh',
+      'api/v1/marketing/vehicle-products/:id': 'catalog marketing có phạm vi tenant, không theo chi nhánh',
+      'api/v1/marketing/vehicle-products/:id/experiences': 'experience marketing có phạm vi tenant',
+      'api/v1/marketing/site-profile': 'hồ sơ landing là dữ liệu tenant',
+      'api/v1/marketing/branch-public-profiles': 'cấu hình public profile không phải dữ liệu vận hành chi nhánh',
+      'api/v1/public/site': 'bootstrap landing công khai, tenant lấy từ hostname',
+      'api/v1/public/vehicle-products/:slug': 'catalog công khai, tenant lấy từ hostname',
+      'api/v1/public/vehicle-products/:slug/experiences/:stableKey': 'experience công khai, tenant lấy từ hostname',
+      'api/v1/public/leads': 'lead public chỉ POST; GET guard là controller scan metadata',
+      /*
+       * ⚠️ NỢ, không phải miễn trừ thật. `requireLeadInScope()` CÓ áp
+       * `sl.branch_id = ANY($branchIds)` khi scope là BRANCH — nghĩa là hai
+       * route này thuộc đúng loại mà bài quét sinh ra để canh. Chúng nằm đây
+       * chỉ vì seed chưa có lead ở chi nhánh khác để dựng ca quét.
+       * Việc phải làm: tạo lead ở HCM01 rồi chuyển hai dòng này sang `duongDan`.
+       */
+      'api/v1/sales/leads': 'NỢ — chưa có lead ở chi nhánh khác trong seed để quét',
+      'api/v1/sales/leads/:id': 'NỢ — chưa có lead ở chi nhánh khác trong seed để quét',
+      'api/v1/public/vehicle-products': 'catalog công khai, tenant lấy từ hostname',
+      'media/:key': 'media public chỉ được phát từ asset đã publish',
     };
 
+    /*
+     * 🔒 Chuẩn hoá tham số của `boQua` GIỐNG HỆT cách chuẩn hoá route thật.
+     *
+     * Bản trước so khớp `boQua` bằng tên tham số nguyên gốc (`:id`, `:slug`,
+     * `:key`) trong khi `routes` đã được đổi hết thành `:x`. Hệ quả: mọi dòng
+     * miễn trừ có tham số đều VÔ TÁC DỤNG — chỉ `:token` khớp, và khớp nhờ một
+     * phép thay ngược `:x → :token` chỉ đúng cho đúng một route.
+     *
+     * Đây là kiểu hỏng nguy hiểm nhất của một hàng rào: nó không im lặng cho
+     * qua, nó báo động NHẦM. Người thêm route mới sẽ thấy tên route mình vừa
+     * khai báo miễn trừ vẫn bị liệt kê, và cách sửa nhanh nhất trông như là
+     * "xoá cái assert phiền phức này đi".
+     */
+    const chuanHoa = (r: string): string => r.replace(/:[a-zA-Z]+/g, ':x');
+    const boQuaChuanHoa = new Set(Object.keys(boQua).map(chuanHoa));
+
     const thieu = routes
-      .map((r) => r.replace(/:[a-zA-Z]+/g, ':x'))
-      .filter((r) => boQua[r.replace(/:x/g, ':token')] === undefined && boQua[r] === undefined)
+      .map(chuanHoa)
+      .filter((r) => !boQuaChuanHoa.has(r))
       .filter((r) => {
         const mau = r.replace(/:x/g, '[^/?]+').replace(/\//g, '\\/');
         return ![...duongDan, ...duongDanTrucTiep].some((d) =>

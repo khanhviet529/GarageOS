@@ -27,6 +27,30 @@ export const ACTION_ROLES = {
   /** Tiếp nhận xe — docs/02 mục 3, hàng "Đơn sửa chữa / Tạo" */
   'repairOrder:create': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 
+  /**
+   * 🔒 ĐỌC đơn sửa chữa — danh sách xe trong xưởng và chi tiết đơn.
+   *
+   * Suốt Phase 1–4 quyền này không tồn tại: mọi vai đều là người của xưởng,
+   * nên "đã đăng nhập" cộng với phạm vi chi nhánh là đủ. Nhánh landing bán xe
+   * phá vỡ giả định đó — `MARKETING_EDITOR` và `SALES_ADVISOR` cũng đăng nhập
+   * và cũng thuộc một chi nhánh, nên `branchScope()` không lọc họ ra.
+   *
+   * Bằng chứng: `LS-T13` trả `200` với **100 bản ghi** cho `MARKETING_EDITOR` —
+   * biển số, khiếu nại của khách và trạng thái đơn của cả chi nhánh.
+   *
+   * Sáu vai dưới đây là toàn bộ vai vận hành xưởng. Thợ có mặt vì họ cần thấy
+   * việc; phần TIỀN trong cùng phản hồi đã được lược riêng ở tầng khác
+   * (`tho-khong-thay-tien.spec.ts`), đọc được đơn không có nghĩa là thấy giá.
+   */
+  'repairOrder:read': [
+    'SERVICE_ADVISOR',
+    'BRANCH_MANAGER',
+    'OWNER',
+    'TECHNICIAN',
+    'STORE_KEEPER',
+    'CASHIER',
+  ],
+
   /** Lập và sửa báo giá — hàng "Báo giá / Lập-sửa (bản nháp)" */
   'quotation:write': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
   /** Gửi báo giá cho khách — hàng "Báo giá / Gửi cho khách" */
@@ -206,6 +230,37 @@ export const ACTION_ROLES = {
 
   /** Hồ sơ bồi thường bảo hiểm — BC-08, việc của cố vấn dịch vụ */
   'insurance:manage': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
+
+  /*
+   * Landing / Sales — SRS Phase 1 mục 5.2 (docs/superpowers/specs/).
+   *
+   * 🔒 Vai cũ không tự có action mới; OWNER được liệt kê tường minh từng dòng.
+   * Vai mới (MARKETING_*, SALES_*) cũng không được nhận action cũ của xưởng.
+   */
+  'marketing:catalogRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
+  'marketing:catalogWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+  'marketing:catalogPublish': ['MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+  'marketing:experienceRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+  'marketing:experienceWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+  'marketing:experiencePublish': ['MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+  'marketing:seoRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:seoWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:seoPublish': ['MARKETING_PUBLISHER', 'OWNER'],
+  'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
+  'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
+  'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
+  'sales:leadTransition': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
+  'sales:leadAddActivity': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Xoá dữ liệu cá nhân của một lead theo yêu cầu của chính người đó.
+   *
+   * Hẹp hơn `sales:leadTransition` một bậc: tư vấn viên xử lý lead hằng ngày
+   * không cần quyền này, và thao tác thì không hoàn tác được. Đây là hành động
+   * pháp lý (rút đồng ý theo NĐ 13/2023), không phải một bước trong quy trình
+   * bán hàng — người chịu trách nhiệm phải là quản lý.
+   */
+  'sales:leadRedact': ['SALES_MANAGER', 'OWNER'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -219,6 +274,7 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'customer:create': 'tạo hồ sơ khách hàng',
   'vehicle:create': 'tạo hồ sơ xe',
   'repairOrder:create': 'tiếp nhận xe',
+  'repairOrder:read': 'xem đơn sửa chữa',
   'quotation:write': 'lập hoặc sửa báo giá',
   'quotation:send': 'gửi báo giá cho khách',
   'quotation:read': 'xem báo giá',
@@ -246,4 +302,19 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'payment:record': 'thu tiền',
   'credit:approveOverLimit': 'duyệt cho nợ vượt hạn mức',
   'insurance:manage': 'quản lý hồ sơ bồi thường bảo hiểm',
+  'marketing:catalogRead': 'xem catalog xe',
+  'marketing:catalogWrite': 'tạo hoặc sửa catalog xe',
+  'marketing:catalogPublish': 'publish hoặc rollback catalog xe',
+  'marketing:experienceRead': 'xem trải nghiệm xe',
+  'marketing:experienceWrite': 'tạo hoặc sửa trải nghiệm xe',
+  'marketing:experiencePublish': 'publish hoặc rollback trải nghiệm xe',
+  'marketing:seoRead': 'xem cấu hình SEO',
+  'marketing:seoWrite': 'sửa bản nháp SEO',
+  'marketing:seoPublish': 'publish SEO/site profile',
+  'sales:leadRead': 'xem lead được gán',
+  'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
+  'sales:leadAssign': 'gán lead cho tư vấn',
+  'sales:leadTransition': 'chuyển trạng thái lead',
+  'sales:leadAddActivity': 'ghi hoạt động lên lead',
+  'sales:leadRedact': 'xoá dữ liệu cá nhân của lead',
 };

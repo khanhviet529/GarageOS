@@ -8,6 +8,11 @@ export const Role = z.enum([
   'CASHIER',
   'BRANCH_MANAGER',
   'OWNER',
+  // Landing / Sales — SRS Phase 1 (docs/superpowers/specs/2026-08-12-phase-1-landing-sales-srs.md mục 5.1)
+  'MARKETING_EDITOR',
+  'MARKETING_PUBLISHER',
+  'SALES_ADVISOR',
+  'SALES_MANAGER',
 ]);
 export type Role = z.infer<typeof Role>;
 
@@ -22,6 +27,13 @@ export const SCOPE_OF_ROLE: Record<Role, Scope> = {
   STORE_KEEPER: 'BRANCH',
   CASHIER: 'BRANCH',
   TECHNICIAN: 'SELF',
+  // ⚠️ SCOPE_OF_ROLE là "phạm vi mặc định theo vai". Module sales KHÔNG dùng
+  // trực tiếp nó — xem scopeForAction() trong @garageos/domain (P1-UT-007):
+  // người vừa MARKETING_EDITOR vừa SALES_ADVISOR vẫn chỉ đọc lead được gán.
+  MARKETING_EDITOR: 'TENANT',
+  MARKETING_PUBLISHER: 'TENANT',
+  SALES_ADVISOR: 'SELF',
+  SALES_MANAGER: 'BRANCH',
 };
 
 /**
@@ -47,4 +59,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   STORE_KEEPER: 'Thủ kho',
   CASHIER: 'Thu ngân',
   TECHNICIAN: 'Kỹ thuật viên',
+  MARKETING_EDITOR: 'Biên tập Marketing',
+  MARKETING_PUBLISHER: 'Duyệt nội dung Marketing',
+  SALES_ADVISOR: 'Tư vấn bán hàng',
+  SALES_MANAGER: 'Quản lý bán hàng',
 };

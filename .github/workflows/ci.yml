@@ -45,9 +45,24 @@ jobs:
       OTP_DEV_ECHO: 'true'
       # Bản web của app thợ chạy ở cổng khác nên phải nằm trong danh sách CORS.
       # Liệt kê tường minh chứ không `origin: true` — xem apps/api/src/main.ts.
-      WEB_ORIGIN: 'http://localhost:3000,http://localhost:3002'
+      # 3000=web xưởng · 3002=app thợ · 3003=landing · 3004=sales-admin.
+      # Biến này vừa cấu hình CORS vừa là allow-list chống CSRF — thiếu một cổng
+      # nghĩa là app ở cổng đó không ghi được gì, và lỗi hiện ra ở tầng CSRF chứ
+      # không nói rằng thiếu cấu hình.
+      WEB_ORIGIN: 'http://localhost:3000,http://localhost:3002,http://localhost:3003,http://localhost:3004'
       # E2E cần danh sách tài khoản demo hiển thị trên trang đăng nhập
       NEXT_PUBLIC_DEMO_HINTS: '1'
+
+      # ---- Landing / Sales Admin -------------------------------------------
+      # 🔒 Giữ `EDGE_HOST_TRUST` ở mặc định (`signed`): CI phải kiểm chính hàng
+      #    rào mà production dùng. `LS-T02..T04` khẳng định host KHÔNG ký thì
+      #    không chọn được tenant — đặt `host` ở đây là tự vô hiệu hoá chúng.
+      EDGE_SIGNING_SECRET: ci-only-edge-4Tn8kQ2wR6yV0xB3mL9pS5dF7gJ1hZ
+      LANDING_INTERNAL_API: http://localhost:3001
+      PUBLIC_MEDIA_ORIGIN: http://localhost:3001/media
+      # Landing đứng trước API như một hop proxy, và nó chuyển tiếp IP khách để
+      # LeadRateLimitGuard vẫn đếm theo IP thật (LS-T15).
+      TRUST_PROXY_HOPS: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +113,14 @@ jobs:
       - name: Kiểm tra bất biến kiến trúc
         run: pnpm test:invariants
 
+      # 🔒 Script vận hành cũng phải có bài kiểm.
+      #    `infra/` chạy bằng DATABASE_ADMIN_URL — quyền cao nhất, bỏ qua RLS —
+      #    và cho tới đợt này nó chưa từng đi qua `tsc` lẫn một bài kiểm nào.
+      #    Không nối vào `turbo run test` được vì `infra/` không phải workspace;
+      #    chạy thẳng để không lệ thuộc vào việc ai đó nhớ thêm nó vào danh sách.
+      - name: Kiểm tra script vận hành
+        run: pnpm test:infra
+
       # Seed phải chạy lại được SAU KHI test đã sinh dữ liệu.
       # CI trước luôn seed trên database rỗng, nên không bao giờ phát hiện việc
       # danh sách bảng cần dọn bị thiếu — lỗi chỉ xuất hiện ở máy dev.
@@ -140,6 +163,32 @@ jobs:
             sleep 3
           done
           curl -sf http://localhost:3002 >/dev/null || { echo "App thợ không khởi động được"; exit 1; }
+
+      # 🔒 Landing (3003) và Sales Admin (3004) — hai app CHƯA TỪNG chạy E2E.
+      #
+      # Chỉ riêng việc dựng nền cho chúng đã lộ ra ba lỗi mà `pnpm build` báo
+      # xanh: `outputFileTracingRoot` truy vết sai gốc, script `start` không
+      # tương thích với `output: standalone`, và trình duyệt gọi thẳng API bằng
+      # header host KHÔNG ký nên form lead trả 404.
+      #
+      # Cả hai chạy bằng bản build production, đúng thứ sẽ được triển khai.
+      - name: Khởi động landing nền
+        run: |
+          pnpm --filter @garageos/landing start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3003/xe >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3003/xe >/dev/null || { echo "Landing không khởi động được"; exit 1; }
+
+      - name: Khởi động sales-admin nền
+        run: |
+          pnpm --filter @garageos/sales-admin start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3004/login >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3004/login >/dev/null || { echo "Sales Admin không khởi động được"; exit 1; }
 
       # E2E gồm cả kiểm tra accessibility tự động bằng axe-core trên 4 màn hình.
       # Lỗi accessibility nặng nhất của dự án (nút duyệt báo giá không có tên

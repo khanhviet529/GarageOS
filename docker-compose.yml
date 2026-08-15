@@ -24,5 +24,32 @@ services:
       timeout: 3s
       retries: 20
 
+  # 🔒 Object storage tương thích S3 cho media.
+  #
+  # `docs/12-architecture.md` mục "Chạy thử" ghi `docker compose up` dựng
+  # "Postgres + Redis + MinIO" — nhưng MinIO chưa bao giờ có mặt ở đây. Một dòng
+  # tài liệu mô tả thứ không tồn tại thì tệ hơn không có dòng nào: nó làm người
+  # đọc tin rằng mình đã có thứ đó.
+  #
+  # ⚠️ Cổng dịch sang 9002/9003 thay vì 9000/9001 mặc định. Cùng lý do với
+  #    Postgres ở 5433 và Redis ở 6380: máy dev thường đã có sẵn một MinIO của
+  #    dự án khác, và "port already in use" ngay lệnh `docker compose up` đầu
+  #    tiên là ấn tượng tệ nhất mà một kho mã có thể tạo ra.
+  minio:
+    image: minio/minio:latest
+    container_name: garageos-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: garageos
+      MINIO_ROOT_PASSWORD: garageos_dev
+    ports: ["9002:9000", "9003:9001"]
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   pgdata:
+  miniodata:
