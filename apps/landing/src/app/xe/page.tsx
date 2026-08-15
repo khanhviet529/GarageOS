@@ -28,10 +28,42 @@ export default async function CatalogPage({
   if (site !== null) {
     try {
       const host = await requestHost();
-      const q = powertrain !== undefined && powertrain !== '' ? `?powertrain=${encodeURIComponent(powertrain)}` : '';
-      const res = await fetchPublic<{ items: PublicProductSummary[] }>(host, `/vehicle-products${q}&limit=50`);
+      /*
+       * ⚠️ Bản trước ghép chuỗi tay:
+       *
+       *     const q = powertrain ? `?powertrain=...` : '';
+       *     fetchPublic(host, `/vehicle-products${q}&limit=50`);
+       *
+       *    Không có bộ lọc thì `q` rỗng, và URL thành
+       *    `/vehicle-products&limit=50` — dấu `&` đứng đầu, KHÔNG có `?`. Nest
+       *    coi đó là một route khác và trả:
+       *
+       *        Cannot GET /api/v1/public/vehicle-products&limit=50
+       *
+       *    Nghĩa là trang danh sách xe CHƯA BAO GIỜ hiện được chiếc nào. Lỗi
+       *    sống sót vì `catch` bên dưới nuốt nó thành mảng rỗng, và trang hiện
+       *    "Chưa có xe nào được giới thiệu" — một câu hoàn toàn hợp lý cho một
+       *    showroom mới mở.
+       *
+       * 💡 Đây là lần thứ hai trong ngày một `catch` im lặng biến thứ HỎNG thành
+       *    thứ TRỐNG. Trạng thái rỗng luôn trông vô hại, nên nó là chỗ trú tốt
+       *    nhất cho lỗi.
+       *
+       * `URLSearchParams` để không còn chỗ cho lỗi ghép chuỗi.
+       */
+      const tham = new URLSearchParams({ limit: '50' });
+      if (powertrain !== undefined && powertrain !== '') tham.set('powertrain', powertrain);
+      const res = await fetchPublic<{ items: PublicProductSummary[] }>(
+        host,
+        `/vehicle-products?${tham.toString()}`,
+      );
       items = res.items;
-    } catch {
+    } catch (e) {
+      /*
+       * Vẫn không chặn trang — nhưng NÓI RA. Không có dòng này thì lần sau lỗi
+       * lại nằm im dưới một trạng thái rỗng trông bình thường.
+       */
+      console.error('[landing] không tải được danh sách xe:', e);
       items = [];
     }
   }

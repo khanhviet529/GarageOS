@@ -40,3 +40,6 @@ probe.mjs
 # định là `<cwd>/media/public`, mà `cwd` lúc chạy test là `apps/api`.
 apps/api/media/
 media/public/
+
+# Ảnh chụp màn hình tạm khi rà soát giao diện — không phải mã nguồn.
+.anh-tam/

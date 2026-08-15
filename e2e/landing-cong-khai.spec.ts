@@ -47,6 +47,29 @@ test.describe('Trang bán xe công khai', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
+  test('LD-E07 — trang danh sách xe LIỆT KÊ được xe, không phải trạng thái rỗng', async ({ page }) => {
+    /*
+     * ⚠️ Bài này sinh ra từ một lỗi đã sống suốt cả nhánh: `/xe` ghép chuỗi truy
+     *    vấn bằng tay, và khi KHÔNG có bộ lọc thì URL thành
+     *    `/vehicle-products&limit=50` — dấu `&` đứng đầu, không có `?`. API trả
+     *
+     *        Cannot GET /api/v1/public/vehicle-products&limit=50
+     *
+     *    rồi một `catch` nuốt nó thành mảng rỗng. Trang hiện "Chưa có xe nào
+     *    được giới thiệu" — câu hoàn toàn hợp lý cho một showroom mới mở.
+     *
+     * 💡 Trạng thái rỗng luôn trông vô hại, nên nó là chỗ trú tốt nhất cho lỗi.
+     *    Một bài kiểm chỉ hỏi "trang có mở được không" sẽ không bao giờ thấy;
+     *    phải hỏi "trang có NỘI DUNG không".
+     */
+    await page.goto(`${LANDING}/xe`);
+
+    const theXe = page.locator('a[href^="/xe/"]');
+    await expect(theXe.first()).toBeVisible();
+    expect(await theXe.count()).toBeGreaterThan(0);
+    await expect(page.getByText(/chưa có xe nào/i)).toHaveCount(0);
+  });
+
   test('LD-E02 — trang chi tiết xe nói giá, và giá đó khớp một phiên bản có thật', async ({
     page,
   }) => {
