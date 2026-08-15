@@ -45,9 +45,24 @@ jobs:
       OTP_DEV_ECHO: 'true'
       # Bản web của app thợ chạy ở cổng khác nên phải nằm trong danh sách CORS.
       # Liệt kê tường minh chứ không `origin: true` — xem apps/api/src/main.ts.
-      WEB_ORIGIN: 'http://localhost:3000,http://localhost:3002'
+      # 3000=web xưởng · 3002=app thợ · 3003=landing · 3004=sales-admin.
+      # Biến này vừa cấu hình CORS vừa là allow-list chống CSRF — thiếu một cổng
+      # nghĩa là app ở cổng đó không ghi được gì, và lỗi hiện ra ở tầng CSRF chứ
+      # không nói rằng thiếu cấu hình.
+      WEB_ORIGIN: 'http://localhost:3000,http://localhost:3002,http://localhost:3003,http://localhost:3004'
       # E2E cần danh sách tài khoản demo hiển thị trên trang đăng nhập
       NEXT_PUBLIC_DEMO_HINTS: '1'
+
+      # ---- Landing / Sales Admin -------------------------------------------
+      # 🔒 Giữ `EDGE_HOST_TRUST` ở mặc định (`signed`): CI phải kiểm chính hàng
+      #    rào mà production dùng. `LS-T02..T04` khẳng định host KHÔNG ký thì
+      #    không chọn được tenant — đặt `host` ở đây là tự vô hiệu hoá chúng.
+      EDGE_SIGNING_SECRET: ci-only-edge-4Tn8kQ2wR6yV0xB3mL9pS5dF7gJ1hZ
+      LANDING_INTERNAL_API: http://localhost:3001
+      PUBLIC_MEDIA_ORIGIN: http://localhost:3001/media
+      # Landing đứng trước API như một hop proxy, và nó chuyển tiếp IP khách để
+      # LeadRateLimitGuard vẫn đếm theo IP thật (LS-T15).
+      TRUST_PROXY_HOPS: '1'
 
     steps:
       - uses: actions/checkout@v4
