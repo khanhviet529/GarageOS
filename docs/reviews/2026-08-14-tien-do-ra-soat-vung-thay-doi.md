@@ -3,7 +3,9 @@
 **Ngày:** 2026-08-14 · **Nhánh:** `fix/ra-soat-landing-ban-xe`<br>
 **Lý do:** `/codex-review` không chạy được, nên vùng thay đổi được rà soát thủ
 công từng file, đối chiếu với [SRS Phase 1](../superpowers/specs/2026-08-12-phase-1-landing-sales-srs.md).<br>
-**Trạng thái:** ⏳ **Đang dở — mới xong khoảng 40% khối lượng.**
+**Trạng thái:** ✅ **Đã hoàn tất** — xem
+[kết luận rà soát](2026-08-15-ket-luan-ra-soat-landing.md) (20 phát hiện, đã sửa hết).
+Tài liệu này giữ nguyên như một ảnh chụp giữa chừng.
 
 > Đọc kèm: [rà soát luồng tenant công khai](2026-08-14-luong-tenant-public-landing.md)
 > — 8 phát hiện trước đó, đã sửa xong.
