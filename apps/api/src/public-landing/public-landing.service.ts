@@ -28,9 +28,18 @@ export class PublicLandingService {
   async site(ctx: PublicTenantContext, scheme: string): Promise<PublicSiteView> {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
-        `SELECT brand_name, legal_name, default_title_suffix, default_description
-           FROM site_profile
-          WHERE status = 'PUBLISHED'
+        `SELECT sp.brand_name, sp.legal_name, sp.default_title_suffix,
+                sp.default_description, mp.public_storage_key AS hero_key
+           FROM site_profile sp
+           LEFT JOIN LATERAL (
+             SELECT p.public_storage_key
+               FROM media_rendition r
+               JOIN media_publication p ON p.rendition_id = r.id AND p.status = 'READY'
+              WHERE r.asset_id = sp.hero_media_id
+              ORDER BY CASE r.profile WHEN 'POSTER' THEN 0 ELSE 1 END
+              LIMIT 1
+           ) mp ON true
+          WHERE sp.status = 'PUBLISHED'
           LIMIT 1`,
       );
       const p = rows[0];
@@ -52,6 +61,10 @@ export class PublicLandingService {
         legalName: (p.legal_name ?? null) as string | null,
         defaultTitleSuffix: p.default_title_suffix as string,
         primaryOrigin: `${scheme}://${ctx.primaryHostname}`,
+        heroUrl:
+          p.hero_key === null || p.hero_key === undefined
+            ? null
+            : this.publicUrl(p.hero_key as string),
         publicBranches: branches.map((b) => ({
           id: b.id as string,
           stableKey: b.stable_key as string,

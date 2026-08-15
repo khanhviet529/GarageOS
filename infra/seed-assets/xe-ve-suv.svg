@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200" role="img">
+  <defs>
+    <linearGradient id="nen" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="hsl(262 28% 13%)"/>
+      <stop offset="0.6" stop-color="hsl(262 24% 7%)"/>
+      <stop offset="1" stop-color="#04060a"/>
+    </linearGradient>
+    <linearGradient id="vien" x1="0.05" y1="0" x2="0.95" y2="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.2" stop-color="#eef5ff" stop-opacity=".9"/>
+      <stop offset="0.55" stop-color="#cfe2ff" stop-opacity=".5"/>
+      <stop offset="0.85" stop-color="#eef5ff" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="son" x1="0" y1="0" x2="0.15" y2="1">
+      <stop offset="0" stop-color="hsl(262 26% 16%)"/>
+      <stop offset="0.7" stop-color="#080b12"/>
+      <stop offset="1" stop-color="#05070c"/>
+    </linearGradient>
+    <radialGradient id="denPha"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="#d9ecff" stop-opacity=".85"/><stop offset="1" stop-color="#7fb2ff" stop-opacity="0"/></radialGradient>
+    <radialGradient id="sanNha"><stop offset="0" stop-color="hsl(262 45% 34%)" stop-opacity=".42"/><stop offset="1" stop-color="hsl(262 45% 34%)" stop-opacity="0"/></radialGradient>
+  </defs>
+
+  <rect width="1800" height="1200" fill="url(#nen)"/>
+  <ellipse cx="900" cy="908" rx="700" ry="104" fill="url(#sanNha)"/>
+
+  <path d="M 261 846 C 239 800, 235 694, 275 666 L 524 648 C 590 544, 716 474, 910 470 C 1160 472, 1254 536, 1318 644 L 1380 682 C 1516 704, 1590 754, 1586 812 L 1580 846 L 1449 846 A 154 154 0 0 0 1141 846 L 664 846 A 154 154 0 0 0 356 846 Z" fill="url(#son)"/>
+  <path d="M 261 846 C 239 800, 235 694, 275 666 L 524 648 C 590 544, 716 474, 910 470 C 1160 472, 1254 536, 1318 644 L 1380 682 C 1516 704, 1590 754, 1586 812 L 1580 846 L 1449 846 A 154 154 0 0 0 1141 846 L 664 846 A 154 154 0 0 0 356 846 Z" fill="none" stroke="url(#vien)" stroke-width="4.5" stroke-linejoin="round"/>
+  <path d="M 560 634 C 626 552, 732 498, 910 496 C 1154 498, 1234 548, 1284 630 Z" fill="#0b111a"/>
+  <path d="M 560 634 C 626 552, 732 498, 910 496 C 1154 498, 1234 548, 1284 630 Z" fill="none" stroke="#8fb4e8" stroke-width="2" opacity=".4"/>
+
+  
+    <circle cx="510" cy="846" r="138" fill="#04060a"/>
+    <circle cx="510" cy="846" r="135" fill="none" stroke="url(#vien)" stroke-width="3.5" opacity=".9"/>
+    <circle cx="510" cy="846" r="77.28" fill="none" stroke="#44536e" stroke-width="3"/>
+    <circle cx="510" cy="846" r="27.6" fill="#141c28"/>
+  
+    <circle cx="1295" cy="846" r="138" fill="#04060a"/>
+    <circle cx="1295" cy="846" r="135" fill="none" stroke="url(#vien)" stroke-width="3.5" opacity=".9"/>
+    <circle cx="1295" cy="846" r="77.28" fill="none" stroke="#44536e" stroke-width="3"/>
+    <circle cx="1295" cy="846" r="27.6" fill="#141c28"/>
+
+  <ellipse cx="1530" cy="724" rx="132" ry="92" fill="url(#denPha)" opacity=".5"/>
+  <rect x="1462" y="712" width="84" height="18" rx="9" fill="#eaf4ff" opacity=".95"/>
+  <rect x="251" y="714" width="56" height="16" rx="8" fill="#ff5a4d" opacity=".8"/>
+  <ellipse cx="279" cy="722" rx="74" ry="50" fill="#ff5a4d" opacity=".14"/>
+</svg>

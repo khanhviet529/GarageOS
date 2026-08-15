@@ -1382,6 +1382,63 @@ async function main(): Promise<void> {
    *    vì nằm trong một file README không ai đọc. Nguồn đầy đủ và tiêu chí chọn
    *    ảnh: `infra/seed-assets/LICENSE.md`.
    */
+  /**
+   * Nhập hình vẽ SVG (`infra/seed-assets/*.svg`) làm ảnh bìa xe.
+   *
+   * 🔒 Hình VẼ chứ không phải ảnh chụp, và đó là lựa chọn có lý do:
+   *
+   *   · Dữ liệu mẫu dùng tên tự đặt (`Aurora E1`), nên mọi ảnh chụp đều là MỘT
+   *     CHIẾC XE KHÁC đặt dưới cái tên không phải của nó. Hình vẽ hiển nhiên là
+   *     minh hoạ nên không có gì để lệch.
+   *   · Mọi xe cùng một phong cách, cùng góc, cùng ánh sáng — điều mà ảnh gom
+   *     từ nhiều nguồn không có.
+   *   · Và nó MỞ KHOÁ được tính năng chọn màu: đổi màu sơn của một hình vector
+   *     là đổi một biến, còn nhuộm ảnh chụp thì ra màu sai — đúng thứ
+   *     `docs/…/automotive-landing-experience-design.md` mục 3 cấm.
+   *
+   * Xem `infra/seed-assets/ve-xe.mjs` để biết cách sinh.
+   */
+  const themHinhVe = async (
+    tenantId: string,
+    stableKey: string,
+    profile: string,
+    tenFile: string,
+  ): Promise<string> => {
+    const dulieu = readFileSync(join(GOC_KHO, 'infra', 'seed-assets', tenFile));
+    const sha = createHash('sha256').update(dulieu).digest('hex');
+    const key = `${tenantId}/${sha}.svg`;
+    const dich = join(MEDIA_ROOT, key);
+    mkdirSync(dirname(dich), { recursive: true });
+    writeFileSync(dich, dulieu);
+
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO media_asset (tenant_id, stable_key, kind, status, source_storage_key,
+                                source_sha256, source_mime, byte_size, provenance,
+                                license, license_owner, created_by)
+       VALUES ($1,$2,'IMAGE','READY',$3,$4,'image/svg+xml',$5,$6::jsonb,
+               'Nội bộ — hình minh hoạ','GarageOS',$7)
+       RETURNING id`,
+      [tenantId, stableKey, key, sha, dulieu.length,
+       JSON.stringify({ nguon: 'infra/seed-assets/ve-xe.mjs', loai: 'minh hoạ vector' }),
+       publisherId],
+    );
+    const assetId = rows[0]!.id;
+    await db.query(
+      `INSERT INTO media_rendition (tenant_id, asset_id, profile, format, mime,
+                                    storage_key, content_sha256, byte_size, visibility)
+       VALUES ($1,$2,$3,'svg','image/svg+xml',$4,$5,$6,'PUBLIC')`,
+      [tenantId, assetId, profile, key, sha, dulieu.length],
+    );
+    await db.query(
+      `INSERT INTO media_publication (tenant_id, rendition_id, public_storage_key,
+                                      public_content_sha256, status, verified_at)
+       SELECT $1, id, $2, $3, 'READY', now() FROM media_rendition
+        WHERE asset_id = $4 AND profile = $5`,
+      [tenantId, key, sha, assetId, profile],
+    );
+    return assetId;
+  };
+
   const themAnhThat = async (
     tenantId: string,
     stableKey: string,
@@ -1459,6 +1516,21 @@ async function main(): Promise<void> {
     [TENANT_B, ownerBId],
   );
 
+  /*
+   * Ảnh mặt tiền — ẢNH CHỤP, khác hẳn hình vẽ dùng cho thẻ xe.
+   *
+   * 💡 Hai chỗ này có yêu cầu ngược nhau. Hero cần một tấm gây ấn tượng, xem
+   *    một lần; thẻ xe cần nhất quán giữa nhiều xe và đổi màu được. Ép chúng
+   *    dùng chung một trường ảnh là bắt cả hai cùng thoả hiệp.
+   */
+  const heroId = await themAnhThat(
+    TENANT_A, 'hero-trang-chu', 'POSTER', 'xe-den-pha.jpg', 'Graham Pengelly',
+  );
+  await db.query(
+    `UPDATE site_profile SET hero_media_id = $2 WHERE tenant_id = $1`,
+    [TENANT_A, heroId],
+  );
+
   for (const b of branchesA) {
     await db.query(
       `INSERT INTO branch_public_profile (tenant_id, branch_id, version_number, status,
@@ -1471,7 +1543,7 @@ async function main(): Promise<void> {
   }
 
   // --- Flagship product: có spin 360° + panorama + hotspot ------------------
-  const coverId = await themAnhThat(TENANT_A, 'e1-cover', 'POSTER', 'xe-silhouette.jpg', 'Sunder Muthukumaran');
+  const coverId = await themHinhVe(TENANT_A, 'e1-cover', 'POSTER', 'xe-ve-sedan.svg');
   const gal1Id = await createMedia(TENANT_A, 'e1-gallery-1', 'GALLERY', 'demo/e1-gallery-1.svg');
   const gal2Id = await createMedia(TENANT_A, 'e1-gallery-2', 'GALLERY', 'demo/e1-gallery-2.svg');
 
@@ -1614,7 +1686,7 @@ async function main(): Promise<void> {
    *    tự trong seed KHÔNG phải thứ tự hiển thị — cái sau do câu ORDER BY quyết
    *    định, và nó nằm ở một file khác.
    */
-  const coverX5Id = await themAnhThat(TENANT_A, 'x5-cover', 'POSTER', 'xe-den-pha.jpg', 'Graham Pengelly');
+  const coverX5Id = await themHinhVe(TENANT_A, 'x5-cover', 'POSTER', 'xe-ve-suv.svg');
   const productX5Id = randomUUID();
   const revisionX5Id = randomUUID();
   await db.query(

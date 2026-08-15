@@ -32,6 +32,15 @@ export default async function HomePage(): Promise<React.ReactElement> {
    *    (`.hero-media__empty`) — một trạng thái rỗng có chủ ý, không phải ô vỡ.
    */
   const noiBat = products[0] ?? null;
+
+  /*
+   * Ảnh hero là ẢNH CHỤP do showroom chọn (`site_profile.hero_media_id`), khác
+   * hình minh hoạ dùng cho thẻ xe. Hai chỗ có yêu cầu ngược nhau: hero cần gây
+   * ấn tượng, thẻ xe cần nhất quán giữa nhiều xe.
+   *
+   * Chưa chọn thì rơi về ảnh bìa xe nổi bật — mặc định hợp lý, không phải lỗi.
+   */
+  const anhHero = site?.heroUrl ?? noiBat?.coverUrl ?? null;
   const anhNen = products[1]?.coverUrl ?? products[0]?.coverUrl ?? null;
 
   const jsonLd = {
@@ -58,9 +67,9 @@ export default async function HomePage(): Promise<React.ReactElement> {
         */}
         <section className="hero">
           <div className="hero-media" aria-hidden="true">
-            {noiBat?.coverUrl !== null && noiBat?.coverUrl !== undefined ? (
+            {anhHero !== null ? (
               <div className="hero-photo">
-                <img src={noiBat.coverUrl} alt="" width={1800} height={1200} fetchPriority="high" />
+                <img src={anhHero} alt="" width={1800} height={1200} fetchPriority="high" />
                 {/*
                   Vệt sáng đèn nằm TRONG khung ảnh, không phải trong hero — nhờ
                   vậy nó bị cắt cùng một cách với ảnh và không bao giờ trôi khỏi

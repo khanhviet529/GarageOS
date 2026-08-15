@@ -101,6 +101,8 @@ export const PublicSiteView = z.object({
   defaultTitleSuffix: z.string(),
   primaryOrigin: z.string(),
   publicBranches: z.array(PublicBranchCard),
+  /** Ảnh mặt tiền do showroom chọn. `null` thì landing rơi về ảnh xe nổi bật. */
+  heroUrl: z.string().nullable(),
 });
 export type PublicSiteView = z.infer<typeof PublicSiteView>;
 
