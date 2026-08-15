@@ -149,6 +149,32 @@ jobs:
           done
           curl -sf http://localhost:3002 >/dev/null || { echo "App thợ không khởi động được"; exit 1; }
 
+      # 🔒 Landing (3003) và Sales Admin (3004) — hai app CHƯA TỪNG chạy E2E.
+      #
+      # Chỉ riêng việc dựng nền cho chúng đã lộ ra ba lỗi mà `pnpm build` báo
+      # xanh: `outputFileTracingRoot` truy vết sai gốc, script `start` không
+      # tương thích với `output: standalone`, và trình duyệt gọi thẳng API bằng
+      # header host KHÔNG ký nên form lead trả 404.
+      #
+      # Cả hai chạy bằng bản build production, đúng thứ sẽ được triển khai.
+      - name: Khởi động landing nền
+        run: |
+          pnpm --filter @garageos/landing start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3003/xe >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3003/xe >/dev/null || { echo "Landing không khởi động được"; exit 1; }
+
+      - name: Khởi động sales-admin nền
+        run: |
+          pnpm --filter @garageos/sales-admin start &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3004/login >/dev/null && break
+            sleep 2
+          done
+          curl -sf http://localhost:3004/login >/dev/null || { echo "Sales Admin không khởi động được"; exit 1; }
+
       # E2E gồm cả kiểm tra accessibility tự động bằng axe-core trên 4 màn hình.
       # Lỗi accessibility nặng nhất của dự án (nút duyệt báo giá không có tên
       # riêng theo hạng mục) đã lọt qua 17 kịch bản E2E viết tay — chính chúng

@@ -74,8 +74,7 @@ export function Showroom({ slug, experience, onActivated }: ShowroomProps): Reac
     setActivated(true);
     try {
       const res = await fetch(
-        `${browserApiOrigin()}/api/v1/public/vehicle-products/${encodeURIComponent(slug)}/experiences/${encodeURIComponent(experience.stableKey)}`,
-        { headers: { 'x-garageos-original-host': window.location.host } },
+        `${browserApiOrigin()}/vehicle-products/${encodeURIComponent(slug)}/experiences/${encodeURIComponent(experience.stableKey)}`,
       );
       if (!res.ok) {
         setError('Không tải được trải nghiệm 360°. Bạn vẫn có thể xem thư viện ảnh bên trên.');

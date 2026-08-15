@@ -58,12 +58,14 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
     };
 
     try {
-      const res = await fetch(`${browserApiOrigin()}/api/v1/public/leads`, {
+      /*
+       * Gọi CÙNG origin với trang. Việc ký host là của server (xem
+       * `app/api/public/[...duong]/route.ts`) — trình duyệt không có bí mật ký
+       * và không được có.
+       */
+      const res = await fetch(`${browserApiOrigin()}/leads`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-garageos-original-host': window.location.host,
-        },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = (await res.json().catch(() => ({}))) as {
