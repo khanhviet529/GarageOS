@@ -259,6 +259,7 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'health', ':token', 'me',
       'vehicle-products', 'vehicle-products/:id', 'vehicle-products/:slug',
       'vehicle-products/:id/experiences', 'vehicle-products/:slug/experiences/:stableKey',
+      'vehicle-products/:slug/chi-phi-so-huu',
       'site-profile', 'branch-public-profiles', 'site', 'leads', 'leads/:id',
     ]);
 

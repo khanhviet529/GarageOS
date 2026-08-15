@@ -4,6 +4,7 @@ import { loadSite, formatPrice, isGone } from '@/lib/site';
 import { buildMetadata } from '@/lib/seo';
 import { Header, Footer } from '@/components/chrome';
 import { DetailActions } from '@/components/detail-actions';
+import { ChiPhiSoHuu } from '@/components/chi-phi-so-huu';
 import type { PublicProductDetail, PublicSiteView } from '@garageos/contracts';
 import type { Metadata } from 'next';
 import { buildPageTitle } from '@garageos/domain';
@@ -140,6 +141,13 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
             </table></section>
           </div>
         </div>
+
+        {/*
+          Chi phí sở hữu đặt NGAY SAU bảng phiên bản và TRƯỚC form đăng ký.
+          Khách vừa xem giá xong sẽ hỏi "rồi nuôi nó tốn bao nhiêu" — trả lời
+          đúng lúc đó, trước khi họ phải quyết định để lại số điện thoại.
+        */}
+        <div className="container"><ChiPhiSoHuu slug={slug} /></div>
 
         <div className="container"><DetailActions
           site={site}

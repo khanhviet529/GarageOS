@@ -571,6 +571,7 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       'api/v1/public/site': 'bootstrap landing công khai, tenant lấy từ hostname',
       'api/v1/public/vehicle-products/:slug': 'catalog công khai, tenant lấy từ hostname',
       'api/v1/public/vehicle-products/:slug/experiences/:stableKey': 'experience công khai, tenant lấy từ hostname',
+      'api/v1/public/vehicle-products/:slug/chi-phi-so-huu': 'chi phí bảo dưỡng công khai, tenant lấy từ hostname',
       'api/v1/public/leads': 'lead public chỉ POST; GET guard là controller scan metadata',
       /*
        * ⚠️ NỢ, không phải miễn trừ thật. `requireLeadInScope()` CÓ áp

@@ -249,6 +249,7 @@ async function main(): Promise<void> {
     insurance_claim,
     llm_call_log,
     storage_fee, customer_contact_attempt,
+    maintenance_plan_part, maintenance_plan_item,
     stock_take_line, stock_take,
     cancellation_settlement_line, cancellation_settlement,
     warranty_cost_attribution, warranty_coverage,
@@ -343,6 +344,74 @@ async function main(): Promise<void> {
          p.warrantyMonths, p.warrantyKm, 5],
       );
       partIds.set(p.sku, rows[0]!.id);
+    }
+
+    /*
+     * Lịch bảo dưỡng định kỳ — dữ liệu cho tính năng "chi phí sở hữu 5 năm".
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ⚠️ CÁC MỐC DƯỚI ĐÂY LÀ GIÁ TRỊ THÔNG DỤNG Ở THỊ TRƯỜNG VIỆT NAM, CHƯA
+     *    ĐƯỢC MỘT XƯỞNG THẬT XÁC NHẬN.
+     *
+     *    Chúng xuất hiện CÔNG KHAI trên trang bán xe, và khách sẽ cầm con số đó
+     *    tới xưởng đối chiếu. Trước khi dùng cho quảng cáo thật, xưởng phải rà
+     *    lại theo khuyến cáo của từng hãng xe mà họ phục vụ.
+     *
+     * 💡 Ghi thành DỮ LIỆU của tenant chứ không phải hằng số trong mã: mỗi xưởng
+     *    có khuyến cáo riêng, và sửa một con số không nên cần một lần deploy.
+     *
+     * Mốc "hoặc N tháng" quan trọng ngang mốc km: người chạy 3.000 km/năm vẫn
+     * phải thay dầu theo tuổi dù xe gần như đứng yên.
+     */
+    const LICH_BAO_DUONG: {
+      sv: string; km: number | null; thang: number | null;
+      vatTu: { sku: string; sl: number }[];
+    }[] = [
+      // --- Mọi loại động cơ ---
+      { sv: 'SV-TIRE-ROT',    km: 10_000, thang: 12, vatTu: [] },
+      { sv: 'SV-BRAKE-PAD',   km: 40_000, thang: null,
+        vatTu: [{ sku: 'PT-BRAKE-PAD-F', sl: 1 }] },
+      { sv: 'SV-AC-CLEAN',    km: null,   thang: 12,
+        vatTu: [{ sku: 'PT-CABIN-FILTER', sl: 1 }] },
+      { sv: 'SV-SUSPENSION',  km: 20_000, thang: 24, vatTu: [] },
+
+      // --- Chỉ xe có động cơ đốt trong ---
+      { sv: 'SV-OIL-ENGINE',  km: 10_000, thang: 12,
+        vatTu: [{ sku: 'PT-OIL-5W30', sl: 4 }, { sku: 'PT-FILTER-OIL', sl: 1 }] },
+      { sv: 'SV-SPARK-PLUG',  km: 40_000, thang: null,
+        vatTu: [{ sku: 'PT-SPARK-PLUG', sl: 4 }] },
+      { sv: 'SV-TIMING-BELT', km: 100_000, thang: null, vatTu: [] },
+      { sv: 'SV-EXHAUST',     km: 20_000, thang: 24, vatTu: [] },
+
+      // --- Chỉ xe điện hoá ---
+      { sv: 'SV-HV-SOH',      km: null,   thang: 12, vatTu: [] },
+      { sv: 'SV-HV-COOLANT',  km: 60_000, thang: 48,
+        vatTu: [{ sku: 'PT-HV-COOLANT', sl: 3 }] },
+      { sv: 'SV-HV-INSUL',    km: null,   thang: 24, vatTu: [] },
+      { sv: 'SV-CHARGE-PORT', km: null,   thang: 12, vatTu: [] },
+      { sv: 'SV-FIRMWARE',    km: null,   thang: 12, vatTu: [] },
+    ];
+
+    for (const lich of LICH_BAO_DUONG) {
+      const { rows: pi } = await db.query<{ id: string }>(
+        `INSERT INTO maintenance_plan_item
+           (tenant_id, service_item_id, interval_km, interval_months)
+         SELECT $1, id, $3, $4 FROM service_item
+          WHERE tenant_id = $1 AND code = $2
+         RETURNING id`,
+        [t, lich.sv, lich.km, lich.thang],
+      );
+      const planId = pi[0]?.id;
+      if (planId === undefined) continue;
+      for (const v of lich.vatTu) {
+        const partId = partIds.get(v.sku);
+        if (partId === undefined) continue;
+        await db.query(
+          `INSERT INTO maintenance_plan_part (tenant_id, plan_item_id, part_id, quantity)
+           VALUES ($1,$2,$3,$4)`,
+          [t, planId, partId, v.sl],
+        );
+      }
     }
 
     // Bảng giá toàn chuỗi, hiệu lực từ đầu năm, chưa đóng kỳ

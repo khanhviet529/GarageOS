@@ -67,6 +67,35 @@ export class PublicLandingController {
     res.json(detail);
   }
 
+  /**
+   * Chi phí bảo dưỡng N năm — thứ mà chỉ hệ thống vừa bán xe vừa vận hành xưởng
+   * mới trả lời được.
+   */
+  @Get('vehicle-products/:slug/chi-phi-so-huu')
+  async chiPhiSoHuu(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('slug') slug: string,
+    @Query('kmMoiNam') kmMoiNam?: string,
+    @Query('soNam') soNam?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+
+    /*
+     * Tham số từ URL công khai: `Number('abc')` cho `NaN`, và `NaN` lọt qua mọi
+     * phép so sánh mà không ném lỗi. Chốt về mặc định thay vì tin đầu vào.
+     */
+    const km = Number(kmMoiNam);
+    const nam = Number(soNam);
+    const kq = await this.svc.chiPhiSoHuu(ctx, slug, {
+      kmMoiNam: Number.isFinite(km) ? km : 15_000,
+      soNam: Number.isFinite(nam) ? nam : 5,
+    });
+    res.json(kq);
+  }
+
   @Get('vehicle-products/:slug/experiences/:stableKey')
   async experience(
     @Req() req: Request,

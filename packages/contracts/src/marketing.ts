@@ -170,6 +170,40 @@ export const PublicProductSummary = z.object({
 });
 export type PublicProductSummary = z.infer<typeof PublicProductSummary>;
 
+/**
+ * Chi phí bảo dưỡng theo năm — SRS "hành trình sở hữu".
+ *
+ * 🔒 Tiền là số nguyên đồng. Con số này khách sẽ CẦM TỚI XƯỞNG đối chiếu với
+ *    hoá đơn thật, nên nó không được là ước lượng làm tròn cho đẹp.
+ */
+export const ChiPhiMotNam = z.object({
+  nam: z.number().int().positive(),
+  tienCong: z.number().int().nonnegative(),
+  tienVatTu: z.number().int().nonnegative(),
+  tong: z.number().int().nonnegative(),
+  hangMuc: z.array(z.string()),
+});
+export type ChiPhiMotNam = z.infer<typeof ChiPhiMotNam>;
+
+export const ChiPhiSoHuuView = z.object({
+  kmMoiNam: z.number().int().nonnegative(),
+  soNam: z.number().int().positive(),
+  theoNam: z.array(ChiPhiMotNam),
+  tong: z.number().int().nonnegative(),
+  /**
+   * Cùng quãng đường, cùng bảng giá, nhưng theo lịch bảo dưỡng của XE XĂNG.
+   * `null` khi chính chiếc xe đang xem đã là xe xăng — so sánh khi đó vô nghĩa.
+   */
+  soSanhXeXang: z.number().int().nonnegative().nullable(),
+  soNamKhongTon: z.number().int().nonnegative(),
+  /** Giá công mỗi giờ đang áp dụng — để trang nói được con số đến từ đâu. */
+  giaCongMoiGio: z.number().int().nonnegative(),
+  /** Tên bảng giá và ngày hiệu lực — thứ làm con số kiểm chứng được. */
+  tenBangGia: z.string(),
+  ápDụngTừ: z.string(),
+});
+export type ChiPhiSoHuuView = z.infer<typeof ChiPhiSoHuuView>;
+
 export const PublicProductDetail = z.object({
   id: z.string().uuid(),
   slug: z.string(),

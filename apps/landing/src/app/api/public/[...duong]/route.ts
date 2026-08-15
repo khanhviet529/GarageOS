@@ -54,6 +54,7 @@ const DUONG_CHO_PHEP: { method: 'GET' | 'POST'; mau: RegExp }[] = [
   { method: 'GET', mau: /^vehicle-products$/ },
   { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+$/ },
   { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+\/experiences\/[a-z0-9-]+$/ },
+  { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+\/chi-phi-so-huu$/ },
   { method: 'POST', mau: /^leads$/ },
 ];
 

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { TenantAwareDb } from '@garageos/db';
-import { parseAmountFromDb } from '@garageos/domain';
+import { parseAmountFromDb, tinhChiPhiSoHuu, type HangMucBaoDuong } from '@garageos/domain';
 import {
   ErrorCode,
   type ExperienceManifest,
@@ -9,6 +9,7 @@ import {
   type PublicProductDetail,
   type PublicProductSummary,
   type PublicSiteView,
+  type ChiPhiSoHuuView,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import type { PublicTenantContext } from './tenant-context.service';
@@ -237,6 +238,191 @@ export class PublicLandingService {
         variants,
         media,
         experiences,
+      };
+    });
+  }
+
+  /**
+   * Chi phí bảo dưỡng N năm cho một mẫu xe.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * 🔒 Con số đến từ BẢNG GIÁ ĐANG ÁP DỤNG của chính xưởng này — cùng bảng giá
+   *    dùng để xuất hoá đơn cho khách khác. Đó là toàn bộ giá trị của tính năng:
+   *    khách cầm bảng này tới xưởng đối chiếu được.
+   *
+   * ⚠️ Vì thế endpoint KHÔNG được nhận giá từ client, và KHÔNG được dùng một
+   *    bảng giá riêng cho quảng cáo. Nếu sau này cần tách, phải tách tường minh
+   *    và nói rõ trên giao diện — chứ không lặng lẽ đổi nguồn số.
+   *
+   * 💡 Xe điện rẻ hơn là KẾT QUẢ, không phải thông điệp được cài sẵn: lọc hạng
+   *    mục theo `applicable_powertrains` rồi để phép cộng tự nói. Không có dòng
+   *    nào trong hàm này biết "điện" hay "xăng" nghĩa là gì.
+   */
+  async chiPhiSoHuu(
+    ctx: PublicTenantContext,
+    slug: string,
+    opts: { kmMoiNam: number; soNam: number },
+  ): Promise<ChiPhiSoHuuView> {
+    /*
+     * Chặn trên để một truy vấn công khai không biến thành phép tính vô hạn —
+     * đây là endpoint không cần đăng nhập.
+     */
+    const kmMoiNam = Math.min(Math.max(Math.round(opts.kmMoiNam), 0), 200_000);
+    const soNam = Math.min(Math.max(Math.round(opts.soNam), 1), 10);
+
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows: prodRows } = await tx.query<{ id: string }>(
+        `SELECT p.id FROM vehicle_product p
+          WHERE p.slug = $1 AND p.lifecycle_status = 'ACTIVE'
+            AND p.published_revision_id IS NOT NULL`,
+        [slug],
+      );
+      const prod = prodRows[0];
+      if (prod === undefined) {
+        throw new BusinessError(ErrorCode.CONTENT_NOT_PUBLISHED, 'Không tìm thấy xe');
+      }
+
+      /*
+       * Loại động cơ lấy từ CÁC BIẾN THỂ ĐANG PUBLISH, không từ một cột trên
+       * sản phẩm — một mẫu xe có thể vừa có bản xăng vừa có bản điện, và chi phí
+       * của hai bản đó khác hẳn nhau.
+       *
+       * MVP lấy loại của biến thể RẺ NHẤT: đó cũng là biến thể mà giá "từ…" trên
+       * thẻ xe đang nói tới, nên hai con số kể cùng một câu chuyện.
+       */
+      const { rows: ptRows } = await tx.query<{ powertrain: string }>(
+        `SELECT vvr.powertrain
+           FROM vehicle_variant_revision vvr
+           JOIN vehicle_product p ON p.published_revision_id = vvr.product_revision_id
+          WHERE p.id = $1 AND vvr.inclusion_status = 'ACTIVE'
+          ORDER BY vvr.display_price_amount ASC NULLS LAST, vvr.sort_order
+          LIMIT 1`,
+        [prod.id],
+      );
+      const powertrain = ptRows[0]?.powertrain ?? 'ICE';
+
+      const { rows: giaRows } = await tx.query<{
+        id: string; name: string; labor_rate_per_hour: string; effective_from: Date;
+      }>(
+        `SELECT id, name, labor_rate_per_hour, effective_from
+           FROM price_list
+          WHERE effective_from <= now()
+            AND (effective_to IS NULL OR effective_to > now())
+          ORDER BY effective_from DESC
+          LIMIT 1`,
+      );
+      const bangGia = giaRows[0];
+      if (bangGia === undefined) {
+        throw new BusinessError(
+          ErrorCode.NOT_FOUND,
+          'Chưa có bảng giá dịch vụ đang hiệu lực',
+        );
+      }
+
+      /*
+       * Một truy vấn lấy hạng mục + chu kỳ + vật tư. Gộp vật tư bằng
+       * `json_agg` thay vì N+1: đây là endpoint công khai, và số lần gọi database
+       * cho mỗi lượt xem trang là thứ nhìn thấy được trên hoá đơn hạ tầng.
+       */
+      const { rows: hmRows } = await tx.query<{
+        ma: string; ten: string; gio: string;
+        chu_ky_km: number | null; chu_ky_thang: number | null;
+        vat_tu: { ten: string; gia: string; sl: string }[] | null;
+      }>(
+        `SELECT si.code AS ma, si.name AS ten, si.standard_hours AS gio,
+                mpi.interval_km AS chu_ky_km, mpi.interval_months AS chu_ky_thang,
+                (SELECT json_agg(json_build_object(
+                          'ten', pt.name,
+                          'gia', pli.sell_price::text,
+                          'sl',  mpp.quantity::text))
+                   FROM maintenance_plan_part mpp
+                   JOIN part pt ON pt.id = mpp.part_id
+                   LEFT JOIN price_list_item pli
+                     ON pli.part_id = pt.id AND pli.price_list_id = $2
+                  WHERE mpp.plan_item_id = mpi.id) AS vat_tu
+           FROM maintenance_plan_item mpi
+           JOIN service_item si ON si.id = mpi.service_item_id
+          WHERE si.is_active
+            AND $1::powertrain = ANY(si.applicable_powertrains)
+          ORDER BY si.code`,
+        [powertrain, bangGia.id],
+      );
+
+      const dungHangMuc = (rows: typeof hmRows): HangMucBaoDuong[] => rows.map((r) => ({
+        ma: r.ma,
+        ten: r.ten,
+        gioDinhMuc: Number(r.gio),
+        chuKyKm: r.chu_ky_km,
+        chuKyThang: r.chu_ky_thang,
+        vatTu: (r.vat_tu ?? [])
+          // Vật tư chưa có trong bảng giá thì BỎ QUA, không tính 0 đồng: một
+          // con số thiếu thà thiếu rõ ràng còn hơn sai mà trông đầy đủ.
+          .filter((v) => v.gia !== null && v.gia !== undefined)
+          .map((v) => ({ ten: v.ten, giaBan: BigInt(v.gia), soLuong: Number(v.sl) })),
+      }));
+
+      const tinh = (rows: typeof hmRows) =>
+        tinhChiPhiSoHuu({
+          hangMuc: dungHangMuc(rows),
+          giaCongMoiGio: BigInt(bangGia.labor_rate_per_hour),
+          kmMoiNam,
+          soNam,
+        });
+
+      const kq = tinh(hmRows);
+
+      /*
+       * 🔒 Mốc so sánh với xe xăng — tính bằng CHÍNH bảng giá và CHÍNH lịch bảo
+       *    dưỡng đó, chỉ đổi bộ lọc loại động cơ.
+       *
+       * 💡 Đây là điều làm cho câu "xe điện rẻ hơn" trở thành một PHÉP ĐO thay
+       *    vì một khẩu hiệu. Không có hằng số nào, không có tỉ lệ phần trăm nào
+       *    được gõ tay: cùng một xưởng, cùng một bảng giá, cùng một quãng đường
+       *    — khác nhau duy nhất ở chỗ xe xăng phải thay dầu, bugi và curoa cam.
+       *
+       * ⚠️ Chỉ trả về khi xe KHÔNG phải xe xăng. So sánh xe xăng với xe xăng là
+       *    một dòng vô nghĩa, và một con số vô nghĩa trên trang bán hàng sẽ bị
+       *    đọc thành một con số có nghĩa.
+       */
+      let soSanhXeXang: number | null = null;
+      if (powertrain !== 'ICE') {
+        const { rows: iceRows } = await tx.query<(typeof hmRows)[number]>(
+          `SELECT si.code AS ma, si.name AS ten, si.standard_hours AS gio,
+                  mpi.interval_km AS chu_ky_km, mpi.interval_months AS chu_ky_thang,
+                  (SELECT json_agg(json_build_object(
+                            'ten', pt.name,
+                            'gia', pli.sell_price::text,
+                            'sl',  mpp.quantity::text))
+                     FROM maintenance_plan_part mpp
+                     JOIN part pt ON pt.id = mpp.part_id
+                     LEFT JOIN price_list_item pli
+                       ON pli.part_id = pt.id AND pli.price_list_id = $1
+                    WHERE mpp.plan_item_id = mpi.id) AS vat_tu
+             FROM maintenance_plan_item mpi
+             JOIN service_item si ON si.id = mpi.service_item_id
+            WHERE si.is_active AND 'ICE'::powertrain = ANY(si.applicable_powertrains)
+            ORDER BY si.code`,
+          [bangGia.id],
+        );
+        soSanhXeXang = Number(tinh(iceRows).tong);
+      }
+
+      return {
+        kmMoiNam,
+        soNam,
+        theoNam: kq.theoNam.map((n) => ({
+          nam: n.nam,
+          tienCong: Number(n.tienCong),
+          tienVatTu: Number(n.tienVatTu),
+          tong: Number(n.tong),
+          hangMuc: n.hangMuc,
+        })),
+        tong: Number(kq.tong),
+        soSanhXeXang,
+        soNamKhongTon: kq.soNamKhongTon,
+        giaCongMoiGio: Number(bangGia.labor_rate_per_hour),
+        tenBangGia: bangGia.name,
+        ápDụngTừ: bangGia.effective_from.toISOString(),
       };
     });
   }

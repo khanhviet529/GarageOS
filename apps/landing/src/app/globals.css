@@ -513,3 +513,52 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   .footer-grid { grid-template-columns: 1fr; gap: var(--s-5); }
   .hero-actions .btn, .button-row .btn { flex: 1 1 100%; }
 }
+
+/* ═══════════════════════ Chi phí sở hữu ═══════════════════════ */
+
+/*
+ * 🔒 Bảng số liệu phải ĐỌC ĐƯỢC trước khi đẹp.
+ *
+ * Đây là chỗ duy nhất trên trang khách sẽ dừng lại và so từng dòng, nên chữ số
+ * dùng `tabular-nums` để các cột thẳng hàng, và cột tiền căn phải.
+ */
+.chi-phi { margin-top: var(--s-7); padding: var(--s-6); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface-1); }
+.chi-phi h2 { margin: 0 0 var(--s-5); font-size: var(--fs-xl); }
+.chi-phi-dieu-khien { margin-bottom: var(--s-5); }
+.chi-phi-dieu-khien label { display: block; margin-bottom: var(--s-3); color: var(--text-muted); font-size: var(--fs-sm); }
+.chi-phi-moc { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.moc {
+  padding: var(--s-2) var(--s-4); border: 1px solid var(--line-strong); border-radius: var(--r-full);
+  background: transparent; color: var(--text-muted); font: inherit; font-size: var(--fs-sm);
+  font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.moc:hover { color: var(--text); border-color: var(--text-dim); }
+/* Trạng thái chọn KHÔNG chỉ bằng màu — nền đảo hẳn, và `aria-pressed` nói cho
+   trình đọc màn hình. Người không phân biệt màu vẫn thấy khác biệt. */
+.moc--chon { background: var(--text); border-color: var(--text); color: var(--surface-0); }
+
+.chi-phi-bang { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.chi-phi-bang th, .chi-phi-bang td { padding: var(--s-3) var(--s-2); border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.chi-phi-bang thead th { color: var(--text-muted); font-weight: 600; font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase; }
+.chi-phi-bang tbody th { width: 2.5rem; color: var(--text-muted); font-weight: 700; }
+.chi-phi-bang .phai { text-align: right; white-space: nowrap; }
+.chi-phi-bang .manh { color: var(--text); font-weight: 700; }
+.chi-phi-bang tfoot th { text-align: right; color: var(--text); }
+.chi-phi-bang tfoot td { color: var(--accent); font-size: var(--fs-md); }
+
+/* Thanh nền tỉ lệ — cho thấy năm nào nặng mà không cần đọc số. */
+.chi-phi-hang-muc { position: relative; min-width: 14rem; }
+.chi-phi-hang-muc .thanh { position: absolute; left: 0; top: 4px; bottom: 4px; border-radius: var(--r-sm); background: var(--brand-dim); }
+.chi-phi-ten { position: relative; color: var(--text-muted); }
+
+.chi-phi-so-sanh { margin: var(--s-5) 0 0; padding: var(--s-4); border-radius: var(--r-md); background: var(--surface-2); color: var(--text-muted); font-size: var(--fs-sm); }
+.chi-phi-so-sanh--loi { border-left: 3px solid var(--ok); }
+.chi-phi-so-sanh strong { color: var(--text); }
+.chi-phi-nguon { margin: var(--s-4) 0 0; color: var(--text-dim); font-size: var(--fs-xs); line-height: 1.6; }
+
+@media (max-width: 700px) {
+  /* Bảng 5 cột không vừa màn điện thoại — cho cuộn ngang TRONG bảng, không để
+     cả trang cuộn ngang. */
+  .chi-phi { padding: var(--s-4); }
+  .chi-phi-bang { display: block; overflow-x: auto; white-space: nowrap; }
+}
