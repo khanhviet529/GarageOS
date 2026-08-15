@@ -158,6 +158,18 @@ const KICH_BAN: KichBan[] = [
       }, v),
   },
   {
+    quyen: 'repairOrder:photoWrite',
+    ten: 'Tải ảnh hiện trạng',
+    goi: (v) =>
+      call('POST', `/api/v1/repair-orders/${co.orderId}/photos`, {
+        phase: 'INTAKE',
+        contentType: 'image/png',
+        // PNG 1x1 thật — vai bị cấm phải dừng ở 403 TRƯỚC khi chạm nội dung.
+        dataBase64:
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      }, v),
+  },
+  {
     quyen: 'repairOrder:read',
     ten: 'Xem danh sách xe trong xưởng',
     goi: (v) => call('GET', '/api/v1/repair-orders', undefined, v),
@@ -706,6 +718,15 @@ after(async () => {
       [d.id],
     );
     await pool.query(`DELETE FROM quotation WHERE repair_order_id = $1`, [d.id]);
+    /*
+     * Ảnh hiện trạng: kịch bản `repairOrder:photoWrite` tạo hàng thật cho những
+     * vai ĐƯỢC phép, và khoá ngoại của nó chặn việc xoá đơn.
+     *
+     * 💡 Đây là cái giá của một hàng rào tốt: mỗi quyền mới đều bị ép phải có
+     *    kịch bản, và mỗi kịch bản ghi dữ liệu đều phải tự dọn. Rẻ hơn nhiều so
+     *    với một quyền không ai thử.
+     */
+    await pool.query(`DELETE FROM repair_order_photo WHERE repair_order_id = $1`, [d.id]);
     await pool.query(`DELETE FROM repair_order WHERE id = $1`, [d.id]);
   }
   // Tạo xe qua API sinh kèm bản ghi sang tên chủ (`vehicle_ownership`) — lịch

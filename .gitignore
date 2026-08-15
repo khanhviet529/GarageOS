@@ -34,3 +34,9 @@ e2e/screenshots/
 # Đã lọt vào ba commit của Phase 3 vì nó nằm trong `apps/api/` để `tsx` tìm được
 # `pg`. Chặn theo TÊN thay vì nhắc nhau nhớ xoá.
 probe.mjs
+
+# Ảnh do LocalStorage ghi ra khi chạy dev/test — nội dung do người dùng tải lên,
+# không phải mã nguồn. Đã lọt vào một commit rồi mới nhận ra: `MEDIA_ROOT` mặc
+# định là `<cwd>/media/public`, mà `cwd` lúc chạy test là `apps/api`.
+apps/api/media/
+media/public/

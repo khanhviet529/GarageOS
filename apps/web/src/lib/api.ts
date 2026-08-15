@@ -640,6 +640,14 @@ export const api = {
     call<{ id: string; code: string }>('POST', '/api/v1/repair-orders', input),
   listRepairOrders: () => call<RepairOrderListItem[]>('GET', '/api/v1/repair-orders?open=true'),
   getRepairOrder: (id: string) => call<RepairOrderDetail>('GET', `/api/v1/repair-orders/${id}`),
+
+  /** Tải ảnh hiện trạng — BC-01 bước 6. Ảnh đi base64 trong JSON, xem contract. */
+  taiAnhHienTrang: (
+    orderId: string,
+    input: { phase: string; contentType: string; dataBase64: string; caption?: string },
+  ) => call<{ id: string; storageKey: string }>(
+    'POST', `/api/v1/repair-orders/${orderId}/photos`, input,
+  ),
   getCatalog: (vehicleId: string) =>
     call<CatalogForVehicle>('GET', `/api/v1/catalog/vehicle/${vehicleId}`),
 

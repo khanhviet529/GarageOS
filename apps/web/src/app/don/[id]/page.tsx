@@ -7,7 +7,7 @@
  * và link tra cứu để gửi cho khách. Link đó là thứ khách dùng để theo dõi và
  * duyệt báo giá (Phase 1.5) — hiện ngay ở đây để không phải đi tìm.
  */
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   api, ApiCallError,
@@ -19,6 +19,7 @@ import { AppHeader } from '@/components/AppHeader';
 import { CatalogSection } from '@/components/CatalogSection';
 import { StatusActions } from '@/components/StatusActions';
 import { HopHoaDon } from '@/components/HopHoaDon';
+import { TaiAnhHienTrang } from '@/components/TaiAnhHienTrang';
 import { ErrorState } from '@/components/ErrorState';
 import { SkeletonCard } from '@/components/Skeleton';
 import { HopBaoHiem } from '@/components/HopBaoHiem';
@@ -31,14 +32,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    api
-      .getRepairOrder(id)
-      .then(setOrder)
-      .catch((err) =>
-        setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối'),
-      );
+  /** Tải lại chi tiết đơn — dùng cả lúc mount và sau khi tải ảnh xong. */
+  const taiLai = useCallback(async (): Promise<void> => {
+    try {
+      setOrder(await api.getRepairOrder(id));
+    } catch (err) {
+      setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
+    }
   }, [id]);
+
+  useEffect(() => {
+    void taiLai();
+  }, [taiLai]);
 
   const trackingUrl =
     order === null ? '' : `${window.location.origin}/tra-cuu/${order.customerAccessToken}`;
@@ -188,10 +193,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               {order.photos.length === 0 && (
                 <div className="alert warn" style={{ marginTop: 12 }}>
                   <strong>Chưa có ảnh hiện trạng.</strong> Ảnh là bằng chứng mạnh nhất khi
-                  khách khiếu nại vết trầy không do xưởng gây ra. Chức năng tải ảnh nằm ở
-                  lát cắt tiếp theo.
+                  khách khiếu nại vết trầy không do xưởng gây ra.
                 </div>
               )}
+
+              {/*
+                Dòng cảnh báo cũ kết thúc bằng "Chức năng tải ảnh nằm ở lát cắt
+                tiếp theo" — trung thực khi viết, nhưng lát cắt đó là bây giờ.
+                Một câu như thế để lâu sẽ thành một lời nói dối mà không ai sửa,
+                vì nó vẫn đọc như một lời hứa.
+              */}
+              <TaiAnhHienTrang orderId={id} onXong={() => { void taiLai(); }} />
             </div>
 
             <div className="card">

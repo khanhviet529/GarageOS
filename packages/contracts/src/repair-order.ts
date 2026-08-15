@@ -88,6 +88,53 @@ export const RepairOrderPhoto = z.object({
 });
 export type RepairOrderPhoto = z.infer<typeof RepairOrderPhoto>;
 
+/** Giai đoạn chụp — khớp CHECK `photo_phase_valid` ở migration 0006. */
+export const PhotoPhase = z.enum([
+  'INTAKE',
+  'DIAGNOSIS',
+  'IN_PROGRESS',
+  'AFTER',
+  'DELIVERY',
+]);
+export type PhotoPhase = z.infer<typeof PhotoPhase>;
+
+/**
+ * Tải ảnh hiện trạng lên — BC-01 bước 6.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 🔒 Ảnh đi trong JSON dưới dạng base64, không phải multipart.
+ *
+ * Người gửi chính là app thợ, và `expo-image-picker` trả base64 sẵn khi bật
+ * `base64: true`. Dùng multipart ở đây nghĩa là mobile phải dựng lại `FormData`
+ * từ một chuỗi base64 mà nó vừa được cho — thêm một bước đổi định dạng chỉ để
+ * đổi ngược lại ở đầu kia.
+ *
+ * Đánh đổi: base64 phình 33%. Với trần 8 MB ảnh thật thì phần phình đó là ~2,7
+ * MB trên một request hiếm — chấp nhận được, và đổi lại là một đường đi duy
+ * nhất cho cả web lẫn mobile lẫn test.
+ *
+ * ⚠️ Trần đặt ở ĐỘ DÀI CHUỖI base64, không phải ở kích thước ảnh sau giải mã:
+ *    phải chặn TRƯỚC khi cấp phát bộ nhớ, không phải sau.
+ */
+const TRAN_BYTE_ANH = 8 * 1024 * 1024;
+const TRAN_KY_TU_BASE64 = Math.ceil(TRAN_BYTE_ANH / 3) * 4;
+
+export const UploadPhotoInput = z.object({
+  phase: PhotoPhase,
+  /**
+   * 🔒 Danh sách trắng, không nhận `image/*`.
+   *
+   * `contentType` do client khai và nó quyết định đuôi file mà máy chủ ghi ra,
+   * tức nó chảy thẳng vào `Content-Type` lúc phục vụ lại. Nhận `image/svg+xml`
+   * ở đây là mở đường XSS: SVG chạy được `<script>`, và ảnh được phục vụ từ
+   * cùng origin với API.
+   */
+  contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  dataBase64: z.string().min(1).max(TRAN_KY_TU_BASE64),
+  caption: z.string().trim().max(500).optional(),
+});
+export type UploadPhotoInput = z.infer<typeof UploadPhotoInput>;
+
 export const RepairOrderDetail = z.object({
   id: z.string().uuid(),
   code: z.string(),

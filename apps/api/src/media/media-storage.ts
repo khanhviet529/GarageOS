@@ -1,7 +1,6 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { join, resolve, sep } from 'node:path';
+import { STORAGE_PROVIDER, type StorageProvider } from './storage-provider';
 
 /**
  * Storage adapter cho media public — SRS Phase 1 mục 6.7/13.
@@ -22,31 +21,49 @@ export interface PublicMediaFile {
 export class MediaStorage {
   private readonly log = new Logger('MediaStorage');
 
+  constructor(@Inject(STORAGE_PROVIDER) private readonly noiLuu: StorageProvider) {}
+
+  /**
+   * 🔒 Việc chặn path traversal chuyển hẳn xuống `LocalStorage`.
+   *
+   * ⚠️ Bản trước làm sạch key bằng `.replace(/\.\.\//g, '')` — bộ lọc kiểu danh
+   *    sách đen, và loại đó luôn thua: `....//` sau khi xoá `../` còn lại đúng
+   *    `../`. Nó vô hại ở đây vì có phép so `startsWith(root + sep)` phía sau
+   *    đỡ — nhưng hai lớp bảo vệ mà một lớp sai thì lớp còn lại đang gánh một
+   *    mình, và không ai biết điều đó.
+   *
+   * 💡 Chỉ nên có MỘT chỗ trả lời "key này có nằm trong gốc không", và chỗ đó
+   *    phải là nơi biết gốc nằm ở đâu. Với S3 thì câu hỏi ấy thậm chí không tồn
+   *    tại — thêm một lý do để nó không nằm ở đây.
+   */
   async readPublic(key: string): Promise<PublicMediaFile> {
     if (key.startsWith('demo/')) {
       return this.demoPlaceholder(key);
     }
 
-    const root = resolve(process.env['MEDIA_ROOT'] ?? join(process.cwd(), 'media', 'public'));
-    // 🔒 Chặn path traversal: key đã normalize, không chứa '..', không ra ngoài root
-    const safeKey = key.replace(/\\/g, '/').replace(/\.\.\//g, '');
-    const filePath = resolve(join(root, safeKey));
-    if (!filePath.startsWith(root.endsWith(sep) ? root : root + sep)) {
+    let data: Buffer | null;
+    try {
+      data = await this.noiLuu.get(key);
+    } catch (e) {
+      this.log.warn(`Key media không hợp lệ: ${key} — ${(e as Error).message}`);
       throw new NotFoundException();
     }
-
-    try {
-      const data = await readFile(filePath);
-      return {
-        data,
-        contentType: contentTypeOf(key),
-        cacheControl: 'public,max-age=31536000,immutable',
-        contentHash: contentHashOf(key),
-      };
-    } catch {
+    if (data === null) {
       this.log.warn(`Không tìm thấy media: ${key}`);
       throw new NotFoundException();
     }
+
+    return {
+      data,
+      contentType: contentTypeOf(key),
+      cacheControl: 'public,max-age=31536000,immutable',
+      contentHash: contentHashOf(key),
+    };
+  }
+
+  /** Ghi nội dung mới. Key content-addressed nên ghi lại cùng nội dung là vô hại. */
+  async writePublic(key: string, data: Buffer, contentType: string): Promise<void> {
+    await this.noiLuu.put(key, data, contentType);
   }
 
   /** Placeholder SVG cho seed/demo — xác định theo key, không đọc đĩa. */

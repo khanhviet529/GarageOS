@@ -2,6 +2,7 @@ import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from '@n
 import {
   ChangeOrderStatusInput,
   CreateRepairOrderInput,
+  UploadPhotoInput,
   type ActorContext,
   type RepairOrderDetail,
   type RepairOrderListItem,
@@ -40,6 +41,16 @@ export class RepairOrderController {
   @Get(':id')
   getById(@Actor() actor: ActorContext, @Param('id') id: string): Promise<RepairOrderDetail> {
     return this.svc.getById(actor, id);
+  }
+
+  /** Tải ảnh hiện trạng — BC-01 bước 6. Thợ cũng gửi được, xem `repairOrder:photoWrite`. */
+  @Post(':id/photos')
+  themAnh(
+    @Actor() actor: ActorContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(UploadPhotoInput)) input: UploadPhotoInput,
+  ): Promise<{ id: string; storageKey: string }> {
+    return this.svc.themAnh(actor, id, input);
   }
 
   /** Chuyển trạng thái — bảng chuyển đổi ở packages/contracts/src/state-machine.ts */

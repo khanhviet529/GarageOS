@@ -10,7 +10,28 @@ import { MediaStorage } from './media-storage';
 export class MediaController {
   constructor(@Inject(MediaStorage) private readonly storage: MediaStorage) {}
 
-  @Get(':key')
+  /**
+   * 🔒 `:key(*)` — key media có DẤU GẠCH CHÉO trong nó.
+   *
+   * ─────────────────────────────────────────────────────────────────────
+   * ⚠️ Bản trước là `@Get(':key')`. Trong Express, một tham số đường dẫn khớp
+   *    ĐÚNG MỘT đoạn — nó dừng lại ở dấu `/`. Mà mọi key public đều có ít nhất
+   *    một dấu đó:
+   *
+   *        <tenant-uuid>/<sha256>.jpg      ảnh thật
+   *        demo/vf3-cover.svg              placeholder của seed
+   *
+   *    Nên route này chưa từng khớp một key thật nào. Đo được:
+   *
+   *        GET /media/demo/vf3-cover.svg  ->  404
+   *
+   * 💡 Hệ quả không nhìn thấy từ phía server: TOÀN BỘ ảnh trên trang bán xe
+   *    hỏng. Trang vẫn lên, tiêu đề vẫn đúng, SEO vẫn đủ — chỉ có ảnh là ô
+   *    trắng. Bài E2E đầu tiên tôi viết cũng không bắt được, vì nó kiểm tiêu đề
+   *    và chữ, không kiểm ảnh. Một trang bán xe không có ảnh xe thì không bán
+   *    được gì.
+   */
+  @Get(':key(*)')
   async get(
     @Param('key') key: string,
     @Req() req: Request,

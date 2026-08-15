@@ -112,6 +112,35 @@ test.describe('Trang bán xe công khai', () => {
     await expect(page.locator('a[href="/xe/vinfast-vf-3"]')).toHaveCount(0);
   });
 
+  test('LD-E06 — ẢNH trên trang xe tải được thật, không phải ô trắng', async ({ page }) => {
+    /*
+     * ⚠️ Bài này sinh ra từ một lỗi mà chính bộ E2E đầu tiên của tôi bỏ sót.
+     *
+     *    `MediaController` khai `@Get(':key')`. Trong Express, một tham số đường
+     *    dẫn khớp ĐÚNG MỘT đoạn — nó dừng ở dấu `/`. Mà mọi key media đều có ít
+     *    nhất một dấu đó (`demo/vf3-cover.svg`, `<tenant>/<sha>.jpg`), nên route
+     *    ấy chưa từng khớp một key thật nào:
+     *
+     *        GET /media/demo/vf3-cover.svg  ->  404
+     *
+     * 💡 Trang vẫn lên, tiêu đề vẫn đúng, SEO vẫn đủ — chỉ có ảnh là ô trắng.
+     *    LD-E01..E05 đều xanh vì chúng kiểm chữ, không kiểm ảnh. Một trang bán
+     *    xe không có ảnh xe thì không bán được gì.
+     */
+    await page.goto(`${LANDING}/xe/vinfast-vf-3`);
+
+    const anh = page.locator('img[src*="/media/"]').first();
+    await expect(anh).toBeVisible();
+
+    // `naturalWidth === 0` nghĩa là trình duyệt tải ảnh THẤT BẠI — thuộc tính
+    // này là cách duy nhất phân biệt "ảnh trắng" với "ảnh chưa tải xong".
+    await expect
+      .poll(async () => anh.evaluate((e: HTMLImageElement) => e.naturalWidth), {
+        timeout: 10_000,
+      })
+      .toBeGreaterThan(0);
+  });
+
   test('LD-E05 — trang xe không tồn tại trả 404, không phải lỗi 500', async ({ page }) => {
     const res = await page.goto(`${LANDING}/xe/khong-co-chiec-xe-nao-ten-nay`);
     expect(res?.status()).toBe(404);
