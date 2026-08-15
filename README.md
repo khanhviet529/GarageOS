@@ -245,18 +245,25 @@ docs/               Thiết kế đầy đủ, 9.300 dòng
 Cần Docker và Node 20+.
 
 ```bash
+cp .env.example .env   # rồi điền JWT_ACCESS_SECRET / JWT_REFRESH_SECRET
 pnpm install
 pnpm db:up && pnpm db:migrate && pnpm db:seed
-pnpm dev            # API :3001 · web :3000
+pnpm dev            # API :3001 · web :3000 · thợ :3002 · landing :3003 · sales-admin :3004
 ```
 
 Mở http://localhost:3000, đăng nhập `0901000003` / `demo1234` (cố vấn dịch vụ).
 Trang đăng nhập liệt kê sẵn các tài khoản demo khác.
+Trang bán xe công khai ở http://localhost:3003.
 
 ```bash
-pnpm test           # 469 test tích hợp trên Postgres THẬT — cần API đang chạy
-pnpm e2e            # 69 kịch bản Playwright — cần cả API lẫn web
+pnpm test           # 521 test tích hợp trên Postgres THẬT — cần API đang chạy
+pnpm test:infra     # 10 bài cho script vận hành (không cần API)
+pnpm e2e            # 86 kịch bản Playwright — cần cả năm app
 ```
+
+🔒 Với thay đổi chạm `apps/*`, chạy thêm **bản build** chứ đừng dừng ở `pnpm dev`:
+`next dev` và `next build` là hai trình biên dịch khác nhau, và một lớp lỗi chỉ
+tồn tại ở bản build. Xem [CONTRIBUTING mục 3.1](CONTRIBUTING.md).
 
 🔒 Test dùng **PostgreSQL thật trong Docker, không dùng SQLite** — exclusion
 constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
@@ -275,13 +282,14 @@ constraint và RLS không tồn tại ở đó, test sẽ xanh giả.
 | 6 | Báo cáo: lãi/lỗ theo đơn, thời gian chờ, năng suất, kho, đúng hẹn | ✅ |
 | 7 | Hoàn thiện để trưng bày | ✅ trừ link demo sống và video |
 | 8 | Tầng công cụ cho AI agent: tool có phân quyền, guardrail, trần chi phí, nhật ký | ✅ phần không cần khoá API |
+| L | Landing bán xe: catalog, trải nghiệm 360°, form lead, Sales Admin, cô lập theo hostname | ✅ |
 
 | | |
 |---|---|
-| Test tích hợp (Postgres thật) | 469 |
-| E2E Playwright | 69 |
-| Migration SQL viết tay | 49 |
-| Vòng codex-review | 6 · 17 phát hiện · 17 xác nhận |
+| Test tích hợp (Postgres thật) | 615 (api 521, db 42, domain 42, infra 10) |
+| E2E Playwright | 86 |
+| Migration SQL viết tay | 63 |
+| Vòng review | 10 codex-review + 2 vòng rà soát thủ công · ~97 phát hiện |
 
 💡 **Phase 3 làm SAU Phase 5–8, có chủ ý.** Những case khó của hệ thống này
 không nằm ở hoá đơn mà ở bảo hành hạn kép, huỷ đơn giữa chừng, kiểm kê kho và
