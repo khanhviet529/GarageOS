@@ -248,10 +248,23 @@ interface. Xem [ADR-0005](adr/0005-einvoice-adapter.md).
 ### Chạy local một lệnh
 
 ```bash
-docker compose up        # Postgres + Redis + MinIO
+docker compose up -d     # Postgres :5433 · Redis :6380 · MinIO :9002 (console :9003)
 pnpm db:migrate
 pnpm db:seed             # dữ liệu mẫu: 2 tenant, 3 chi nhánh, ~50 xe, ~200 đơn
-pnpm dev                 # api + web + mobile song song
+pnpm dev                 # api + web + mobile + landing + sales-admin song song
+```
+
+⚠️ Cổng đều dịch khỏi mặc định (5433 / 6380 / 9002) vì máy dev thường đã có sẵn
+một Postgres, Redis hoặc MinIO của dự án khác.
+
+🔒 Với thay đổi chạm `apps/*`, chạy thêm bản BUILD chứ đừng dừng ở `pnpm dev` —
+`next dev` và `next build` là hai trình biên dịch khác nhau, và một lớp lỗi chỉ
+tồn tại ở bản build. Xem [CONTRIBUTING.md mục 3.1](../CONTRIBUTING.md).
+
+```bash
+pnpm build
+pnpm --filter @garageos/landing start      # :3003
+pnpm --filter @garageos/sales-admin start  # :3004
 ```
 
 🔒 Seed phải tạo đủ dữ liệu để **mọi màn hình có nội dung** và **mọi báo cáo có

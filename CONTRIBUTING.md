@@ -112,7 +112,7 @@ Bất biến: INV-S-01
 - 🔒 Dòng đầu **≤ 72 ký tự**
 - 🔒 Commit **chạm bất biến** ([05-invariants.md](docs/05-invariants.md)) phải ghi mã bất biến ở chân
 - 🔒 Commit **triển khai case nghiệp vụ** phải ghi mã case (`BC-xx`)
-- 🔒 **Không commit code đỏ.** `lint` + `typecheck` + `test` phải xanh
+- 🔒 **Không commit code đỏ.** `lint` + `typecheck` + `test` + **`build`** phải xanh
 - Thân commit giải thích **vì sao**, không phải **làm gì** — diff đã nói làm gì
 
 ## 3. Quy trình một lát cắt
@@ -122,14 +122,41 @@ Bất biến: INV-S-01
 2. Viết test trước cho bất biến mới (TDD)
 3. Code cho test xanh
 4. Tự review: lint / typecheck / test
-5. /codex-review          ← review độc lập + phản biện
-6. Sửa các CONFIRMED
-7. Commit theo quy ước
-8. Merge vào main, ĐẨY LÊN REMOTE, xoá nhánh
+5. pnpm build             ← BẮT BUỘC, xem mục 3.1
+6. /codex-review          ← review độc lập + phản biện
+7. Sửa các CONFIRMED
+8. Commit theo quy ước
+9. Merge vào main, ĐẨY LÊN REMOTE, xoá nhánh
 ```
 
-🔒 **Bước 5 không được bỏ qua** với bất kỳ thay đổi nào chạm: kho, tiền, phân
+🔒 **Bước 6 không được bỏ qua** với bất kỳ thay đổi nào chạm: kho, tiền, phân
 quyền, hoặc bất biến.
+
+### 3.1 🔒 Vì sao `pnpm build` là một bước riêng, không phải việc lúc triển khai
+
+`next dev` và `next build` là **hai trình biên dịch khác nhau**. `dev` biên dịch
+lười từng route, không rút gọn, và chỉ nhắm môi trường Node. `build` biên dịch
+toàn chương trình, rút gọn, nhắm cả trình duyệt lẫn Node, và truy vết dependency
+để đóng gói. Một lớp lỗi CHỈ tồn tại ở lớp sau — và `lint` với `typecheck` xanh
+hết.
+
+Bốn lỗi thật của dự án này, cả bốn đều lọt qua lint + typecheck + test:
+
+| Triệu chứng | Chỉ lộ ra ở |
+|---|---|
+| `node:crypto` lọt vào bundle trình duyệt qua barrel của `@garageos/domain` | `pnpm build` |
+| `output: standalone` truy vết sai gốc → `.next/standalone/` không có `server.js` | đọc cây build |
+| script `start` không tương thích standalone → mọi route động 404 | chạy bản build |
+| trình duyệt gọi API bằng header host không ký → form lead 404 | E2E trên bản build |
+
+⚠️ Ba lỗi cuối đều để `pnpm build` in ra **"successful"**. Một bản build xanh mà
+sản phẩm của nó không chạy được là kiểu hỏng tệ nhất: nó tiêu diệt đúng tín hiệu
+mà ta dựa vào để biết mình ổn.
+
+💡 Vì thế bước 5 không dừng ở "build không lỗi". Với thay đổi chạm `apps/*`,
+phải **chạy thử bản build** — `pnpm --filter <app> start` rồi mở vài route thật.
+E2E ở CI làm việc đó cho landing, sales-admin và web; nhưng ở máy, người sửa là
+người chạy.
 
 ## 4. Nguyên tắc không thoả hiệp
 
