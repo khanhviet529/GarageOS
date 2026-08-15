@@ -1,5 +1,61 @@
 {
   "$schema": "https://turbo.build/schema.json",
+
+  /*
+   * 🔒 Turbo 2 mặc định chạy task ở chế độ env NGHIÊM NGẶT: task chỉ nhận
+   *    những biến môi trường được khai ở đây, không phải cả môi trường của
+   *    tiến trình cha.
+   *
+   * ⚠️ Điều đó âm thầm cho tới khi có thứ gì KHÔNG có giá trị mặc định. Bộ test
+   *    trên `main` sống sót vì mọi chỗ đọc env đều có fallback:
+   *
+   *        process.env.DATABASE_ADMIN_URL ?? 'postgresql://…@localhost:5433/…'
+   *
+   *    `run-api-tests.mjs` (nhánh này thêm) tự khởi động API từ TRONG một task
+   *    của turbo, và `assertSecretsUsable()` CỐ Ý không có mặc định cho bí mật
+   *    JWT. Trên CI:
+   *
+   *        Khởi động thất bại: Cấu hình không an toàn, API từ chối khởi động:
+   *          • JWT_ACCESS_SECRET chưa được đặt
+   *          • JWT_REFRESH_SECRET chưa được đặt
+   *
+   * 💡 Fallback trong code làm cho việc thiếu cấu hình trông như không thiếu.
+   *    Chỗ duy nhất KHÔNG có fallback lại là chỗ đầu tiên nói ra sự thật — và
+   *    nó nói vào lượt CI thứ tư.
+   *
+   * Khai ở `globalEnv` chứ không `globalPassThroughEnv`: các biến này ĐỔI kết
+   * quả chạy, nên chúng phải nằm trong hash của cache.
+   */
+  "globalEnv": [
+    "CI",
+    "DATABASE_URL",
+    "DATABASE_ADMIN_URL",
+    "REDIS_URL",
+    "JWT_ACCESS_SECRET",
+    "JWT_REFRESH_SECRET",
+    "JWT_ACCESS_TTL",
+    "JWT_REFRESH_TTL",
+    "API_PORT",
+    "API_URL",
+    "WEB_ORIGIN",
+    "COOKIE_SECURE",
+    "OTP_DEV_ECHO",
+    "LOGIN_RATE_LIMIT_MAX",
+    "LOGIN_RATE_LIMIT_WINDOW_MS",
+    "LEAD_RATE_LIMIT_MAX",
+    "LEAD_RATE_LIMIT_WINDOW_MS",
+    "EDGE_HOST_TRUST",
+    "EDGE_SIGNING_SECRET",
+    "TRUST_PROXY_HOPS",
+    "LANDING_INTERNAL_API",
+    "PUBLIC_MEDIA_ORIGIN",
+    "MEDIA_ROOT",
+    "NEXT_PUBLIC_API_URL",
+    "NEXT_PUBLIC_DEMO_HINTS",
+    "NEXT_PUBLIC_PUBLIC_API_ORIGIN",
+    "NEXT_PUBLIC_ADMIN_API_ORIGIN"
+  ],
+
   "tasks": {
     "build":      { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**"] },
     "lint":       { "dependsOn": ["^build"] },
