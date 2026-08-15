@@ -50,7 +50,7 @@ test.describe('Trang bán xe công khai', () => {
   test('LD-E02 — trang chi tiết xe nói giá, và giá đó khớp một phiên bản có thật', async ({
     page,
   }) => {
-    await page.goto(`${LANDING}/xe/vinfast-vf-3`);
+    await page.goto(`${LANDING}/xe/aurora-e1`);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     /*
@@ -109,7 +109,7 @@ test.describe('Trang bán xe công khai', () => {
     expect(tenA).not.toEqual(tenB);
 
     // Xe của tenant A không được xuất hiện trên site của tenant B.
-    await expect(page.locator('a[href="/xe/vinfast-vf-3"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/xe/aurora-e1"]')).toHaveCount(0);
   });
 
   test('LD-E06 — ẢNH trên trang xe tải được thật, không phải ô trắng', async ({ page }) => {
@@ -127,7 +127,7 @@ test.describe('Trang bán xe công khai', () => {
      *    LD-E01..E05 đều xanh vì chúng kiểm chữ, không kiểm ảnh. Một trang bán
      *    xe không có ảnh xe thì không bán được gì.
      */
-    await page.goto(`${LANDING}/xe/vinfast-vf-3`);
+    await page.goto(`${LANDING}/xe/aurora-e1`);
 
     const anh = page.locator('img[src*="/media/"]').first();
     await expect(anh).toBeVisible();

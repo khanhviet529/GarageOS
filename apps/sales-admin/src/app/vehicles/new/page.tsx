@@ -46,7 +46,7 @@ export default function NewVehiclePage(): React.ReactElement {
         <label htmlFor="modelName">Dòng xe *<input id="modelName" name="modelName" required maxLength={100} /></label>
         <label htmlFor="slug">
           Slug (kebab-case, không đổi sau publish) *
-          <input id="slug" name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="vinfast-vf-3" />
+          <input id="slug" name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="aurora-e1" />
         </label>
         <label htmlFor="summary">Mô tả ngắn (≤ 500)<textarea id="summary" name="summary" rows={2} maxLength={500} /></label>
         <label htmlFor="description">Nội dung chi tiết (≤ 20.000)<textarea id="description" name="description" rows={5} maxLength={20000} /></label>

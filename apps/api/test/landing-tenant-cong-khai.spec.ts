@@ -49,7 +49,7 @@ const HOST_A = 'localhost';
 const HOST_B = 'garage-b.localhost';
 
 /** Slug sản phẩm đã publish của TENANT_A (seed) */
-const SLUG_A = 'vinfast-vf-3';
+const SLUG_A = 'aurora-e1';
 
 const uniq = `${Date.now().toString().slice(-6)}${process.pid.toString().slice(-3)}`;
 

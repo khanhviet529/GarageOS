@@ -34,6 +34,42 @@ export interface StorageProvider {
 
 export const STORAGE_PROVIDER = Symbol('StorageProvider');
 
+/**
+ * Thư mục media mặc định — neo vào GỐC MONOREPO, không vào `process.cwd()`.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * ⚠️ Bản trước dùng `join(process.cwd(), 'media', 'public')`, và `cwd` khác nhau
+ *    tuỳ ai gọi:
+ *
+ *      pnpm db:seed                    -> cwd = <gốc>            -> <gốc>/media/public
+ *      pnpm --filter @garageos/api dev -> cwd = <gốc>/apps/api   -> apps/api/media/public
+ *
+ *    Nghĩa là seed ghi ảnh vào một chỗ, còn API đọc ở chỗ khác. Triệu chứng
+ *    không hề trỏ về nguyên nhân: ảnh "đã nhập thành công" nhưng `/media/:key`
+ *    trả 404, và người xem sẽ đi tìm lỗi ở tầng khoá hoặc tầng quyền.
+ *
+ * 💡 `cwd` là thuộc tính của LỜI GỌI, không phải của dự án. Mọi giá trị mặc định
+ *    suy ra từ nó đều đổi theo người gọi — thứ cuối cùng ta muốn ở một đường dẫn
+ *    lưu trữ.
+ *
+ * Tìm gốc bằng `pnpm-workspace.yaml` — cùng dấu mốc mà pnpm và turbo dùng, nên
+ * nó đúng ở mọi chỗ mà hai công cụ đó chạy được.
+ */
+function thuMucMediaMacDinh(): string {
+  let thu = process.cwd();
+  for (let i = 0; i < 8; i += 1) {
+    if (existsSync(join(thu, 'pnpm-workspace.yaml'))) return join(thu, 'media', 'public');
+    const cha = resolve(thu, '..');
+    if (cha === thu) break;
+    thu = cha;
+  }
+  // Không tìm thấy gốc (bản build đóng gói lẻ) — quay về hành vi cũ, và nói ra.
+  console.warn(
+    'Không tìm thấy gốc monorepo để đặt MEDIA_ROOT. Dùng cwd — hãy đặt MEDIA_ROOT tường minh.',
+  );
+  return join(process.cwd(), 'media', 'public');
+}
+
 /** Tên file content-addressed: `<tenant>/<sha256>.<ext>` — SRS mục 6.7. */
 export function khoaTheoNoiDung(tenantId: string, data: Buffer, duoi: string): string {
   const sha = createHash('sha256').update(data).digest('hex');
@@ -198,7 +234,13 @@ export class S3Storage implements StorageProvider {
 export function dungStorageProvider(env: NodeJS.ProcessEnv = process.env): StorageProvider {
   const driver = env['STORAGE_DRIVER'] ?? 'local';
   if (driver === 'local') {
-    return new LocalStorage(env['MEDIA_ROOT'] ?? join(process.cwd(), 'media', 'public'));
+    /*
+     * ⚠️ Chuỗi RỖNG cũng là "chưa đặt". `.env` khai `MEDIA_ROOT=` để nói "dùng
+     *    mặc định", nhưng `??` chỉ rơi về mặc định với `null`/`undefined` — nên
+     *    chuỗi rỗng đi thẳng qua và mọi đường dẫn thành tương đối.
+     */
+    const goc = env['MEDIA_ROOT'] ?? '';
+    return new LocalStorage(goc === '' ? thuMucMediaMacDinh() : goc);
   }
   if (driver !== 's3') {
     throw new Error(`STORAGE_DRIVER không hợp lệ: ${driver} (chỉ nhận 'local' hoặc 's3')`);
