@@ -598,14 +598,29 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
      * khai báo miễn trừ vẫn bị liệt kê, và cách sửa nhanh nhất trông như là
      * "xoá cái assert phiền phức này đi".
      */
-    const chuanHoa = (r: string): string => r.replace(/:[a-zA-Z]+/g, ':x');
+    /*
+     * ⚠️ Chuẩn hoá phải nuốt cả ĐẶC TẢ ĐƯỜNG DẪN, không chỉ tên tham số.
+     *
+     * Bản trước đổi `:ten` thành `:x` rồi ghép thẳng phần còn lại vào `RegExp`.
+     * Với một route hợp lệ như `media/:key(*)` — cú pháp Express để bắt cả phần
+     * chứa dấu `/` — chuỗi ghép ra là:
+     *
+     *     /^media\/[^\/?]+(*)(\?|$)/     ->  SyntaxError: Nothing to repeat
+     *
+     * Hàng rào không báo "thiếu route", nó ĐỔ VỠ. Và một hàng rào đổ vỡ thì cách
+     * sửa nhanh nhất luôn trông như "xoá cái assert phiền phức này đi" — đúng
+     * thứ mà chú thích ngay phía trên đã cảnh báo, chỉ ở một dạng khác.
+     */
+    const chuanHoa = (r: string): string => r.replace(/:[a-zA-Z]+(\([^)]*\))?/g, ':x');
     const boQuaChuanHoa = new Set(Object.keys(boQua).map(chuanHoa));
 
     const thieu = routes
       .map(chuanHoa)
       .filter((r) => !boQuaChuanHoa.has(r))
       .filter((r) => {
-        const mau = r.replace(/:x/g, '[^/?]+').replace(/\//g, '\\/');
+        // Thoát TOÀN BỘ phần cố định TRƯỚC, rồi mới thay chỗ giữ. Đảo thứ tự là
+        // để `(`, `*`, `.` trong route chảy thẳng vào regex.
+        const mau = r.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&').replace(/:x/g, '[^/?]+');
         return ![...duongDan, ...duongDanTrucTiep].some((d) =>
           new RegExp(`^${mau}(\\?|$)`).test(d.replace(/^\//, '')),
         );

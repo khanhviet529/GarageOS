@@ -28,6 +28,24 @@ export const ACTION_ROLES = {
   'repairOrder:create': ['SERVICE_ADVISOR', 'BRANCH_MANAGER', 'OWNER'],
 
   /**
+   * 🔒 Tải ảnh hiện trạng lên — BC-01 bước 6.
+   *
+   * THỢ có quyền này, khác với `repairOrder:create`. Người đứng cạnh chiếc xe
+   * lúc phát hiện một vết trầy là người thợ, không phải cố vấn dịch vụ ngồi ở
+   * quầy — bắt họ đi tìm cố vấn để chụp hộ là cách chắc chắn khiến tấm ảnh đó
+   * không bao giờ được chụp.
+   *
+   * Thu ngân và thủ kho KHÔNG có: họ không đứng ở khoang sửa chữa, và mọi quyền
+   * ghi thừa đều là một đường vào thừa.
+   */
+  'repairOrder:photoWrite': [
+    'SERVICE_ADVISOR',
+    'BRANCH_MANAGER',
+    'OWNER',
+    'TECHNICIAN',
+  ],
+
+  /**
    * 🔒 ĐỌC đơn sửa chữa — danh sách xe trong xưởng và chi tiết đơn.
    *
    * Suốt Phase 1–4 quyền này không tồn tại: mọi vai đều là người của xưởng,
@@ -274,6 +292,7 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'customer:create': 'tạo hồ sơ khách hàng',
   'vehicle:create': 'tạo hồ sơ xe',
   'repairOrder:create': 'tiếp nhận xe',
+  'repairOrder:photoWrite': 'tải ảnh hiện trạng',
   'repairOrder:read': 'xem đơn sửa chữa',
   'quotation:write': 'lập hoặc sửa báo giá',
   'quotation:send': 'gửi báo giá cho khách',

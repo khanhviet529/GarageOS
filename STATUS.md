@@ -1,6 +1,6 @@
 # Trạng thái dự án
 
-> Cập nhật: 2026-08-08 · Nhánh `feat/phase-3-tien` · **Phase 1–8 xong**
+> Cập nhật: 2026-08-15 · Nhánh `main` · **Phase 1–8 xong + landing bán xe**
 > (Phase 3 làm sau cùng, có chủ ý — [ADR-0008](docs/adr/0008-bo-qua-hoa-don-co-chu-y.md))
 
 ## Đang ở đâu
@@ -33,6 +33,7 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 | 4.4 | Báo phát sinh từ app | ✅ |
 | 4.5 | 🔒 Thợ không thấy tiền — **vá 3 lỗ hổng** | ✅ |
 | 4.3, 4.6 | Chụp ảnh (chờ lưu trữ đối tượng), build APK (chờ tài khoản Expo) | 🟡 |
+| L | Landing bán xe: catalog, trải nghiệm 360°, lead, Sales Admin | ✅ merged |
 | 3 | Hoá đơn từ công việc thực tế, thanh toán, công nợ, bảo hiểm, HĐĐT | ✅ |
 | 5.1–5.2 | Bảo hành hạn kép, chi phí bảo hành quy về đơn gốc (BC-09) | ✅ |
 | 5.3 | Huỷ đơn giữa chừng + quyết toán phần dở dang (BC-10) | ✅ |
@@ -46,11 +47,15 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 499 (domain 12, db 42, api 445) |
-| E2E Playwright | 73 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 54 |
-| Vòng review đã chạy | 10 vòng `/codex-review` + 1 vòng rà soát toàn dự án |
-| Phát hiện đã xử lý | 25 + ~50 |
+| Test tự động | 615 (domain 42, db 42, api 521, infra 10) |
+| E2E Playwright | 86 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 63 |
+| Vòng review đã chạy | 10 vòng `/codex-review` + 2 vòng rà soát thủ công |
+| Phát hiện đã xử lý | 25 + ~50 + 22 |
+
+🔒 Bộ test **độc lập với thứ tự chạy**: chạy E2E sinh đoạn giờ thật rồi chạy bộ
+API ngay sau, hai lượt liên tiếp, đều 521/521. Đây từng không đúng — xem mục
+"Vòng rà soát landing" bên dưới.
 
 Mỗi vòng review có bản ghi trong [`docs/reviews/`](docs/reviews/README.md), kèm
 test nào đỏ trước khi sửa.
@@ -261,6 +266,40 @@ theo tenant chứ không theo chi nhánh. Bản dùng được quét theo **id t
 tạo dữ liệu ở chi nhánh kia, rồi thử gọi mọi route bằng tài khoản chi nhánh này.
 Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng câu trả lời.
 
+## Vòng rà soát landing bán xe — 22 phát hiện, và ba chỗ KHÔNG CÓ AI CANH
+
+Chi tiết: [`docs/reviews/2026-08-15-ket-luan-ra-soat-landing.md`](docs/reviews/2026-08-15-ket-luan-ra-soat-landing.md).
+
+Điều đáng nói nhất không nằm ở con số 22. Nó nằm ở chỗ **tám phát hiện nặng nhất
+đều thuộc loại "chạy được ở máy dev, hỏng ở nơi thật"** — và cả tám đều đi qua
+được một bộ 510 bài kiểm API đang xanh.
+
+| Chạy được ở máy dev | Hỏng ở nơi thật |
+|---|---|
+| Form lead gửi bình thường | Trình duyệt gửi header host KHÔNG ký → `alert: Không tìm thấy trang` |
+| Showroom 360° mở được | Cùng nguyên nhân → 404 `SITE_NOT_FOUND` |
+| `pnpm dev` mọi route lên đủ | `next start` không tương thích `output: standalone` → mọi route động 404 |
+| `pnpm build` in ra "successful" | `.next/standalone/` không có `server.js` |
+
+### Ba khoảng trống, mỗi cái sinh ra nhiều lỗi cùng lúc
+
+| Khoảng trống | Bịt bằng |
+|---|---|
+| `infra/` (1.856 dòng, chạy bằng `DATABASE_ADMIN_URL` — quyền cao nhất, bỏ qua RLS) **chưa từng được kiểm kiểu, cũng không có bài kiểm nào**. Lượt kiểm kiểu đầu tiên bắt ngay hai lỗi có sẵn | `infra/tsconfig.json` vào `pnpm typecheck`; `pnpm test:infra` vào CI |
+| `pnpm build` không nằm trong quy trình. Bốn lỗi chỉ tồn tại ở bản build; **ba trong bốn còn để build in ra "successful"** | [CONTRIBUTING mục 3.1](CONTRIBUTING.md) — và bước này không dừng ở "build không lỗi", phải CHẠY THỬ bản build |
+| Landing và Sales Admin **chưa từng chạy E2E**, trong khi `package.json` ghi `"test": "echo 'E2E chạy riêng bằng playwright'"` | 10 kịch bản mới; CI khởi động cả năm app |
+
+⚠️ Nhánh này cũng **chưa từng có một lượt CI xanh** — lockfile là bản pnpm 8,
+`--env-file=.env` mà CI không có `.env`, và turbo 2 lọc biến môi trường nên API
+khởi động trong task không thấy bí mật JWT. Nghĩa là toàn bộ phần rà soát trước
+đó chỉ dựa vào kết quả chạy ở máy — đúng loại tin cậy mà CI sinh ra để thay thế.
+
+### Khuôn mới ghi nhận
+
+**Một tham số được nhận nhưng không dùng.** `listProducts` nhận `cursor`, trả
+`nextCursor`, và không đưa `cursor` vào câu SQL. Tệ hơn một tham số không tồn
+tại: API trả `nextCursor`, tức là NÓI RẰNG phân trang hoạt động.
+
 ## Nợ kỹ thuật đã biết
 
 | Nợ | Vì sao chấp nhận bây giờ |
@@ -282,7 +321,8 @@ Không endpoint nào tự khai báo gì cả — nó phải chứng minh bằng 
 
 | Nợ | Trả bằng |
 |---|---|
-| Ba bài test bấm giờ đỏ nếu chạy lượt hai mà chưa seed lại | `before()` của `time-log.spec.ts` và `huy-don.spec.ts` đóng mọi đoạn giờ còn mở — đúng việc `dong_ho_gio_bo_quen()` làm trong đời thật. Một đoạn chưa đóng kéo dài tới vô cùng nên chồng lên mọi đoạn khác của cùng người thợ; một lượt chạy hỏng giữa chừng làm MỌI lượt sau đỏ, ở những bài chẳng liên quan. Đã báo động nhầm hai lần trong một ngày |
+| Bộ test phụ thuộc thứ tự chạy — CI đỏ rồi xanh trên CÙNG một commit | ⚠️ Bản vá đầu (đóng đoạn mở thành khoảng 1 tiếng) **tự tạo ra đúng cái xung đột nó định ngăn** — khoảng đó vẫn nằm chỗ fixture lượt sau sẽ dựng. Thử hai cách lọc hẹp hơn vẫn sót (10 đỏ → 3 → 2 → 1). Đếm dữ liệu seed mới lộ ra gốc: seed đặt đoạn giờ ở **mốc đồng hồ cố định** (8h sáng giờ VN) còn fixture dựng theo `now()`, nên bộ test sẽ đỏ nếu tình cờ chạy trong khung 08:00–09:20. Trả bằng `apps/api/test/_don-doan-gio.ts` — dựng lại một trạng thái đã biết, thay vì cố phân biệt rác với dữ liệu |
+| `capNhatLeoThang` so hai đồng hồ khác nhau | Tính `Date.now()` của Node trừ mốc do `now()` của Postgres ghi. Ở mốc TRÒN — mà mọi ngưỡng leo thang đều tròn — lệch một phần nghìn giây là nhảy bậc: `OVERDUE` thay vì `UNREACHABLE`. **Không phải chuyện riêng của test**: đồng hồ app lệch vài giây so với đồng hồ DB là bình thường, và bậc đó quyết định có gửi thư bảo đảm hay không. Số ngày giờ tính bằng SQL |
 | Token đăng nhập để trong `localStorage` | Cookie `HttpOnly` + xoay vòng refresh token + chống CSRF. Điểm mấu chốt không phải "web đừng lưu token" mà là **máy chủ không gửi token cho web nữa** — không có gì để lưu. App thợ xin token bằng `X-Auth-Mode: token` vì Expo không dùng cookie đáng tin được. 10 bài ở `phien-cookie.spec.ts` |
 | Thuế suất nhận từ client | 0022 mục B. Phụ tùng lấy `price_list_item.tax_rate_percent` (cột có từ 0008, chưa ai đọc); dòng công lấy `tenant.default_tax_rate_percent` (cột mới — VAT là chính sách cấp doanh nghiệp, đổi thì sửa một chỗ) |
 | PR-03 không được enforce | `assertDiscountWithinAuthority()` trong `QuotationService`. Kiểm theo TỪNG DÒNG: chiết khấu % của cả tờ báo giá là trung bình có trọng số của các dòng, nên kiểm từng dòng vừa chặt hơn vừa không tách nhỏ để lách được |

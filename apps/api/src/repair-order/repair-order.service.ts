@@ -9,12 +9,15 @@ import {
   type RepairOrderStatus,
   type ActorContext,
   type CreateRepairOrderInput,
+  type UploadPhotoInput,
   type RepairOrderDetail,
   type RepairOrderListItem,
 } from '@garageos/contracts';
 import { REPAIR_ORDER_STATUS_LABEL, ORDER_ACTION_LABEL } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { assertCan, branchScope } from '../common/permissions';
+import { MediaStorage } from '../media/media-storage';
+import { khoaTheoNoiDung } from '../media/storage-provider';
 
 /**
  * Số km chênh lệch lớn bất thường — BC-01 mục 4.
@@ -24,7 +27,10 @@ const ODOMETER_JUMP_WARNING_KM = 50_000;
 
 @Injectable()
 export class RepairOrderService {
-  constructor(@Inject(TenantAwareDb) private readonly db: TenantAwareDb) {}
+  constructor(
+    @Inject(TenantAwareDb) private readonly db: TenantAwareDb,
+    @Inject(MediaStorage) private readonly media: MediaStorage,
+  ) {}
 
   /**
    * Tiếp nhận xe — BC-01.
@@ -243,6 +249,77 @@ export class RepairOrderService {
       return new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy chi nhánh hoặc xe');
     }
     return err;
+  }
+
+  /**
+   * Tải ảnh hiện trạng lên — BC-01 bước 6.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * 🔒 Thứ tự BẮT BUỘC: ghi file TRƯỚC, ghi hàng DB SAU.
+   *
+   * Đảo lại thì một lần ghi file hỏng để lại hàng DB trỏ vào một key không tồn
+   * tại — và màn hình đơn sẽ hiện một ô ảnh vỡ mà không ai biết vì sao. Làm
+   * đúng thứ tự này thì lỗi tệ nhất là một file mồ côi trên storage: tốn vài
+   * trăm KB, không nói dối ai.
+   *
+   * 💡 Key content-addressed nên ghi lại cùng nội dung là ghi đè chính nó. Hai
+   *    người chụp trùng một tấm ảnh sẽ dùng chung một file, và điều đó ĐÚNG —
+   *    hai hàng DB vẫn riêng vì mỗi hàng là một lần ghi nhận khác nhau.
+   */
+  async themAnh(
+    actor: ActorContext,
+    orderId: string,
+    input: UploadPhotoInput,
+  ): Promise<{ id: string; storageKey: string }> {
+    assertCan(actor, 'repairOrder:photoWrite');
+
+    /*
+     * 🔒 Giải mã TRƯỚC khi chạm database.
+     *
+     * `Buffer.from(x, 'base64')` không bao giờ ném lỗi — nó bỏ qua mọi ký tự
+     * không hợp lệ và trả về những gì giải mã được, kể cả một buffer rỗng. Nên
+     * phải tự kiểm: một chuỗi rác lọt qua sẽ thành một "tấm ảnh" 0 byte nằm
+     * trong hồ sơ bằng chứng của chiếc xe.
+     */
+    const data = Buffer.from(input.dataBase64, 'base64');
+    if (data.length === 0) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Dữ liệu ảnh không đọc được');
+    }
+    if (!laAnhThat(data, input.contentType)) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        'Nội dung tệp không khớp loại ảnh đã khai',
+      );
+    }
+
+    return this.db.withTenant(actor, async (tx) => {
+      // Đơn phải tồn tại VÀ nằm trong phạm vi chi nhánh của người gửi.
+      const scope = branchScope(actor);
+      const scopeSql = scope.sql === '' ? '' : ` AND ${scope.sql.replace('$#', '$2')}`;
+      const { rows } = await tx.query<{ id: string }>(
+        `SELECT ro.id FROM repair_order ro WHERE ro.id = $1${scopeSql}`,
+        scope.params.length === 0 ? [orderId] : [orderId, scope.params],
+      );
+      if (rows[0] === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy đơn sửa chữa');
+      }
+
+      const duoi = input.contentType === 'image/jpeg' ? 'jpg'
+        : input.contentType === 'image/png' ? 'png' : 'webp';
+      const storageKey = khoaTheoNoiDung(actor.tenantId, data, duoi);
+      await this.media.writePublic(storageKey, data, input.contentType);
+
+      const { rows: anh } = await tx.query<{ id: string }>(
+        `INSERT INTO repair_order_photo
+           (tenant_id, repair_order_id, phase, storage_key, caption, taken_by_user_id)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [
+          actor.tenantId, orderId, input.phase, storageKey,
+          input.caption ?? null, actor.userId,
+        ],
+      );
+      return { id: anh[0]!.id, storageKey };
+    });
   }
 
   async getById(actor: ActorContext, id: string): Promise<RepairOrderDetail> {
@@ -540,4 +617,42 @@ export class RepairOrderService {
       return { status: input.to, version: Number(order.version) + 1 };
     });
   }
+}
+
+/**
+ * 🔒 Nội dung tệp phải KHỚP loại ảnh client khai.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * `contentType` do client gửi, và nó quyết định đuôi file máy chủ ghi ra — tức
+ * nó chảy thẳng vào header `Content-Type` khi ảnh được phục vụ lại từ
+ * `/media/:key`, cùng origin với API.
+ *
+ * ⚠️ Không kiểm nội dung thì một tệp HTML khai là `image/png` sẽ được lưu dưới
+ *    đuôi `.png` và trả về với `Content-Type: image/png`. Trình duyệt hiện đại
+ *    tôn trọng header đó (và `X-Content-Type-Options: nosniff` đã bật), nên
+ *    đường XSS bị chặn — nhưng nó chặn nhờ một lớp phòng thủ ở TẦNG KHÁC.
+ *
+ * 💡 Một lớp bảo vệ duy nhất là một lớp không ai kiểm được. Kiểm chữ ký ở đây
+ *    tốn tám dòng và làm cho câu "đây là ảnh PNG" trở thành sự thật ngay tại
+ *    chỗ nó được khẳng định, thay vì một lời khai được tin.
+ *
+ * Chỉ đọc vài byte đầu — đủ để phân biệt ba định dạng được phép, và không kéo
+ * theo một thư viện xử lý ảnh nào.
+ */
+function laAnhThat(data: Buffer, contentType: string): boolean {
+  if (contentType === 'image/jpeg') {
+    return data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+  }
+  if (contentType === 'image/png') {
+    return (
+      data.length > 8 &&
+      data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    );
+  }
+  // WebP: "RIFF" .... "WEBP"
+  return (
+    data.length > 12 &&
+    data.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    data.subarray(8, 12).toString('ascii') === 'WEBP'
+  );
 }
