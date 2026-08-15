@@ -327,26 +327,30 @@ describe('🔒 Phân trang danh sách lead', () => {
     );
     const branchId = bRows[0]!.id;
 
-    // Ba lead của riêng bài này, nhận ra được nhờ hậu tố trong tên.
+    /*
+     * 🔒 Ba lead này dựng bằng SQL, KHÔNG qua endpoint công khai.
+     *
+     * ⚠️ `LeadRateLimitGuard` cho 10 lượt mỗi (hostname, IP) trong 10 phút, và
+     *    bộ đếm nằm trong BỘ NHỚ tiến trình API — nó sống qua nhiều lượt chạy
+     *    test liên tiếp. Bản đầu của bài này gọi endpoint thật ba lần; chạy cả
+     *    bộ ba lượt trong mười phút là hạn mức cạn, và bài đỏ với `RATE_LIMITED`
+     *    chứ không phải vì phân trang sai.
+     *
+     * 💡 Bài này kiểm PHÂN TRANG, không kiểm việc tạo lead. Dữ liệu dựng sẵn thì
+     *    dựng bằng con đường rẻ nhất — đúng như `lead-thao-tac-ghi.spec.ts` và
+     *    `lead-luu-tru.spec.ts` vẫn làm. `PT-T05` mới là bài phải đi qua endpoint
+     *    thật, và nó chỉ tốn một lượt.
+     */
     const tenDaTao: string[] = [];
     for (const i of [1, 2, 3]) {
       const ten = `Khách phân trang ${uniq}-${i}`;
-      const r = await fetch(`${API}/api/v1/public/leads`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-garageos-original-host': HOST_A,
-          'x-garageos-original-host-signature': kyHost(HOST_A),
-        },
-        body: JSON.stringify({
-          fullName: ten,
-          phone: `09${uniq.slice(0, 6)}${i}0`.slice(0, 10),
-          branchId,
-          intent: 'TEST_DRIVE',
-          consentAccepted: true,
-        }),
-      });
-      assert.equal(r.status, 201, `tạo lead ${i}: ${await r.text()}`);
+      await pool.query(
+        `INSERT INTO sales_lead
+           (tenant_id, branch_id, reference, full_name, phone_normalized,
+            intent, source, consent_version, consented_at)
+         VALUES ($1,$2,$3,$4,$5,'TEST_DRIVE','LANDING','2026-08-1', now())`,
+        [TENANT_A, branchId, `PT-${uniq}-${i}`, ten, `09${uniq.slice(0, 6)}${i}`.slice(0, 10)],
+      );
       tenDaTao.push(ten);
     }
 

@@ -346,17 +346,41 @@ describe('🔒 Kiểm tra cấu hình lúc khởi động', () => {
     // Không khởi động lại API được trong test tích hợp, nên kiểm thẳng hàm.
     // Đây là hàm quyết định API có chạy hay không — logic của nó phải đúng.
     const { assertSecretsUsable } = await import('../src/common/startup-checks');
-    const goc = { ...process.env };
 
+    /*
+     * 🔒 Mỗi ca thử chạy trên môi trường TRỐNG cộng đúng những biến nó khai báo.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ⚠️ Bản trước dùng `Object.assign(process.env, env)` — ghi ĐÈ LÊN môi
+     *    trường sẵn có và giữ nguyên mọi biến không được nhắc tới. Với ca cuối,
+     *    ca khẳng định "cấu hình production hợp lệ phải được chấp nhận", nghĩa
+     *    là nửa đề bài đến từ file `.env` của máy đang chạy:
+     *
+     *        cấu hình production hợp lệ bị từ chối
+     *          • OTP_DEV_ECHO=true ở production — …
+     *          • LOGIN_RATE_LIMIT_MAX=1000 ở production — …
+     *
+     *    Hai giá trị đó là giá trị DEV hợp lý; không ai đặt sai cả. Bài kiểm
+     *    xanh trên CI (nơi `.env` khác) và đỏ trên mọi máy phát triển — đúng
+     *    loại đỏ mà người ta học cách bỏ qua.
+     *
+     * 💡 Một bài kiểm hỏi "cấu hình NÀO được chấp nhận" thì phải SỞ HỮU toàn bộ
+     *    cấu hình đó. Kế thừa dù chỉ một biến là để môi trường bên ngoài viết
+     *    một phần đề bài.
+     *
+     * Thay cả `process.env` chứ không xoá một danh sách biến: danh sách viết
+     * tay sẽ lỗi thời ngay lần đầu ai đó thêm một kiểm tra đọc biến mới.
+     */
     const thu = (env: Record<string, string | undefined>) => {
-      Object.assign(process.env, env);
+      const goc = process.env;
+      process.env = { ...env } as NodeJS.ProcessEnv;
       try {
         assertSecretsUsable();
         return null;
       } catch (e) {
         return (e as Error).message;
       } finally {
-        process.env = { ...goc };
+        process.env = goc;
       }
     };
 
