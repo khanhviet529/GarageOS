@@ -376,9 +376,36 @@ export class AbandonmentService {
     const chinhSach = cs[0]!;
     const graceDays = Number(chinhSach.storage_fee_grace_days);
 
-    const soNgay = Math.floor(
-      (Date.now() - don.ready_for_delivery_at.getTime()) / (24 * 3600 * 1000),
+    /*
+     * 🔒 Số ngày tính bằng đồng hồ CỦA DATABASE, không phải của tiến trình Node.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ⚠️ Bản trước dùng `Date.now()`, trong khi `ready_for_delivery_at` được ghi
+     *    bằng `now()` của Postgres. Hai đồng hồ, một phép trừ.
+     *
+     *    Ở mốc tròn — đúng thứ mà mọi ngưỡng leo thang đều là — chỉ cần lệch một
+     *    phần nghìn giây là kết quả nhảy sang bậc khác:
+     *
+     *        + 'OVERDUE'        (actual)
+     *        - 'UNREACHABLE'    (expected)
+     *
+     *    Đo được ở `xe-bo-quen.spec.ts` bài 4: đỏ rồi xanh trên CÙNG một commit.
+     *    API chạy trong tiến trình Node của máy, Postgres chạy trong Docker —
+     *    hai nguồn thời gian, và không có gì buộc chúng khớp nhau.
+     *
+     * 💡 Lần thứ SÁU dự án dính bẫy thời gian, và là lần đầu không phải chuyện
+     *    múi giờ mà là chuyện HAI NGUỒN. Khuôn chung vẫn thế: một đại lượng
+     *    được suy ra từ hai chỗ đo khác nhau.
+     *
+     * Hệ quả thật, không chỉ ở test: đồng hồ máy chủ ứng dụng lệch vài giây so
+     * với máy chủ database là chuyện bình thường, và khi đó một chiếc xe đúng
+     * 30 ngày có thể bị xếp nhầm bậc — bậc quyết định có gửi thư bảo đảm hay không.
+     */
+    const { rows: ngayRows } = await tx.query<{ so_ngay: string }>(
+      `SELECT FLOOR(EXTRACT(EPOCH FROM (now() - $1::timestamptz)) / 86400)::text AS so_ngay`,
+      [don.ready_for_delivery_at],
     );
+    const soNgay = Number(ngayRows[0]!.so_ngay);
 
     /*
      * Mức leo thang KHÔNG phụ thuộc chính sách phí: một garage không thu phí lưu
