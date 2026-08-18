@@ -1625,3 +1625,70 @@ ra, như Task 2 đang làm.
 bật đầu tiên (`products[0]`). Khi tenant có nhiều xe, một bộ chọn xe trong phiếu
 sẽ hợp lý hơn — nhưng nó cần state phía client và một endpoint gọi lại theo slug,
 nên tách thành việc riêng thay vì nhồi vào đây.
+
+---
+
+## Kết quả thực hiện — 2026-08-19
+
+Đã thực hiện toàn bộ, 8 commit trên nhánh `feat/landing-he-thong-thi-giac`.
+
+| Task | Trạng thái | Ghi chú |
+|---|---|---|
+| 0 — dark cinematic | ✅ | Phải đổi thêm 1 token ngoài plan: xem dưới |
+| 1 — `tomTatChiPhi` | ✅ | 7 test, tổng 58/58 test domain xanh |
+| 2 — fetch SSR | ✅ | Thêm `ngayVietNam()` ngoài plan: xem dưới |
+| 3 — phiếu chi phí | ✅ | |
+| 4 — băng so sánh | ✅ | |
+| 5 — gắn trang chủ | ✅ | |
+| 6 — lịch bảo dưỡng | ⚠️ **ĐỔI PHẠM VI** | xem dưới |
+| 7 — e2e | ✅ | Thêm LD-E10 ngoài plan |
+
+### Ba điều lệch khỏi plan, và vì sao
+
+**Task 0 — `--brand` không phải `#e63b2e`.** Plan đặt `--brand: #e63b2e` theo bản
+tham chiếu. Script kiểm tương phản bắt được: đỏ đó đạt 4.72:1 trên `--surface-0`
+nhưng chỉ 4.46 / 4.22 / 3.78:1 trên ba tầng bề mặt còn lại, trong khi `--brand`
+được dùng làm **chữ** ở 5 chỗ. Đổi thành `#f9553f` (4.81–6.00:1 trên cả bốn
+tầng). Trên nền tối, một đỏ signal đạt AA buộc phải sáng hơn một bậc — đó là cái
+giá của hướng tối, không phải lựa chọn thẩm mỹ.
+
+**Task 2 — thêm `ngayVietNam()`.** Plan cho `apDungTu: v['ápDụngTừ']` đi thẳng ra
+trang. Khi xem thực tế thì dòng xuất xứ in ra
+`hiệu lực từ 2025-12-31T17:00:00.000Z` — timestamp máy, **và lệch ngày**: 17:00Z
+là 01/01/2026 ở giờ Việt Nam. Cả khối phiếu tồn tại để con số kiểm chứng được,
+nên một ngày hiệu lực sai làm hỏng đúng điều nó khẳng định. Đã format theo
+`Asia/Ho_Chi_Minh` và thêm LD-E10 chặn ISO lọt ra trang.
+
+**Task 6 — bỏ `LichBaoDuong`, làm việc khác.** Tiền đề của task trong plan sai:
+plan nói trang chi tiết "thiếu phần trả lời xưởng sẽ làm gì", nhưng
+`chi-phi-so-huu.tsx:115` **đã** render `n.hangMuc.join(' · ')` — bảng hiện tại đã
+liệt kê đủ hạng mục từng năm, kèm cả trường hợp rỗng. Tiền đề đó được suy từ
+shape của contract mà không đọc component đang render. Component mới sẽ là bản
+trùng lặp hoàn toàn, nên đã bỏ.
+
+Điều thật sự cần sửa lộ ra khi xem bằng mắt: **không có `scroll-padding-top`**.
+Header là `position: sticky` cao 72px, nên neo `#chi-phi` cuộn tới đúng toạ độ
+rồi bị header phủ lên. Không có lỗi nào phát ra, và LD-E09 vẫn xanh vì phần tử
+thật sự tồn tại và đã được cuộn tới — chỉ người dùng nhìn thấy vấn đề. Đã thêm
+`scroll-padding-top: 88px`.
+
+### Kiểm chứng
+
+- `pnpm typecheck` — 8/8 task xanh
+- `pnpm --filter @garageos/domain test` — 58/58
+- `node infra/kiem-tuong-phan.mjs` — 25/25 cặp đạt
+- `pnpm --filter @garageos/landing lint` — sạch
+- `next build` — sạch. **First Load JS không đổi (106 kB)**: hai khối mới là
+  server component nên không thêm bundle client
+- Playwright — **13/13**: 10 bài `landing-cong-khai` (7 cũ + LD-E08/E09/E10) và
+  3 bài a11y landing (axe: 0 lỗi WCAG A/AA)
+- Screenshot 4 trang ở nhiều viewport, kiểm bằng mắt dấu tiếng Việt ở chữ hoa
+  condensed cỡ lớn **không bị cắt**
+
+### Còn mở
+
+- Trang chủ chỉ hiện chi phí của `products[0]`. Bộ chọn xe trong phiếu cần state
+  client và một lần gọi lại theo slug — tách thành việc riêng.
+- Chưa chạy e2e của `apps/web` và `sales-admin` (cần server ở port 3000). Thay
+  đổi không chạm `apps/web`, `apps/api` hay `packages` ngoài `domain`; file dùng
+  chung duy nhất là `e2e/accessibility.spec.ts` và chỉ được **thêm** vào cuối.
