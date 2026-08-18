@@ -889,3 +889,43 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 .phieu-nguon strong { color: var(--text); }
 .phieu-cta { margin: var(--s-6) 0 0; }
+
+/* ═══════════════════════ So sánh điện / xăng ═══════════════════════ */
+
+.so-sanh { padding: var(--s-9) 0; }
+.so-sanh h2 {
+  max-width: 32ch;
+  margin: var(--s-4) 0 var(--s-7);
+  font-size: var(--fs-2xl);
+}
+
+.so-sanh-thanh { display: grid; gap: var(--s-5); margin: 0; max-width: 46rem; }
+.so-sanh-thanh dt {
+  margin-bottom: var(--s-2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.so-sanh-thanh dd {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * Thanh là ĐỒ HOẠ và mang `aria-hidden`, nên nó chỉ cần đạt 3:1 (SC 1.4.11).
+ * Con số bên cạnh mới là thông tin, và nó lấy màu chữ thường.
+ */
+.thanh-ve {
+  block-size: 12px;
+  flex: 0 0 auto;
+  background: var(--action);
+}
+.thanh-ve--doi-chung {
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+}
+.so-sanh .note { max-width: var(--measure); margin-top: var(--s-6); }
