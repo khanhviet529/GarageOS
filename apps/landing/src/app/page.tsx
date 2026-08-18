@@ -2,6 +2,9 @@ import Link from 'next/link';
 import { requestHost, fetchPublic, noIndex } from '@/lib/api';
 import { loadSite } from '@/lib/site';
 import { Gia } from '@/components/gia';
+import { layChiPhiTrangChu } from '@/lib/chi-phi';
+import { PhieuChiPhi } from '@/components/phieu-chi-phi';
+import { SoSanhDongCo } from '@/components/so-sanh-dong-co';
 import { buildMetadata } from '@/lib/seo';
 import { Header, Footer } from '@/components/chrome';
 import { buildPageTitle } from '@garageos/domain';
@@ -33,6 +36,15 @@ export default async function HomePage(): Promise<React.ReactElement> {
    *    (`.hero-media__empty`) — một trạng thái rỗng có chủ ý, không phải ô vỡ.
    */
   const noiBat = products[0] ?? null;
+
+  /*
+   * Chi phí sở hữu của xe nổi bật. Lấy ở server để nó vào HTML đầu tiên — đây là
+   * con số đáng được crawl và đáng hiện khi JS chưa chạy.
+   *
+   * `layChiPhiTrangChu` không bao giờ ném; `null` nghĩa là tenant chưa cấu hình
+   * bảng giá hoặc lịch bảo dưỡng, và trang chủ khi đó thiếu một khối thay vì lỗi.
+   */
+  const chiPhi = noiBat === null ? null : await layChiPhiTrangChu(noiBat.slug);
 
   /*
    * Ảnh hero là ẢNH CHỤP do showroom chọn (`site_profile.hero_media_id`), khác
@@ -95,11 +107,27 @@ export default async function HomePage(): Promise<React.ReactElement> {
                 <Link className="btn" href="/xe">Khám phá dòng xe</Link>
                 <Link className="btn btn-secondary" href="/lien-he">Đăng ký lái thử</Link>
               </div>
-              <div className="trust-row" aria-label="Cam kết dịch vụ">
-                <span>Giá niêm yết công khai</span>
-                <span>Lái thử theo lịch của bạn</span>
-                <span>Hậu mãi liền mạch</span>
-              </div>
+              {/*
+                ⚠️ Ba dòng "Giá niêm yết công khai · Lái thử theo lịch của bạn ·
+                   Hậu mãi liền mạch" đã bị bỏ. Cả ba là tính từ, không có số nào,
+                   và bất kỳ đại lý nào cũng viết được — nên chúng không phân biệt
+                   được gì.
+
+                💡 Thay bằng một con số có nguồn, dẫn xuống phiếu chi phí. Nếu
+                   tenant chưa có bảng giá thì hero không nói gì thêm, và như vậy
+                   vẫn trung thực hơn ba tính từ.
+              */}
+              {chiPhi !== null && (
+                <p className="trust-row" aria-label="Chi phí bảo dưỡng dự kiến">
+                  <span>
+                    Bảo dưỡng {chiPhi.tomTat.soNam} năm đầu:{' '}
+                    <strong className="tnum">
+                      {new Intl.NumberFormat('vi-VN').format(chiPhi.tomTat.tong)} ₫
+                    </strong>{' '}
+                    — tính từ {chiPhi.tenBangGia}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
         </section>
@@ -183,6 +211,14 @@ export default async function HomePage(): Promise<React.ReactElement> {
              dòng thời gian dọc ở dưới. Nhịp thị giác đến từ sự KHÁC NHAU giữa
              các khối, không đến từ việc mỗi khối tự đẹp.
         */}
+        {chiPhi !== null && noiBat !== null && (
+          <PhieuChiPhi du={chiPhi} tenXe={noiBat.name} slug={noiBat.slug} />
+        )}
+
+        {chiPhi !== null && noiBat !== null && (
+          <SoSanhDongCo du={chiPhi} tenXe={noiBat.name} />
+        )}
+
         <section className="section section--raised" aria-labelledby="cam-ket">
           <div className="container">
             <div className="section-heading">
