@@ -168,4 +168,67 @@ test.describe('Trang bán xe công khai', () => {
     const res = await page.goto(`${LANDING}/xe/khong-co-chiec-xe-nao-ten-nay`);
     expect(res?.status()).toBe(404);
   });
+
+  /*
+   * 🔒 LD-E08 — Con số chi phí phải ở trong HTML ĐẦU TIÊN, không chờ JS.
+   *
+   * Khối chi phí bản trước là client-side và nằm ở trang chi tiết, nên nó không
+   * được crawl và không hiện khi JS chưa chạy. Bài này khoá lại hành vi mới:
+   * trang chủ render sẵn con số VÀ tên bảng giá.
+   *
+   * ⚠️ Kiểm bằng `page.content()` sau `waitUntil: 'domcontentloaded'` thay vì
+   *    `getByText`, vì `getByText` cũng xanh khi chữ do JS chèn vào sau — tức là
+   *    nó không phân biệt được đúng thứ bài này muốn phân biệt.
+   */
+  test('LD-E08 — trang chủ nói chi phí bảo dưỡng kèm tên bảng giá, ngay trong HTML server', async ({
+    page,
+  }) => {
+    await page.goto(LANDING, { waitUntil: 'domcontentloaded' });
+    const html = await page.content();
+
+    expect(html).toContain('Bảng giá');
+    // Một số tiền có phân cách nghìn kiểu vi-VN, ví dụ "15.585.000".
+    expect(html).toMatch(/\d{1,3}(\.\d{3}){2,}/);
+  });
+
+  /*
+   * 🔒 LD-E09 — Nút trên phiếu phải dẫn tới đúng neo có thật.
+   *
+   * Một CTA trỏ tới `#chi-phi` mà trang đích không có `id` đó thì vẫn "hoạt
+   * động": trình duyệt mở trang và đứng ở đầu. Không có lỗi nào, và khách chỉ
+   * thấy nút không làm gì. Bài này kiểm rằng neo TỒN TẠI.
+   */
+  test('LD-E09 — CTA của phiếu chi phí dẫn tới neo có thật trên trang chi tiết', async ({
+    page,
+  }) => {
+    await page.goto(LANDING);
+    const cta = page.getByRole('link', { name: 'Xem chi tiết từng năm' });
+    await expect(cta).toBeVisible();
+
+    const href = await cta.getAttribute('href');
+    expect(href).not.toBeNull();
+    expect(href as string).toContain('#chi-phi');
+
+    await cta.click();
+    await expect(page.locator('#chi-phi')).toBeAttached();
+  });
+
+  /*
+   * 🔒 LD-E10 — Ngày hiệu lực phải là ngày người Việt đọc được, không phải ISO.
+   *
+   * ⚠️ API trả `ápDụngTừ` dạng `2025-12-31T17:00:00.000Z`. In thẳng thì khách
+   *    thấy một timestamp máy VÀ nó lệch ngày: 17:00Z là 01/01/2026 ở Việt Nam.
+   *    Cả khối phiếu tồn tại để con số kiểm chứng được, nên một ngày sai làm hỏng
+   *    đúng điều nó khẳng định.
+   */
+  test('LD-E10 — ngày hiệu lực bảng giá hiện dạng dd/mm/yyyy, không phải ISO', async ({
+    page,
+  }) => {
+    await page.goto(LANDING, { waitUntil: 'domcontentloaded' });
+    const html = await page.content();
+
+    expect(html).toMatch(/hiệu lực từ[^<]*(<!-- -->)?\d{2}\/\d{2}\/\d{4}/);
+    // Không được lọt timestamp ISO ra trang.
+    expect(html).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
+  });
 });
