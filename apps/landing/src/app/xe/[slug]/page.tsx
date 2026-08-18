@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { requestHost, fetchPublic, noIndex, httpStatusForPublicApiError } from '@/lib/api';
 import { loadSite, formatPrice, isGone } from '@/lib/site';
+import { Gia } from '@/components/gia';
 import { buildMetadata } from '@/lib/seo';
 import { Header, Footer } from '@/components/chrome';
 import { DetailActions } from '@/components/detail-actions';
@@ -96,7 +97,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
         <section className="detail-hero"><div className="container">
           <p className="eyebrow">{detail.makeName} · {detail.modelName}</p>
           <h1>{detail.name}</h1>
-          <p className="price">{formatPrice(displayPrice)}</p>
+          <Gia amount={displayPrice} />
           <p className="detail-summary">{detail.summary}</p>
         </div></section>
         <div className="container detail-grid">

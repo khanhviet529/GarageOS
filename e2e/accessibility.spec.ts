@@ -130,3 +130,42 @@ test('màn lịch xưởng không có lỗi accessibility', async ({ page }) => 
   const kq = await soi(page).analyze();
   expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
 });
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * LANDING BÁN XE CÔNG KHAI
+ *
+ * 🔒 Vì sao ba bài này được thêm: `accessibility.spec.ts` trước đây soi 6 màn
+ *    của `apps/web` và KHÔNG soi màn nào của `apps/landing` — trong khi landing
+ *    là bề mặt duy nhất người ngoài truy cập được mà không đăng nhập, tức là bề
+ *    mặt duy nhất mà một lỗi trợ năng gây thiệt hại thật.
+ *
+ * ⚠️ Lỗ hổng đó lộ ra khi đổi toàn bộ hệ màu của landing sang hướng ATELIER: nếu
+ *    một cặp chữ/nền trượt AA, không có bài kiểm nào bắt được. `infra/kiem-tuong-phan.mjs`
+ *    tính tương phản của các TOKEN; ba bài này soi những gì thật sự được render —
+ *    kể cả chữ nằm trên ảnh, nơi token không nói được điều gì.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+
+const LANDING = process.env.LANDING_URL ?? 'http://localhost:3003';
+
+test('landing — trang chủ không có lỗi accessibility', async ({ page }) => {
+  await page.goto(LANDING);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const kq = await soi(page).analyze();
+  expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
+});
+
+test('landing — trang chi tiết xe không có lỗi accessibility', async ({ page }) => {
+  await page.goto(`${LANDING}/xe/aurora-e1`);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const kq = await soi(page).analyze();
+  expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
+});
+
+test('landing — form quan tâm không có lỗi accessibility', async ({ page }) => {
+  await page.goto(`${LANDING}/lien-he`);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const kq = await soi(page).analyze();
+  expect(moTa(kq.violations), moTa(kq.violations)).toBe('');
+});

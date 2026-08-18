@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { requestHost, fetchPublic, noIndex } from '@/lib/api';
-import { loadSite, formatPrice } from '@/lib/site';
+import { loadSite } from '@/lib/site';
+import { Gia } from '@/components/gia';
 import { buildMetadata } from '@/lib/seo';
 import { Header, Footer } from '@/components/chrome';
 import type { PublicProductSummary } from '@garageos/contracts';
@@ -105,7 +106,7 @@ export default async function CatalogPage({
                 <div className="card-body">
                   <h3>{p.name}</h3>
                   <p className="muted">{p.makeName} · {p.modelName}</p>
-                  <p className="price">{formatPrice(p.displayPrice)}</p>
+                  <Gia amount={p.displayPrice} />
                 </div>
               </Link>
             ))}

@@ -13,6 +13,7 @@
     "test": "turbo run test",
     "test:invariants": "turbo run test:invariants",
     "test:infra": "tsx infra/run-tests.mjs infra",
+    "kiem:tuong-phan": "node infra/kiem-tuong-phan.mjs",
     "db:up": "docker compose up -d postgres redis",
     "db:down": "docker compose down",
     "db:migrate": "tsx --env-file-if-exists=.env infra/migrate.ts",

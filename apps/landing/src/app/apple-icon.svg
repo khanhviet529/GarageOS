@@ -1,5 +1,6 @@
+<!-- Xem `icon.svg` để biết vì sao màu là như thế này. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
-  <rect width="180" height="180" rx="40" fill="#0f5bb5"/>
-  <path d="M36 112h108v20H36z" fill="#ffffff"/>
-  <circle cx="90" cy="72" r="30" fill="#e8792b"/>
+  <rect width="180" height="180" rx="18" fill="#0a0b0c"/>
+  <path d="M36 112h108v16H36z" fill="#f5f5f3"/>
+  <circle cx="90" cy="72" r="31" fill="#e63b2e"/>
 </svg>
