@@ -28,7 +28,15 @@ export interface TomTatChiPhi {
 }
 
 export function tomTatChiPhi(v: NguonChiPhi): TomTatChiPhi | null {
-  if (v.theoNam.length === 0 || v.soNam <= 0) return null;
+  /*
+   * `tong <= 0` cũng là dữ liệu không dùng được, không chỉ `theoNam` rỗng.
+   *
+   * ⚠️ Một tenant có `maintenance_plan_item` nhưng THIẾU `price_list_item` sẽ ra
+   *    `tong = 0` với `theoNam` không rỗng. Cửa bảo vệ chỉ kiểm độ dài mảng thì
+   *    để lọt trường hợp đó, và trang chủ in ra "5 năm đầu tốn 0 ₫" — đúng cái
+   *    "lời hứa miễn phí" mà chú thích ở trên nói phải tránh.
+   */
+  if (v.theoNam.length === 0 || v.soNam <= 0 || v.tong <= 0) return null;
 
   /*
    * `Math.ceil`, không phải `Math.round`. Đây là con số khách mang tới xưởng đối

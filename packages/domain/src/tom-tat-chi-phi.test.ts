@@ -62,6 +62,24 @@ describe('tomTatChiPhi', () => {
     assert.equal(t.chenhLechXeXang, -3_000_000);
   });
 
+  /*
+   * 🔒 Chú thích của chính hàm này nói: "một phiếu chi phí ghi 0 ₫ trông như một
+   *    lời hứa miễn phí". Nhưng cửa bảo vệ chỉ kiểm `theoNam.length` và `soNam`,
+   *    nên một tenant có lịch bảo dưỡng mà THIẾU `price_list_item` sẽ ra
+   *    `tong = 0` với `theoNam` không rỗng — và trang chủ in đúng "0 ₫" đó.
+   */
+  test('tổng bằng 0 dù có dữ liệu năm thì trả null, không hứa miễn phí', () => {
+    const t = tomTatChiPhi({
+      ...nguon,
+      tong: 0,
+      theoNam: [
+        { nam: 1, tong: 0 },
+        { nam: 2, tong: 0 },
+      ],
+    });
+    assert.equal(t, null);
+  });
+
   test('nhiều năm cùng mức đắt nhất thì lấy năm ĐẦU TIÊN', () => {
     const t = tomTatChiPhi({
       ...nguon,
