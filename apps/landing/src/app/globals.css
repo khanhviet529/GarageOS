@@ -172,7 +172,21 @@
  */
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+/*
+ * 🔒 `scroll-padding-top` bằng đúng chiều cao header sticky.
+ *
+ * ⚠️ Header là `position: sticky` cao 72px. Không có dòng này, mọi neo trong
+ *    trang — `#chi-phi` từ phiếu ở trang chủ chẳng hạn — cuộn tới đúng toạ độ
+ *    của phần tử, rồi header phủ lên trên nó. Tiêu đề đích nằm dưới header và
+ *    trông như bị cắt mất dấu tiếng Việt.
+ *
+ * 💡 Không có lỗi nào phát ra, và bài test neo vẫn xanh vì phần tử THẬT SỰ tồn
+ *    tại và đã được cuộn tới. Chỉ người dùng nhìn thấy vấn đề.
+ */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 88px;
+}
 html, body {
   margin: 0;
   padding: 0;
@@ -929,3 +943,4 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   border: 1px solid var(--line-strong);
 }
 .so-sanh .note { max-width: var(--measure); margin-top: var(--s-6); }
+

@@ -148,7 +148,8 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
           Khách vừa xem giá xong sẽ hỏi "rồi nuôi nó tốn bao nhiêu" — trả lời
           đúng lúc đó, trước khi họ phải quyết định để lại số điện thoại.
         */}
-        <div className="container"><ChiPhiSoHuu slug={slug} /></div>
+        {/* `id` la dich cua nut "Xem chi tiet tung nam" tren phieu o trang chu. */}
+        <div className="container" id="chi-phi"><ChiPhiSoHuu slug={slug} /></div>
 
         <div className="container"><DetailActions
           site={site}
