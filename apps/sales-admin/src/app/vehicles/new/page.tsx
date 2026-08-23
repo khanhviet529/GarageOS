@@ -2,12 +2,15 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { richTextFromPlainText, type RichTextDocumentV1 } from '@garageos/contracts';
 import { api, errorMessage } from '@/lib/client';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 
 export default function NewVehiclePage(): React.ReactElement {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [descriptionDocument, setDescriptionDocument] = useState<RichTextDocumentV1>(() => richTextFromPlainText(''));
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -24,7 +27,7 @@ export default function NewVehiclePage(): React.ReactElement {
           modelName: String(form.get('modelName') ?? '').trim(),
           slug: String(form.get('slug') ?? '').trim(),
           summary: String(form.get('summary') ?? '').trim(),
-          description: String(form.get('description') ?? '').trim(),
+          descriptionDocument,
           seoTitle: String(form.get('seoTitle') ?? '').trim() || null,
           seoDescription: String(form.get('seoDescription') ?? '').trim() || null,
         }),
@@ -49,7 +52,7 @@ export default function NewVehiclePage(): React.ReactElement {
           <input id="slug" name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="aurora-e1" />
         </label>
         <label htmlFor="summary">Mô tả ngắn (≤ 500)<textarea id="summary" name="summary" rows={2} maxLength={500} /></label>
-        <label htmlFor="description">Nội dung chi tiết (≤ 20.000)<textarea id="description" name="description" rows={5} maxLength={20000} /></label>
+        <label>Nội dung chi tiết<RichTextEditor value={descriptionDocument} onChange={setDescriptionDocument} /></label>
         <label htmlFor="seoTitle">SEO title (tuỳ chọn — để trống dùng Auto SEO)<input id="seoTitle" name="seoTitle" maxLength={160} /></label>
         <label htmlFor="seoDescription">SEO description (tuỳ chọn)<input id="seoDescription" name="seoDescription" maxLength={300} /></label>
         {error !== null && <p className="error" role="alert">{error}</p>}

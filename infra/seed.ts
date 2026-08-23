@@ -261,11 +261,12 @@ async function main(): Promise<void> {
     price_list_item, price_list, part, service_item,
     vehicle_ownership, vehicle, customer,
     lead_activity, sales_lead,
+    landing_preview_session, landing_page_revision, landing_page,
     media_import_item, media_import_job,
     vehicle_product_media, vehicle_experience_version_media,
     vehicle_experience_version, vehicle_experience,
-    vehicle_variant_revision, vehicle_variant,
-    vehicle_product_revision, vehicle_product,
+    testimonial, vehicle_variant_revision, vehicle_variant,
+    vehicle_product_revision, vehicle_product, vehicle_product_category,
     media_publication, media_rendition, media_asset,
     branch_public_profile, site_profile, site_domain,
     user_branch, refresh_token, audit_log, app_user, branch, tenant
@@ -1567,12 +1568,13 @@ async function main(): Promise<void> {
   );
   await db.query(
     `INSERT INTO vehicle_product_revision (id, tenant_id, product_id, revision_number, status,
-                                           name, make_name, model_name, summary, description,
+                                           name, make_name, model_name, summary, description, description_document,
                                            seo_title, seo_description, content_hash,
                                            published_by, published_at, created_by, updated_by)
      VALUES ($1,$2,$3,1,'PUBLISHED','Aurora E1','Aurora','E1',
              'Xe điện đô thị nhỏ gọn, phù hợp gia đình trẻ.',
              'Aurora E1 là mẫu SUV điện đô thị nhỏ gọn, linh hoạt trong phố và tiết kiệm chi phí vận hành.',
+             jsonb_build_object('type','doc','schemaVersion',1,'content',jsonb_build_array(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text','Aurora E1 là mẫu SUV điện đô thị nhỏ gọn, linh hoạt trong phố và tiết kiệm chi phí vận hành.'))))),
              'Aurora E1 — giá niêm yết', 'Mua Aurora E1 chính hãng, đăng ký lái thử miễn phí.',
              $4, $5, now(), $5, $5)`,
     [revisionId, TENANT_A, productId, hashOf('e1-rev-1'), publisherId],
@@ -1696,12 +1698,13 @@ async function main(): Promise<void> {
   );
   await db.query(
     `INSERT INTO vehicle_product_revision (id, tenant_id, product_id, revision_number, status,
-                                           name, make_name, model_name, summary, description,
+                                           name, make_name, model_name, summary, description, description_document,
                                            seo_title, seo_description, content_hash,
                                            published_by, published_at, created_by, updated_by)
      VALUES ($1,$2,$3,1,'PUBLISHED','Meridian X5','Meridian','X5',
              'SUV điện hạng B cho gia đình.',
              'Meridian X5 là mẫu SUV điện hạng B, không gian rộng và vận hành êm ái.',
+             jsonb_build_object('type','doc','schemaVersion',1,'content',jsonb_build_array(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text','Meridian X5 là mẫu SUV điện hạng B, không gian rộng và vận hành êm ái.'))))),
              'Meridian X5 — giá niêm yết', 'Mua Meridian X5 chính hãng, nhận tư vấn miễn phí.',
              $4, $5, now(), $5, $5)`,
     [revisionX5Id, TENANT_A, productX5Id, hashOf('x5-rev-1'), publisherId],

@@ -1,30 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { api, errorMessage } from '@/lib/client';
+import { errorMessage } from '@/lib/client';
 import { hasAction, useMe } from '@/components/auth';
-
-interface AdminProduct {
-  id: string;
-  slug: string;
-  lifecycleStatus: string;
-  name: string | null;
-  status: string | null;
-  version: number;
-}
+import { useVehicles } from '@/features/vehicles/queries';
 
 export default function VehiclesPage(): React.ReactElement {
   const { me } = useMe();
-  const [items, setItems] = useState<AdminProduct[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (me === null || !hasAction(me.roles, 'marketing:catalogRead')) return;
-    api<{ items: AdminProduct[] }>('/api/v1/marketing/vehicle-products?limit=100')
-      .then((r) => setItems(r.items))
-      .catch((e) => setError(errorMessage(e)));
-  }, [me]);
+  const canRead = me !== null && hasAction(me.roles, 'marketing:catalogRead');
+  const vehicles = useVehicles(canRead);
+  const items = vehicles.data?.items ?? [];
 
   const canWrite = me !== null && hasAction(me.roles, 'marketing:catalogWrite');
 
@@ -32,7 +17,7 @@ export default function VehiclesPage(): React.ReactElement {
     <main className="container">
       <div className="page-heading"><div><p className="eyebrow">Marketing catalog</p><h1>Catalog xe</h1><p>Bản nháp, nội dung SEO và phiên bản công khai được quản lý tách bạch.</p></div>
       {canWrite && <Link className="btn" href="/vehicles/new">Tạo sản phẩm mới</Link>}</div>
-      {error !== null && <p className="error">{error}</p>}
+      {vehicles.error !== null && <p className="error">{errorMessage(vehicles.error)}</p>}
       <table className="table">
         <thead>
           <tr><th>Tên</th><th>Slug</th><th>Bản nháp</th><th>Trạng thái</th><th /></tr>

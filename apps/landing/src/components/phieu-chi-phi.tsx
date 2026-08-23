@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ChiPhiTrangChu } from '@/lib/chi-phi';
+import styles from './phieu-chi-phi.module.css';
 
 /**
  * Phiếu chi phí sở hữu — hiện vật trung tâm của trang chủ.
@@ -18,9 +19,9 @@ const dinhDang = (d: number): string => new Intl.NumberFormat('vi-VN').format(d)
 
 function So({ dong, lon }: { dong: number; lon?: boolean }): React.ReactElement {
   return (
-    <span className={lon === true ? 'phieu-so phieu-so--lon' : 'phieu-so'}>
-      <span className="gia-so">{dinhDang(dong)}</span>{' '}
-      <span className="gia-ky-hieu">₫</span>
+    <span className={lon === true ? `${styles.amount} ${styles.amountLarge}` : styles.amount}>
+      <span>{dinhDang(dong)}</span>{' '}
+      <span className={styles.currency}>₫</span>
     </span>
   );
 }
@@ -36,14 +37,14 @@ export function PhieuChiPhi({
 }): React.ReactElement {
   const { tomTat } = du;
   return (
-    <section className="phieu" aria-labelledby="phieu-tieu-de">
-      <div className="container">
+    <section className={styles.ticket} aria-labelledby="phieu-tieu-de">
+      <div className={`container ${styles.container}`}>
         <p className="eyebrow">Chi phí bảo dưỡng, tính từ bảng giá của xưởng</p>
         <h2 id="phieu-tieu-de">
           {tomTat.soNam} năm đầu của {tenXe} tốn <So dong={tomTat.tong} lon />
         </h2>
 
-        <dl className="phieu-bang">
+        <dl className={styles.facts}>
           <div>
             <dt>Bình quân mỗi năm</dt>
             <dd>
@@ -76,14 +77,14 @@ export function PhieuChiPhi({
           Dòng xuất xứ. Nó là phần khiến cả khối này có giá trị, nên nó nằm trong
           luồng đọc chính chứ không nằm ở chân trang dưới dạng chữ nhỏ.
         */}
-        <p className="phieu-nguon">
+        <p className={styles.source}>
           Tính cho {dinhDang(du.kmMoiNam)} km mỗi năm theo{' '}
           <strong>{du.tenBangGia}</strong>, hiệu lực từ {du.apDungTu}. Đây là bảng
           giá xưởng đang dùng để lập báo giá thật — bạn mang con số này tới quầy và
           đối chiếu được.
         </p>
 
-        <p className="phieu-cta">
+        <p className={styles.cta}>
           <Link className="btn" href={`/xe/${slug}#chi-phi`}>
             Xem chi tiết từng năm
           </Link>

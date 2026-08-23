@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Powertrain } from './vehicle.js';
+import { RichTextDocumentV1 } from './catalog-cms.js';
 
 /**
  * Contracts cho module marketing (landing/catalog/experience/SEO).
@@ -236,8 +237,10 @@ export const CreateVehicleProductInput = z.object({
     .min(1)
     .max(200)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug phải là kebab-case chữ thường'),
+  categoryId: z.string().uuid().nullable().optional(),
   summary: z.string().trim().max(500).optional().default(''),
   description: z.string().trim().max(20000).optional().default(''),
+  descriptionDocument: RichTextDocumentV1.optional(),
   seoTitle: z.string().trim().max(160).nullable().optional(),
   seoDescription: z.string().trim().max(300).nullable().optional(),
 });
@@ -245,9 +248,12 @@ export type CreateVehicleProductInput = z.infer<typeof CreateVehicleProductInput
 
 export const PatchProductDraftInput = z.object({
   version: z.number().int().nonnegative(),
+  /** Product identity, intentionally not part of revision content hashing. */
+  categoryId: z.string().uuid().nullable().optional(),
   name: z.string().trim().min(2).max(160).optional(),
   summary: z.string().trim().max(500).optional(),
   description: z.string().trim().max(20000).optional(),
+  descriptionDocument: RichTextDocumentV1.optional(),
   seoTitle: z.string().trim().max(160).nullable().optional(),
   seoDescription: z.string().trim().max(300).nullable().optional(),
 });

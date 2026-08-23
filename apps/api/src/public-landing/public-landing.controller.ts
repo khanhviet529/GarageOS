@@ -7,6 +7,7 @@ import {
   type LeadCreateResult,
   type PublicProductDetail,
   type PublicProductSummary,
+  type PublicTestimonial,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { LeadRateLimitGuard } from '../common/lead-rate-limit.guard';
@@ -14,6 +15,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { SalesService } from '../sales/sales.service';
 import { TenantContextService, type TenantResolution } from './tenant-context.service';
 import { PublicLandingService } from './public-landing.service';
+import { LandingPageService } from '../landing-page/landing-page.service';
 
 /**
  * Public API cho landing — SRS Phase 1 mục 11.1.
@@ -27,6 +29,7 @@ export class PublicLandingController {
     @Inject(PublicLandingService) private readonly svc: PublicLandingService,
     @Inject(SalesService) private readonly sales: SalesService,
     @Inject(TenantContextService) private readonly tenantCtx: TenantContextService,
+    @Inject(LandingPageService) private readonly landingPages: LandingPageService,
   ) {}
 
   @Get('site')
@@ -35,6 +38,31 @@ export class PublicLandingController {
     if (!this.applyAliasRedirect(r, req, res)) return;
     const ctx = this.requireContext(r);
     res.json(await this.svc.site(ctx, this.tenantCtx.scheme()));
+  }
+
+  @Get('landing-page')
+  async landingPage(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const resolution = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(resolution, req, res)) return;
+    const ctx = this.requireContext(resolution);
+    const document = await this.landingPages.publicPublished(ctx.tenantId);
+    if (document === null) throw new BusinessError(ErrorCode.CONTENT_NOT_PUBLISHED, 'Chưa có landing page được publish');
+    res.json(document);
+  }
+
+  @Get('landing-page-preview')
+  async landingPagePreview(@Query('token') token: string | undefined, @Res() res: Response): Promise<void> {
+    if (token === undefined || token.length > 256) throw new BusinessError(ErrorCode.PREVIEW_NOT_FOUND, 'Preview không tồn tại');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.json(await this.landingPages.publicPreview(token));
+  }
+
+  @Get('testimonials')
+  async testimonials(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const resolution = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(resolution, req, res)) return;
+    res.json({ items: await this.svc.testimonials(this.requireContext(resolution)) } as { items: PublicTestimonial[] });
   }
 
   @Get('vehicle-products')

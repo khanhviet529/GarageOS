@@ -1,0 +1,7 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 88px; }
+html, body { min-height: 100%; margin: 0; color: var(--text); background: var(--surface-0); }
+body { -webkit-font-smoothing: antialiased; }
+img, picture, svg, canvas { display: block; max-width: 100%; }
+button, input, textarea, select { font: inherit; }
+button, select { cursor: pointer; }

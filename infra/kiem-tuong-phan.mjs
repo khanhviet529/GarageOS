@@ -57,12 +57,13 @@ export function tren(hex, alpha, nen) {
   );
 }
 
-/* ── Theme mặc định: đúng các giá trị trong apps/landing/.../globals.css ── */
+/* ── Theme mặc định: đúng các giá trị trong apps/landing/src/styles/tokens.css ── */
 
 const NEN_0 = '#0a0b0c';
 const NEN_1 = '#111315';
-const NEN_2 = '#17191c';
-const NEN_3 = '#202327';
+const NEN_2 = '#181b1e';
+const NEN_3 = '#24282c';
+const GIAY = '#f3f1eb';
 
 /**
  * Một cặp cần kiểm.
@@ -81,34 +82,37 @@ const CAP = [
   ['chữ chính trên nền 1', '#f5f5f3', NEN_1, 4.5],
   ['chữ chính trên nền 2', '#f5f5f3', NEN_2, 4.5],
   ['chữ chính trên nền 3', '#f5f5f3', NEN_3, 4.5],
-  ['chữ mờ trên nền 0', '#a5a7aa', NEN_0, 4.5],
-  ['chữ mờ trên nền 1', '#a5a7aa', NEN_1, 4.5],
-  ['chữ mờ trên nền 2', '#a5a7aa', NEN_2, 4.5],
-  ['chữ mờ trên nền 3', '#a5a7aa', NEN_3, 4.5],
+  ['chữ mờ trên nền 0', '#b5b7b4', NEN_0, 4.5],
+  ['chữ mờ trên nền 1', '#b5b7b4', NEN_1, 4.5],
+  ['chữ mờ trên nền 2', '#b5b7b4', NEN_2, 4.5],
+  ['chữ mờ trên nền 3', '#b5b7b4', NEN_3, 4.5],
 
   /* --- Thương hiệu và hành động --- */
-  ['brand làm chữ trên nền 0', '#f9553f', NEN_0, 4.5],
-  ['brand làm chữ trên nền 1', '#f9553f', NEN_1, 4.5],
-  ['brand làm chữ trên nền 2', '#f9553f', NEN_2, 4.5],
-  ['brand làm chữ trên nền 3', '#f9553f', NEN_3, 4.5],
+  ['brand làm chữ trên nền 0', '#ff705c', NEN_0, 4.5],
+  ['brand làm chữ trên nền 1', '#ff705c', NEN_1, 4.5],
+  ['brand làm chữ trên nền 2', '#ff705c', NEN_2, 4.5],
+  ['brand làm chữ trên nền 3', '#ff705c', NEN_3, 4.5],
   /* Vòng focus và điểm mốc là ĐỒ HOẠ → ngưỡng 3:1, không phải 4.5. */
-  ['vòng focus trên nền 3', '#f9553f', NEN_3, 3],
-  ['đỏ nhận diện làm đồ hoạ trên nền 3', '#e63b2e', NEN_3, 3],
-  ['chữ trắng trên nút chính', '#ffffff', '#d6301f', 4.5],
-  ['chữ trắng trên nút hover', '#ffffff', '#c22a1c', 4.5],
+  ['vòng focus trên nền 3', '#ff705c', NEN_3, 3],
+  ['đỏ tiến trình làm đồ hoạ trên nền 3', '#ff705c', NEN_3, 3],
+  ['chữ trắng trên nút chính', '#ffffff', '#c73526', 4.5],
+  ['chữ trắng trên nút hover', '#ffffff', '#ae2e21', 4.5],
+  ['chữ chính trên nền giấy', '#161817', GIAY, 4.5],
+  ['chữ phụ trên nền giấy', '#5d605b', GIAY, 4.5],
+  ['accent biên tập trên nền giấy', '#c73526', GIAY, 4.5],
 
   /* --- Trạng thái --- */
   ['thành công trên nền 0', '#62d19b', NEN_0, 4.5],
   ['thành công trên nền 2', '#62d19b', NEN_2, 4.5],
-  ['lỗi trên nền 0', '#ff7b72', NEN_0, 4.5],
-  ['lỗi trên nền 2', '#ff7b72', NEN_2, 4.5],
-  ['lỗi trên nền 3', '#ff7b72', NEN_3, 4.5],
+  ['lỗi trên nền 0', '#ff8f84', NEN_0, 4.5],
+  ['lỗi trên nền 2', '#ff8f84', NEN_2, 4.5],
+  ['lỗi trên nền 3', '#ff8f84', NEN_3, 4.5],
 
   /* --- Ranh giới điều khiển (SC 1.4.11) và đường chia --- */
-  ['viền điều khiển trên nền 0', tren('#ffffff', 0.34, NEN_0), NEN_0, 3],
-  ['viền điều khiển trên nền 2', tren('#ffffff', 0.34, NEN_2), NEN_2, 3],
-  ['đường chia trên nền 0 — trang trí', tren('#ffffff', 0.12, NEN_0), NEN_0, 1],
-  ['đường chia trên nền 2 — trang trí', tren('#ffffff', 0.12, NEN_2), NEN_2, 1],
+  ['viền điều khiển trên nền 0', tren('#ffffff', 0.38, NEN_0), NEN_0, 3],
+  ['viền điều khiển trên nền 2', tren('#ffffff', 0.38, NEN_2), NEN_2, 3],
+  ['đường chia trên nền 0 — trang trí', tren('#ffffff', 0.14, NEN_0), NEN_0, 1],
+  ['đường chia trên nền 2 — trang trí', tren('#ffffff', 0.14, NEN_2), NEN_2, 1],
 ];
 
 /**

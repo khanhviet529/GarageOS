@@ -11,63 +11,57 @@
  * đơn giá lấy từ bảng giá đã snapshot trên báo giá. Một lỗi hiển thị ở đây
  * không thể biến thành một hoá đơn sai.
  */
-import { use, useCallback, useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  api, ApiCallError,
-  SERVICE_CATEGORY_LABEL, QUOTATION_STATUS_LABEL, LINE_STATUS_LABEL,
+  ApiCallError,
   formatMoney, formatDateTime,
-  type CatalogForVehicle, type Quotation, type RepairOrderDetail,
 } from '@/lib/api';
+import {
+  QUOTATION_LINE_STATUS_LABEL,
+  QUOTATION_STATUS_LABEL,
+  SERVICE_CATEGORY_LABEL,
+  type CatalogForVehicle,
+  type Quotation,
+} from '@garageos/contracts';
 import { AppHeader } from '@/components/AppHeader';
 import { IconBo, IconKhoa } from '@/components/Icon';
 import { ErrorState, Loading } from '@/components/ErrorState';
 import { formatPlate } from '@garageos/domain';
 import { BangCuon } from '@/components/BangCuon';
+import { useQuotationCatalog, useQuotationOrder, useQuotations } from '@/features/quotations/queries';
+import {
+  useAddQuotationLine,
+  useCreateQuotation,
+  useRemoveQuotationLine,
+  useSendQuotation,
+} from '@/features/quotations/mutations';
 
 export default function QuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orderId } = use(params);
 
-  const [order, setOrder] = useState<RepairOrderDetail | null>(null);
-  const [catalog, setCatalog] = useState<CatalogForVehicle | null>(null);
-  const [quotations, setQuotations] = useState<Quotation[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const reloadQuotations = useCallback(async () => {
-    setQuotations(await api.listQuotations(orderId));
-  }, [orderId]);
-
-  const taiLai = useCallback(async () => {
-    setError(null);
-    try {
-      const o = await api.getRepairOrder(orderId);
-      setOrder(o);
-      const [cat] = await Promise.all([api.getCatalog(o.vehicle.id), reloadQuotations()]);
-      setCatalog(cat);
-    } catch (err) {
-      setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
-    }
-  }, [orderId, reloadQuotations]);
-
-  useEffect(() => {
-    void taiLai();
-  }, [taiLai]);
+  const orderQuery = useQuotationOrder(orderId);
+  const order = orderQuery.data;
+  const catalogQuery = useQuotationCatalog(order);
+  const catalog = catalogQuery.data;
+  const quotationsQuery = useQuotations(orderId);
+  const quotations = quotationsQuery.data;
+  const createQuotation = useCreateQuotation(orderId);
+  const addLine = useAddQuotationLine(orderId);
+  const removeLine = useRemoveQuotationLine(orderId);
+  const sendQuotation = useSendQuotation(orderId);
+  const busy = createQuotation.isPending || addLine.isPending || removeLine.isPending || sendQuotation.isPending;
+  const queryError = [orderQuery.error, catalogQuery.error, quotationsQuery.error,
+    createQuotation.error, addLine.error, removeLine.error, sendQuotation.error]
+    .find((cause) => cause !== null);
+  const error = queryError instanceof ApiCallError ? queryError.api.message :
+    (queryError === undefined ? null : 'Lỗi kết nối');
 
   // Bản nháp là bản duy nhất sửa được — các bản đã gửi chỉ để xem lại
   const draft = quotations?.find((q) => q.status === 'DRAFT') ?? null;
 
-  async function run(action: () => Promise<unknown>) {
-    setError(null);
-    setBusy(true);
-    try {
-      await action();
-      await reloadQuotations();
-    } catch (err) {
-      setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
-    } finally {
-      setBusy(false);
-    }
+  function run(action: () => Promise<unknown>) {
+    void action().catch(() => undefined);
   }
 
   return (
@@ -75,14 +69,22 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
       <AppHeader current="don" />
 
       <main id="noi-dung" className="container stack">
-        {error !== null && <ErrorState message={error} onRetry={() => void taiLai()} />}
+        {error !== null && <ErrorState message={error} onRetry={() => {
+          createQuotation.reset();
+          addLine.reset();
+          removeLine.reset();
+          sendQuotation.reset();
+          void orderQuery.refetch();
+          void catalogQuery.refetch();
+          void quotationsQuery.refetch();
+        }} />}
 
         {/* Bản trước render một trang TRẮNG trong lúc tải: cố vấn bấm 'Lập báo
             giá' khi đang ngồi cạnh khách, thấy trắng 2-3 giây trên wifi xưởng,
             tưởng hỏng và bấm back. */}
-        {order === null && error === null && <Loading what="báo giá" />}
+        {order === undefined && error === null && <Loading what="báo giá" />}
 
-        {order !== null && (
+        {order !== undefined && (
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -95,7 +97,7 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
                 </span>
               </div>
               {draft === null && (
-                <button disabled={busy} onClick={() => void run(() => api.createQuotation(orderId))}>
+                <button disabled={busy} onClick={() => run(() => createQuotation.mutateAsync(undefined))}>
                   Tạo báo giá mới
                 </button>
               )}
@@ -103,7 +105,7 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
           </div>
         )}
 
-        {draft !== null && catalog !== null && (
+        {draft !== null && catalog !== undefined && (
           <div className="split">
             <CatalogPicker
               catalog={catalog}
@@ -111,17 +113,15 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
               lines={draft.lines}
               onAddService={(serviceItemId, quantity) =>
                 void run(() =>
-                  api.addQuotationLine(draft.id, { lineType: 'LABOR', serviceItemId, quantity }),
+                  addLine.mutateAsync({ quotationId: draft.id, input: { lineType: 'LABOR', serviceItemId, quantity } }),
                 )
               }
               onAddPart={(partId, quantity, parentLineId) =>
                 void run(() =>
-                  api.addQuotationLine(draft.id, {
-                    lineType: 'PART',
-                    partId,
-                    quantity,
+                  addLine.mutateAsync({ quotationId: draft.id, input: {
+                    lineType: 'PART', partId, quantity,
                     ...(parentLineId === '' ? {} : { parentLineId }),
-                  }),
+                  }}),
                 )
               }
             />
@@ -129,18 +129,18 @@ export default function QuotationPage({ params }: { params: Promise<{ id: string
             <DraftPanel
               quotation={draft}
               disabled={busy}
-              onRemove={(lineId) => void run(() => api.removeQuotationLine(draft.id, lineId))}
-              onSend={() => void run(() => api.sendQuotation(draft.id))}
+              onRemove={(lineId) => run(() => removeLine.mutateAsync({ quotationId: draft.id, lineId }))}
+              onSend={() => run(() => sendQuotation.mutateAsync(draft.id))}
             />
           </div>
         )}
 
-        {quotations !== null &&
+        {quotations !== undefined &&
           quotations
             .filter((q) => q.status !== 'DRAFT')
             .map((q) => <SentQuotation key={q.id} quotation={q} />)}
 
-        {quotations !== null && quotations.length === 0 && (
+        {quotations !== undefined && quotations.length === 0 && (
           <div className="alert info">
             Đơn này chưa có báo giá nào. Bấm <strong>Tạo báo giá mới</strong> để bắt đầu.
           </div>
@@ -426,7 +426,7 @@ function SentQuotation({ quotation }: { quotation: Quotation }) {
                 </td>
                 <td className="mono">{l.quantity}</td>
                 <td className="mono nowrap">{formatMoney(l.lineTotal)}</td>
-                <td>{LINE_STATUS_LABEL[l.status] ?? l.status}</td>
+                <td>{QUOTATION_LINE_STATUS_LABEL[l.status] ?? l.status}</td>
               </tr>
             ))}
           </tbody>

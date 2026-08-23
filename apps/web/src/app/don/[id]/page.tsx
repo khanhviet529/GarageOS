@@ -7,14 +7,16 @@
  * và link tra cứu để gửi cho khách. Link đó là thứ khách dùng để theo dõi và
  * duyệt báo giá (Phase 1.5) — hiện ngay ở đây để không phải đi tìm.
  */
-import { use, useCallback, useEffect, useState } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import {
-  api, ApiCallError,
-  POWERTRAIN_LABEL, POWERTRAIN_CLASS, ORDER_STATUS_LABEL,
-  ODOMETER_REASON_LABEL, formatDateTime,
-  type RepairOrderDetail,
+  ApiCallError,
+  POWERTRAIN_LABEL, POWERTRAIN_CLASS, formatDateTime,
 } from '@/lib/api';
+import {
+  ODOMETER_OVERRIDE_REASON_LABEL,
+  REPAIR_ORDER_STATUS_LABEL,
+} from '@garageos/contracts';
 import { AppHeader } from '@/components/AppHeader';
 import { CatalogSection } from '@/components/CatalogSection';
 import { StatusActions } from '@/components/StatusActions';
@@ -25,40 +27,36 @@ import { SkeletonCard } from '@/components/Skeleton';
 import { HopBaoHiem } from '@/components/HopBaoHiem';
 import { HopHuyDon } from '@/components/HopHuyDon';
 import { formatPlate } from '@garageos/domain';
+import { useRepairOrder } from '@/features/repair-orders/queries';
+import { useRefreshRepairOrder } from '@/features/repair-orders/mutations';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [order, setOrder] = useState<RepairOrderDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [clipboardError, setClipboardError] = useState<string | null>(null);
 
-  /** Tải lại chi tiết đơn — dùng cả lúc mount và sau khi tải ảnh xong. */
-  const taiLai = useCallback(async (): Promise<void> => {
-    try {
-      setOrder(await api.getRepairOrder(id));
-    } catch (err) {
-      setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
-    }
-  }, [id]);
-
-  useEffect(() => {
-    void taiLai();
-  }, [taiLai]);
+  const { data: order, error, isLoading, refetch } = useRepairOrder(id);
+  const refreshRepairOrder = useRefreshRepairOrder(id);
+  const errorMessage = error instanceof ApiCallError ? error.api.message : 'Lỗi kết nối';
+  const displayError = clipboardError ?? (error === null ? null : errorMessage);
 
   const trackingUrl =
-    order === null ? '' : `${window.location.origin}/tra-cuu/${order.customerAccessToken}`;
+    order === undefined ? '' : `${window.location.origin}/tra-cuu/${order.customerAccessToken}`;
 
   return (
     <>
       <AppHeader current="don" />
 
       <main id="noi-dung" className="container stack">
-        {error !== null && (
-          <ErrorState message={error} onRetry={() => location.reload()} />
+        {displayError !== null && (
+          <ErrorState message={displayError} onRetry={() => {
+            setClipboardError(null);
+            void refetch();
+          }} />
         )}
-        {order === null && error === null && <SkeletonCard rows={4} />}
+        {isLoading && <SkeletonCard rows={4} />}
 
-        {order !== null && (
+        {order !== undefined && (
           <>
             <div className="card">
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -68,7 +66,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     Tiếp nhận lúc {formatDateTime(order.receivedAt)}
                   </span>
                 </div>
-                <span className="tag status">{ORDER_STATUS_LABEL[order.status] ?? order.status}</span>
+                <span className="tag status">{REPAIR_ORDER_STATUS_LABEL[order.status] ?? order.status}</span>
               </div>
             </div>
 
@@ -77,18 +75,6 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               status={order.status}
               version={order.version}
               odometerIn={order.odometerIn}
-              onDone={() => {
-                // Không nuốt lỗi: đổi trạng thái đã THÀNH CÔNG ở server, nhưng
-                // nếu lần đọc lại này lỗi thì màn hình giữ trạng thái CŨ. Cố vấn
-                // nhìn thấy trạng thái cũ, bấm lại, và lần này `version` đã lệch
-                // nên nhận lỗi khoá lạc quan khó hiểu.
-                api
-                  .getRepairOrder(id)
-                  .then(setOrder)
-                  .catch(() =>
-                    setError('Đã cập nhật, nhưng chưa tải lại được. Hãy làm mới trang.'),
-                  );
-              }}
             />
 
             <HopHuyDon
@@ -96,9 +82,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               version={order.version}
               status={order.status}
               onDone={() => {
-                api.getRepairOrder(id).then(setOrder).catch(() =>
-                  setError('Đã cập nhật, nhưng chưa tải lại được. Hãy làm mới trang.'),
-                );
+                void refreshRepairOrder();
               }}
             />
 
@@ -162,7 +146,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                       {order.odometerOverrideReason !== null && (
                         <div className="alert warn small" style={{ marginTop: 8 }}>
                           Số km nhỏ hơn lần trước —{' '}
-                          {ODOMETER_REASON_LABEL[order.odometerOverrideReason] ??
+                          {ODOMETER_OVERRIDE_REASON_LABEL[order.odometerOverrideReason as keyof typeof ODOMETER_OVERRIDE_REASON_LABEL] ??
                             order.odometerOverrideReason}
                           . Đã ghi nhật ký.
                         </div>
@@ -203,7 +187,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 Một câu như thế để lâu sẽ thành một lời nói dối mà không ai sửa,
                 vì nó vẫn đọc như một lời hứa.
               */}
-              <TaiAnhHienTrang orderId={id} onXong={() => { void taiLai(); }} />
+              <TaiAnhHienTrang orderId={id} onXong={() => { void refreshRepairOrder(); }} />
             </div>
 
             <div className="card">
@@ -239,7 +223,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     // "Đã chép" và cố vấn dán cho khách nội dung clipboard CŨ.
                     const clipboard = navigator.clipboard as Clipboard | undefined;
                     if (clipboard === undefined) {
-                      setError('Trình duyệt không cho chép tự động. Hãy bấm vào ô link rồi Ctrl+C.');
+                      setClipboardError('Trình duyệt không cho chép tự động. Hãy bấm vào ô link rồi Ctrl+C.');
                       return;
                     }
                     void clipboard
@@ -249,7 +233,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         setTimeout(() => setCopied(false), 3000);
                       })
                       .catch(() =>
-                        setError('Không chép được. Hãy bấm vào ô link rồi Ctrl+C.'),
+                        setClipboardError('Không chép được. Hãy bấm vào ô link rồi Ctrl+C.'),
                       );
                   }}
                 >

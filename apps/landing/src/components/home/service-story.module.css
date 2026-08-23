@@ -1,0 +1,17 @@
+.section { padding: var(--section-space-lg) 0; color: var(--paper-ink); background: var(--paper-0); }
+.layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: var(--s-9); align-items: center; }
+.visual { position: relative; min-height: 570px; overflow: hidden; background: var(--paper-1); }
+.visual::after { position: absolute; inset: 0; content: ''; background: linear-gradient(0deg, rgb(22 24 23 / 62%), transparent 38%); }
+.visual img { width: 100%; height: 100%; object-fit: cover; }
+.visual > span { position: absolute; z-index: 1; right: var(--s-5); bottom: var(--s-5); left: var(--s-5); color: #fff; font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: .12em; text-transform: uppercase; }
+.copy :global(.eyebrow) { color: var(--brand-strong); }
+.copy h2 { max-width: 12ch; margin: 0; font-size: var(--fs-2xl); }
+.description { max-width: 42ch; margin: var(--s-5) 0 0; color: var(--paper-muted); }
+.evidence { display: grid; gap: var(--s-4); margin: var(--s-7) 0; }
+.evidence > div { display: grid; grid-template-columns: 9rem 1fr; gap: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--paper-line); }
+.evidence dt { color: var(--paper-muted); font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; }
+.evidence dd { margin: 0; font-size: var(--fs-sm); font-weight: 600; }
+.link { display: inline-block; padding-bottom: var(--s-2); border-bottom: 1px solid var(--paper-ink); color: var(--paper-ink); font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .1em; text-decoration: none; text-transform: uppercase; }
+.link:hover { border-color: var(--brand-strong); color: var(--brand-strong); }
+@media (max-width: 900px) { .section { padding: var(--section-space-md) 0; } .layout { grid-template-columns: 1fr; gap: var(--s-7); } .visual { min-height: min(66vw, 560px); } }
+@media (max-width: 620px) { .section { padding: var(--section-space-sm) 0; } .visual { min-height: 380px; margin-inline: calc(var(--page-gutter) * -1); } .visual > span { right: var(--page-gutter); bottom: var(--s-4); left: var(--page-gutter); } .evidence > div { grid-template-columns: 1fr; gap: var(--s-1); } }

@@ -8,6 +8,7 @@ import {
   type ExperienceSummary,
   type PublicProductDetail,
   type PublicProductSummary,
+  type PublicTestimonial,
   type PublicSiteView,
   type ChiPhiSoHuuView,
 } from '@garageos/contracts';
@@ -24,6 +25,13 @@ import type { PublicTenantContext } from './tenant-context.service';
 @Injectable()
 export class PublicLandingService {
   constructor(@Inject(TenantAwareDb) private readonly db: TenantAwareDb) {}
+
+  async testimonials(ctx: PublicTenantContext): Promise<PublicTestimonial[]> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicTestimonial>(
+      `SELECT id, display_name AS "displayName", content, rating, featured, vehicle_id AS "vehicleId"
+         FROM testimonial WHERE status = 'PUBLISHED' ORDER BY featured DESC, sort_order, created_at DESC`,
+    )).rows);
+  }
 
   async site(ctx: PublicTenantContext, scheme: string): Promise<PublicSiteView> {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {

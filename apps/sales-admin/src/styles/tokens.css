@@ -1,0 +1,13 @@
+:root {
+  --admin-canvas: #f6f7f9;
+  --admin-surface: #ffffff;
+  --admin-sidebar: #101a2b;
+  --admin-ink: #182235;
+  --admin-muted: #667085;
+  --admin-border: #e2e6ec;
+  --admin-accent: #1769d3;
+  --admin-danger: #b42318;
+  --admin-radius-sm: .4rem;
+  --admin-radius-md: .65rem;
+  --admin-shadow-sm: 0 1px 2px rgb(16 24 40 / 5%);
+}

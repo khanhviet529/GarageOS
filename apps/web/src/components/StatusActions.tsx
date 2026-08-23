@@ -12,50 +12,52 @@
  */
 import { useState } from 'react';
 import {
-  api, ApiCallError, ORDER_STATUS_LABEL,
-  REPAIR_ORDER_TRANSITIONS, ORDER_ACTION_LABEL,
-} from '@/lib/api';
+  ORDER_ACTION_LABEL,
+  REPAIR_ORDER_STATUS_LABEL,
+  REPAIR_ORDER_TRANSITIONS,
+  type ChangeOrderStatusInput,
+  type RepairOrderStatus,
+} from '@garageos/contracts';
+import { ApiCallError } from '@/lib/api/client';
+import { useUpdateRepairOrderStatus } from '@/features/repair-orders/mutations';
 
 export function StatusActions({
-  orderId, status, version, odometerIn, onDone,
+  orderId, status, version, odometerIn,
 }: {
   orderId: string;
-  status: string;
+  status: RepairOrderStatus;
   version: number;
   odometerIn: number | null;
-  onDone: () => void;
 }) {
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [pending, setPending] = useState<string | null>(null);
+  const updateStatus = useUpdateRepairOrderStatus();
+  const [pending, setPending] = useState<ChangeOrderStatusInput['to'] | null>(null);
   const [odometerOut, setOdometerOut] = useState('');
   // Huỷ là một quy trình quyết toán riêng (BC-10), không được gọi route đổi
   // trạng thái chung vì sẽ bỏ qua hoàn kho và chứng từ quyết toán.
-  const nexts = (REPAIR_ORDER_TRANSITIONS[status] ?? []).filter((to) => to !== 'CANCELLED');
+  const nexts = (REPAIR_ORDER_TRANSITIONS[status] ?? [])
+    .filter((to) => to !== 'CANCELLED') as readonly ChangeOrderStatusInput['to'][];
 
-  async function go(to: string, extra: Record<string, unknown> = {}) {
-    setError(null);
-    setBusy(true);
+  async function go(
+    to: ChangeOrderStatusInput['to'],
+    extra: Omit<ChangeOrderStatusInput, 'to' | 'version'> = {},
+  ) {
     try {
-      await api.changeOrderStatus(orderId, { to, version, ...extra });
+      await updateStatus.mutateAsync({ id: orderId, input: { to, version, ...extra } });
       setPending(null);
-      onDone();
-    } catch (err) {
-      setError(err instanceof ApiCallError ? err.api.message : 'Lỗi kết nối');
-    } finally {
-      setBusy(false);
+    } catch {
+      // React Query giữ nguyên ApiCallError để phần render bên dưới hiển thị.
     }
   }
 
   // Giao xe cần thêm dữ liệu -> mở form thay vì bấm một phát là xong
-  const needsForm = (to: string) => to === 'DELIVERED';
+  const needsForm = (to: ChangeOrderStatusInput['to']) => to === 'DELIVERED';
 
   if (nexts.length === 0) {
     return (
       <div className="card">
         <h2>Trạng thái</h2>
         <div className="alert info">
-          Đơn đã ở trạng thái cuối ({ORDER_STATUS_LABEL[status] ?? status}). Xe quay lại
+          Đơn đã ở trạng thái cuối ({REPAIR_ORDER_STATUS_LABEL[status] ?? status}). Xe quay lại
           vì lỗi cũ thì tạo <strong>đơn mới</strong>, không mở lại đơn này.
         </div>
       </div>
@@ -65,7 +67,11 @@ export function StatusActions({
   return (
     <div className="card">
       <h2>Bước tiếp theo</h2>
-      {error !== null && <div className="alert error" role="alert">{error}</div>}
+      {updateStatus.error !== null && (
+        <div className="alert error" role="alert">
+          {updateStatus.error instanceof ApiCallError ? updateStatus.error.api.message : 'Lỗi kết nối'}
+        </div>
+      )}
 
       {pending === null && (
         <>
@@ -73,8 +79,7 @@ export function StatusActions({
             {nexts.map((to) => (
               <button
                 key={to}
-                className={to === 'CANCELLED' ? 'secondary' : undefined}
-                disabled={busy}
+                disabled={updateStatus.isPending}
                 onClick={() => (needsForm(to) ? setPending(to) : void go(to))}
               >
                 {ORDER_ACTION_LABEL[to] ?? to}
@@ -105,7 +110,7 @@ export function StatusActions({
           </div>
           <div className="row">
             <button
-              disabled={busy || odometerOut === ''}
+              disabled={updateStatus.isPending || odometerOut === ''}
               onClick={() => void go('DELIVERED', { odometerOut: Number(odometerOut) })}
             >
               Xác nhận giao xe

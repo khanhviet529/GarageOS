@@ -1,61 +1,43 @@
-import Link from 'next/link';
-import { requestHost, fetchPublic, noIndex } from '@/lib/api';
-import { loadSite } from '@/lib/site';
-import { Gia } from '@/components/gia';
-import { layChiPhiTrangChu } from '@/lib/chi-phi';
-import { PhieuChiPhi } from '@/components/phieu-chi-phi';
-import { SoSanhDongCo } from '@/components/so-sanh-dong-co';
-import { buildMetadata } from '@/lib/seo';
-import { Header, Footer } from '@/components/chrome';
-import { buildPageTitle } from '@garageos/domain';
-import type { PublicProductSummary } from '@garageos/contracts';
 import type { Metadata } from 'next';
+import type { LandingPageDocument, PublicProductSummary } from '@garageos/contracts';
+import { buildPageTitle } from '@garageos/domain';
+import { Footer, Header } from '@/components/chrome';
+import { FeaturedVehicle } from '@/components/home/featured-vehicle';
+import { FinalCta } from '@/components/home/final-cta';
+import { LandingPageRenderer } from '@/components/page-renderer/landing-page-renderer';
+import { HomeHero } from '@/components/home/home-hero';
+import { OwnershipJourney } from '@/components/home/ownership-journey';
+import { OwnershipSystem } from '@/components/home/ownership-system';
+import { ServiceStory } from '@/components/home/service-story';
+import { TrustSection } from '@/components/home/trust-section';
+import { VehicleCollection } from '@/components/home/vehicle-collection';
+import { fetchPublic, noIndex, requestHost } from '@/lib/api';
+import { layChiPhiTrangChu } from '@/lib/chi-phi';
+import { buildMetadata } from '@/lib/seo';
+import { loadSite } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage(): Promise<React.ReactElement> {
   const site = await loadSite();
   let products: PublicProductSummary[] = [];
+  let document: LandingPageDocument | null = null;
+
   if (site !== null) {
     try {
       const host = await requestHost();
-      const res = await fetchPublic<{ items: PublicProductSummary[] }>(host, '/vehicle-products?limit=6');
-      products = res.items;
+      const response = await fetchPublic<{ items: PublicProductSummary[] }>(host, '/vehicle-products?limit=6');
+      products = response.items;
+      document = await fetchPublic<LandingPageDocument>(host, '/landing-page').catch(() => null);
     } catch {
       products = [];
     }
   }
 
+  const featuredVehicle = products[0] ?? null;
+  const ownershipCost = featuredVehicle === null ? null : await layChiPhiTrangChu(featuredVehicle.slug);
+  const heroImage = site?.heroUrl ?? featuredVehicle?.coverUrl ?? null;
   const brand = site?.brandName ?? 'Showroom ô tô';
-
-  /*
-   * Xe đầu tiên làm ảnh hero, xe thứ hai làm nền khối 360°.
-   *
-   * 💡 Không cấu hình cứng đường dẫn ảnh nào: trang chủ luôn hiện đúng thứ
-   *    tenant đang thật sự bán. Chưa có xe thì cả hai chỗ rơi về nền gradient
-   *    (`.hero-media__empty`) — một trạng thái rỗng có chủ ý, không phải ô vỡ.
-   */
-  const noiBat = products[0] ?? null;
-
-  /*
-   * Chi phí sở hữu của xe nổi bật. Lấy ở server để nó vào HTML đầu tiên — đây là
-   * con số đáng được crawl và đáng hiện khi JS chưa chạy.
-   *
-   * `layChiPhiTrangChu` không bao giờ ném; `null` nghĩa là tenant chưa cấu hình
-   * bảng giá hoặc lịch bảo dưỡng, và trang chủ khi đó thiếu một khối thay vì lỗi.
-   */
-  const chiPhi = noiBat === null ? null : await layChiPhiTrangChu(noiBat.slug);
-
-  /*
-   * Ảnh hero là ẢNH CHỤP do showroom chọn (`site_profile.hero_media_id`), khác
-   * hình minh hoạ dùng cho thẻ xe. Hai chỗ có yêu cầu ngược nhau: hero cần gây
-   * ấn tượng, thẻ xe cần nhất quán giữa nhiều xe.
-   *
-   * Chưa chọn thì rơi về ảnh bìa xe nổi bật — mặc định hợp lý, không phải lỗi.
-   */
-  const anhHero = site?.heroUrl ?? noiBat?.coverUrl ?? null;
-  const anhNen = products[1]?.coverUrl ?? products[0]?.coverUrl ?? null;
-
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'AutoDealer',
@@ -70,228 +52,29 @@ export default async function HomePage(): Promise<React.ReactElement> {
       <Header site={site} />
       {noIndex() && <meta name="robots" content="noindex,nofollow" />}
       <main id="main" tabIndex={-1}>
-        {/*
-          Hero điện ảnh — ảnh là NỀN của cả khối, không phải một ô cạnh chữ.
-
-          ⚠️ Bản trước đặt ảnh trong thẻ bo góc bên phải kèm `mix-blend-mode:
-             screen`. Với ảnh low-key nền đen, `screen` xoá gần hết phần tối, nên
-             ảnh càng đẹp thì càng mất. Giờ ảnh tràn khung và chữ nằm trên đúng
-             vùng tối sẵn có của chính bức ảnh.
-        */}
-        <section className="hero">
-          <div className="hero-media" aria-hidden="true">
-            {anhHero !== null ? (
-              <div className="hero-photo">
-                <img src={anhHero} alt="" width={1800} height={1200} fetchPriority="high" />
-                {/*
-                  Vệt sáng đèn nằm TRONG khung ảnh, không phải trong hero — nhờ
-                  vậy nó bị cắt cùng một cách với ảnh và không bao giờ trôi khỏi
-                  bóng đèn khi đổi kích thước cửa sổ.
-                */}
-                <span className="hero-den" />
-              </div>
-            ) : (
-              <div className="hero-media__empty" />
-            )}
-          </div>
-          <div className="container">
-            <div className="hero-inner">
-              <p className="eyebrow">Showroom &amp; dịch vụ hậu mãi</p>
-              <h1>Chọn một chiếc xe. Mở ra cả một hành trình.</h1>
-              <p className="hero-copy">
-                Xem xe ở góc bạn muốn, hiểu khác biệt từng phiên bản, rồi đăng ký lái
-                thử theo lịch của mình. Sau khi nhận xe, cùng một hồ sơ tiếp tục theo
-                chiếc xe qua từng lần bảo dưỡng.
-              </p>
-              <div className="hero-actions">
-                <Link className="btn" href="/xe">Khám phá dòng xe</Link>
-                <Link className="btn btn-secondary" href="/lien-he">Đăng ký lái thử</Link>
-              </div>
-              {/*
-                ⚠️ Ba dòng "Giá niêm yết công khai · Lái thử theo lịch của bạn ·
-                   Hậu mãi liền mạch" đã bị bỏ. Cả ba là tính từ, không có số nào,
-                   và bất kỳ đại lý nào cũng viết được — nên chúng không phân biệt
-                   được gì.
-
-                💡 Thay bằng một con số có nguồn, dẫn xuống phiếu chi phí. Nếu
-                   tenant chưa có bảng giá thì hero không nói gì thêm, và như vậy
-                   vẫn trung thực hơn ba tính từ.
-              */}
-              {chiPhi !== null && (
-                <p className="trust-row" aria-label="Chi phí bảo dưỡng dự kiến">
-                  <span>
-                    Bảo dưỡng {chiPhi.tomTat.soNam} năm đầu:{' '}
-                    <strong className="tnum">
-                      {new Intl.NumberFormat('vi-VN').format(chiPhi.tomTat.tong)} ₫
-                    </strong>{' '}
-                    — tính từ {chiPhi.tenBangGia}
-                  </span>
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-
-        {products.length > 0 && (
-          <section className="section" aria-labelledby="xe-noi-bat">
-            <div className="container">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Lựa chọn nổi bật</p>
-                  <h2 id="xe-noi-bat">Xe phù hợp với nhịp sống của bạn</h2>
-                </div>
-                <Link className="section-link" href="/xe">Xem toàn bộ xe →</Link>
-              </div>
-              <div className="grid">
-                {products.map((p) => (
-                  <Link key={p.id} href={`/xe/${p.slug}`} className="card">
-                    <div className="card-media">
-                      <span className="card-tag">{nhanDongCo(p.powertrain)}</span>
-                      {p.coverUrl !== null ? (
-                        <img src={p.coverUrl} alt={p.coverAlt ?? p.name} width={640} height={400} loading="lazy" />
-                      ) : (
-                        <div className="card-media__empty" />
-                      )}
-                    </div>
-                    <div className="card-body">
-                      <h3>{p.name}</h3>
-                      <p className="muted">{p.summary}</p>
-                      <Gia amount={p.displayPrice} />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/*
-          🔒 Trải nghiệm 360° là điểm khác biệt lớn nhất của sản phẩm này, và nó
-             từng bị chôn trong trang chi tiết xe. Trang chủ không hề nhắc tới —
-             nên khách rời trang mà không biết nó tồn tại.
-        */}
-        <section className="spotlight" aria-labelledby="trai-nghiem-360">
-          <div className="spotlight-media" aria-hidden="true">
-            {anhNen !== null && <img src={anhNen} alt="" width={1800} height={1200} loading="lazy" />}
-          </div>
-          <div className="container">
-            <div className="spotlight-inner">
-              <p className="eyebrow">Xem trước khi tới showroom</p>
-              <h2 id="trai-nghiem-360">
-                Đi vòng quanh xe, ngồi vào ghế lái — từ điện thoại của bạn.
-              </h2>
-              <ul className="spotlight-modes">
-                <li>Xoay 360° ngoại thất</li>
-                <li>Panorama nội thất</li>
-                <li>Điểm nhấn có chú giải</li>
-              </ul>
-              <p>
-                Ảnh chụp từ chính chiếc xe trong showroom, không phải dựng đồ hoạ. Khi
-                bạn đăng ký lái thử, cấu hình đang xem được gửi kèm để tư vấn viên
-                chuẩn bị đúng chiếc xe đó.
-              </p>
-              <div className="button-row">
-                {noiBat !== null && (
-                  <Link className="btn" href={`/xe/${noiBat.slug}`}>
-                    Mở trải nghiệm {noiBat.name}
-                  </Link>
-                )}
-                <Link className="btn btn-secondary" href="/xe">Xem dòng xe khác</Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/*
-          ⚠️ Mục này và mục hành trình bên dưới trước đây dùng CÙNG một hình thức:
-             ba thẻ chữ cạnh nhau. Người đọc lướt qua cả hai vì trông giống hệt
-             nhau, và trang mất nhịp.
-
-          💡 Cùng số lượng ý, hai hình thức khác nhau: dải ngang chia cột ở đây,
-             dòng thời gian dọc ở dưới. Nhịp thị giác đến từ sự KHÁC NHAU giữa
-             các khối, không đến từ việc mỗi khối tự đẹp.
-        */}
-        {chiPhi !== null && noiBat !== null && (
-          <PhieuChiPhi du={chiPhi} tenXe={noiBat.name} slug={noiBat.slug} />
-        )}
-
-        {chiPhi !== null && noiBat !== null && (
-          <SoSanhDongCo du={chiPhi} tenXe={noiBat.name} />
-        )}
-
-        <section className="section section--raised" aria-labelledby="cam-ket">
-          <div className="container">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Vì sao mua ở đây</p>
-                <h2 id="cam-ket">Ba điều chúng tôi không thương lượng</h2>
-              </div>
-            </div>
-            <div className="pledges">
-              <div className="pledge">
-                <span className="pledge-index">01 / MINH BẠCH</span>
-                <h3>Giá niêm yết công khai</h3>
-                <p>Giá hiện ngay trên trang. Không có mức giá thứ hai khi bạn tới nơi.</p>
-              </div>
-              <div className="pledge">
-                <span className="pledge-index">02 / TRẢI NGHIỆM</span>
-                <h3>Lái thử theo lịch của bạn</h3>
-                <p>Chọn khung giờ và chi nhánh. Tư vấn viên đi cùng, không thúc ép.</p>
-              </div>
-              <div className="pledge">
-                <span className="pledge-index">03 / ĐỒNG HÀNH</span>
-                <h3>Hậu mãi trọn đời xe</h3>
-                <p>Bảo hành, bảo dưỡng và sửa chữa tại chính xưởng đã bàn giao xe.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section" aria-labelledby="hanh-trinh">
-          <div className="container">
-            <div className="journey">
-              <div>
-                <p className="eyebrow">Một hành trình, một hồ sơ</p>
-                <h2 id="hanh-trinh">Sau khi mua, chiếc xe vẫn được nhớ tên.</h2>
-                <p className="note">
-                  Mỗi lần vào xưởng, lịch sử bảo hành và bảo dưỡng đã có sẵn — không
-                  phải kể lại từ đầu, không phải chứng minh xe mua ở đâu.
-                </p>
-              </div>
-              <div className="journey-steps">
-                <div className="journey-step">
-                  <span className="step-when">Trước khi mua</span>
-                  <h3>Tư vấn và lái thử</h3>
-                  <p>Chọn cấu hình theo nhu cầu thật, không theo bảng giá.</p>
-                </div>
-                <div className="journey-step">
-                  <span className="step-when">Ngày nhận xe</span>
-                  <h3>Bàn giao có truy vết</h3>
-                  <p>Xe, chủ sở hữu và gói bảo hành được ghi nhận đúng một lần.</p>
-                </div>
-                <div className="journey-step">
-                  <span className="step-when">Những năm sau</span>
-                  <h3>Chăm sóc tại xưởng</h3>
-                  <p>Được nhắc lịch bảo dưỡng và phục vụ theo cùng một hồ sơ.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="section section--tight">
-          <div className="container">
-            <div className="cta-band">
-              <p className="eyebrow">Bắt đầu từ một cuộc trò chuyện</p>
-              <h2>Hãy để chiếc xe tiếp theo được chọn kỹ hơn.</h2>
-              <p>Điền thông tin, đội ngũ tư vấn sẽ liên hệ theo thời gian bạn mong muốn.</p>
-              <div className="button-row">
-                <Link className="btn" href="/lien-he">Đăng ký lái thử</Link>
-                <Link className="btn btn-secondary" href="/xe">Xem catalog xe</Link>
-              </div>
-            </div>
-          </div>
-        </section>
+        {document === null ? <><HomeHero
+          imageUrl={heroImage}
+          featuredVehicle={featuredVehicle}
+          maintenance={ownershipCost === null ? null : {
+            amount: ownershipCost.tomTat.tong,
+            years: ownershipCost.tomTat.soNam,
+            source: ownershipCost.tenBangGia,
+          }}
+        />
+        <FeaturedVehicle product={featuredVehicle} />
+        <VehicleCollection products={products.slice(1)} />
+        <OwnershipJourney />
+        <OwnershipSystem
+          cost={ownershipCost}
+          vehicle={featuredVehicle === null ? null : { name: featuredVehicle.name, slug: featuredVehicle.slug }}
+        />
+        <ServiceStory
+          imageUrl={featuredVehicle?.coverUrl ?? null}
+          vehicle={featuredVehicle === null ? null : { name: featuredVehicle.name, slug: featuredVehicle.slug }}
+          cost={ownershipCost}
+        />
+        <TrustSection />
+        <FinalCta /></> : <LandingPageRenderer document={document} products={products} site={site} />}
       </main>
       <Footer site={site} />
       <script
@@ -302,24 +85,16 @@ export default async function HomePage(): Promise<React.ReactElement> {
   );
 }
 
-/** Nhãn loại động cơ cho thẻ xe — người mua đọc "Xe điện", không đọc "BEV". */
-function nhanDongCo(pt: PublicProductSummary['powertrain']): string {
-  if (pt === 'BEV') return 'Xe điện';
-  if (pt === 'HYBRID') return 'Hybrid';
-  return 'Xăng';
-}
-
 export async function generateMetadata(): Promise<Metadata> {
   const site = await loadSite();
   const brand = site?.brandName ?? 'Showroom ô tô';
-
-  // OG image dùng cover của xe nổi bật đầu tiên (SEO-META-005: asset đã publish)
   let image: string | null = null;
+
   if (site !== null) {
     try {
       const host = await requestHost();
-      const res = await fetchPublic<{ items: PublicProductSummary[] }>(host, '/vehicle-products?limit=1');
-      image = res.items[0]?.coverUrl ?? null;
+      const response = await fetchPublic<{ items: PublicProductSummary[] }>(host, '/vehicle-products?limit=1');
+      image = response.items[0]?.coverUrl ?? null;
     } catch {
       image = null;
     }

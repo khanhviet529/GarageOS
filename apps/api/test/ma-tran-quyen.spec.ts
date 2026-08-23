@@ -417,10 +417,55 @@ const KICH_BAN: KichBan[] = [
       call('POST', `/api/v1/marketing/vehicle-products/${UUID_GIA}/rollback`, undefined, v),
   },
   {
+    quyen: 'marketing:categoryRead',
+    ten: 'Xem category showroom',
+    goi: (v) => call('GET', '/api/v1/marketing/categories', undefined, v),
+  },
+  {
+    quyen: 'marketing:categoryWrite',
+    ten: 'Sửa category showroom',
+    goi: (v) => call('PATCH', `/api/v1/marketing/categories/${UUID_GIA}`, { name: 'Category test', slug: 'category-test', status: 'ACTIVE', sortOrder: 0, version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:reviewRead',
+    ten: 'Xem testimonial',
+    goi: (v) => call('GET', '/api/v1/marketing/testimonials', undefined, v),
+  },
+  {
+    quyen: 'marketing:reviewWrite',
+    ten: 'Sửa testimonial nháp',
+    goi: (v) => call('PATCH', `/api/v1/marketing/testimonials/${UUID_GIA}`, { displayName: 'Test', content: 'Nội dung testimonial hợp lệ', featured: false, sortOrder: 0, version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:reviewPublish',
+    ten: 'Publish testimonial',
+    goi: (v) => call('POST', `/api/v1/marketing/testimonials/${UUID_GIA}/publish`, undefined, v),
+  },
+  {
     quyen: 'marketing:experienceRead',
     ten: 'Xem trải nghiệm xe',
     goi: (v) =>
       call('GET', `/api/v1/marketing/vehicle-products/${UUID_GIA}/experiences`, undefined, v),
+  },
+  {
+    quyen: 'marketing:landingRead',
+    ten: 'Xem trang landing',
+    goi: (v) => call('GET', '/api/v1/marketing/landing-pages', undefined, v),
+  },
+  {
+    quyen: 'marketing:landingWrite',
+    ten: 'Tạo bản nháp landing',
+    goi: (v) => call('POST', `/api/v1/marketing/landing-pages/${UUID_GIA}/draft`, undefined, v),
+  },
+  {
+    quyen: 'marketing:landingPublish',
+    ten: 'Publish landing',
+    goi: (v) => call('POST', `/api/v1/marketing/landing-pages/${UUID_GIA}/publish`, { version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:mediaRead',
+    ten: 'Xem thư viện media',
+    goi: (v) => call('GET', '/api/v1/marketing/media', undefined, v),
   },
   {
     quyen: 'marketing:experienceWrite',

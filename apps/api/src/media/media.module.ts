@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MediaStorage } from './media-storage';
 import { MediaController } from './media.controller';
+import { MarketingMediaController } from './marketing-media.controller';
 import { STORAGE_PROVIDER, dungStorageProvider } from './storage-provider';
 
 /**
@@ -16,7 +17,7 @@ import { STORAGE_PROVIDER, dungStorageProvider } from './storage-provider';
     { provide: STORAGE_PROVIDER, useFactory: () => dungStorageProvider() },
     MediaStorage,
   ],
-  controllers: [MediaController],
+  controllers: [MediaController, MarketingMediaController],
   exports: [MediaStorage],
 })
 export class MediaModule {}

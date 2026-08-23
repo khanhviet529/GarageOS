@@ -1,0 +1,43 @@
+.shell { min-height: 100vh; background: var(--admin-canvas); color: var(--admin-ink); }
+.sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; display: flex; width: 16rem; flex-direction: column; padding: 1.25rem .75rem .8rem; color: #d7deea; background: var(--admin-sidebar); border-right: 1px solid rgb(255 255 255 / 7%); }
+.brand { display: flex; align-items: center; gap: .7rem; padding: .35rem .55rem; color: #fff; font-size: 1.05rem; font-weight: 760; letter-spacing: -.03em; text-decoration: none; }
+.brandMark { display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border-radius: .38rem; color: #fff; background: var(--admin-accent); font-size: .82rem; font-weight: 800; }
+.tenant { margin: .75rem .55rem 1.35rem; color: #8795aa; font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.navigation { display: grid; gap: 1.05rem; overflow-y: auto; }
+.navGroup { display: grid; gap: .18rem; }
+.groupLabel { margin: 0 0 .35rem; padding: 0 .55rem; color: #718096; font-size: .66rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.navItem, .navItemActive { display: flex; align-items: center; gap: .7rem; min-height: 2.35rem; padding: 0 .55rem; border: 1px solid transparent; border-radius: .42rem; color: #aebace; font-size: .86rem; font-weight: 650; text-decoration: none; }
+.navItem:hover { color: #f8fbff; background: rgb(255 255 255 / 6%); }
+.navItemActive { color: #fff; border-color: rgb(80 149 255 / 34%); background: rgb(47 118 227 / 22%); }
+.icon { width: 1.05rem; height: 1.05rem; flex: none; }
+.account { display: grid; grid-template-columns: 2rem 1fr; align-items: center; gap: .1rem .55rem; margin-top: auto; padding: .85rem .55rem 0; border-top: 1px solid rgb(255 255 255 / 9%); }
+.avatar { display: grid; width: 2rem; height: 2rem; grid-row: span 2; place-items: center; border-radius: 50%; color: #dcecff; background: #244775; font-size: .78rem; font-weight: 800; }
+.accountName { overflow: hidden; color: #e8eef8; font-size: .8rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.logout, .mobileLogout { justify-self: start; padding: 0; border: 0; color: #8ea1b9; background: transparent; cursor: pointer; font: inherit; font-size: .72rem; }
+.logout:hover, .mobileLogout:hover { color: #fff; }
+.logout:focus-visible, .mobileLogout:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.contentArea { min-width: 0; margin-left: 16rem; }
+.topbar { position: sticky; top: 0; z-index: 10; display: flex; min-height: 4.25rem; align-items: center; justify-content: space-between; padding: .7rem 2rem; background: rgb(246 247 249 / 92%); border-bottom: 1px solid var(--admin-border); backdrop-filter: blur(12px); }
+.breadcrumb { margin: 0; color: var(--admin-muted); font-size: .72rem; font-weight: 700; }
+.pageTitle { margin: .06rem 0 0; font-size: .98rem; font-weight: 760; letter-spacing: -.015em; }
+.topbarUser { color: var(--admin-muted); font-size: .8rem; }
+.main { width: min(100%, 100rem); margin: 0 auto; padding: 2rem; }
+.menuButton { display: none; width: 2.4rem; height: 2.4rem; padding: .55rem; border: 1px solid var(--admin-border); border-radius: .4rem; background: #fff; cursor: pointer; }
+.menuButton span { display: block; height: 2px; margin: 3px 0; background: var(--admin-ink); }
+.mobileLayer { display: none; }
+
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .contentArea { margin-left: 0; }
+  .topbar { padding: .7rem 1rem; justify-content: flex-start; gap: .85rem; }
+  .menuButton { display: block; }
+  .topbarUser { margin-left: auto; }
+  .main { padding: 1.3rem 1rem 2.5rem; }
+  .mobileLayer { position: fixed; inset: 0; z-index: 40; display: block; background: rgb(9 17 30 / 46%); }
+  .mobileSidebar { display: flex; width: min(18rem, 88vw); height: 100%; flex-direction: column; padding: 1rem .75rem; background: var(--admin-sidebar); box-shadow: 18px 0 48px rgb(0 0 0 / 24%); }
+  .mobileHeading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; padding: 0 .5rem; color: #fff; font-weight: 760; }
+  .mobileHeading button { border: 0; color: #fff; background: transparent; cursor: pointer; font-size: 1.8rem; line-height: 1; }
+  .mobileLogout { margin: auto .5rem .5rem; color: #d7deea; font-size: .85rem; }
+}
+
+@media (max-width: 520px) { .topbarUser { display: none; } .main { padding: 1rem .75rem 2rem; } }

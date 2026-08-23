@@ -1,4 +1,5 @@
 import type { ChiPhiTrangChu } from '@/lib/chi-phi';
+import styles from './so-sanh-dong-co.module.css';
 
 /**
  * So sánh chi phí bảo dưỡng với xe xăng — cùng quãng đường, cùng bảng giá.
@@ -30,15 +31,15 @@ export function SoSanhDongCo({
   const tiLe = Math.round((du.tomTat.tong / xeXang) * 100);
 
   return (
-    <section className="so-sanh" aria-labelledby="so-sanh-tieu-de">
-      <div className="container">
+    <section className={styles.section} aria-labelledby="so-sanh-tieu-de">
+      <div className={`container ${styles.container}`}>
         <p className="eyebrow">
           Cùng {dinhDang(du.kmMoiNam)} km mỗi năm, cùng một bảng giá
         </p>
         <h2 id="so-sanh-tieu-de">
           {tenXe} tiết kiệm{' '}
-          <span className="phieu-so">
-            {dinhDang(chenh)} <span className="gia-ky-hieu">₫</span>
+          <span className={styles.amount}>
+            {dinhDang(chenh)} <span className={styles.currency}>₫</span>
           </span>{' '}
           trong {du.tomTat.soNam} năm
         </h2>
@@ -47,12 +48,12 @@ export function SoSanhDongCo({
           Hai thanh theo tỉ lệ THẬT, kèm số bên cạnh. Thanh giúp thấy khác biệt
           ngay; số là thứ kiểm chứng được. Thiếu số thì đây chỉ là đồ hoạ.
         */}
-        <dl className="so-sanh-thanh">
+        <dl className={styles.bars}>
           <div>
             <dt>{tenXe}</dt>
             <dd>
               <span
-                className="thanh-ve"
+                className={styles.bar}
                 style={{ inlineSize: `${tiLe}%` }}
                 aria-hidden="true"
               />
@@ -63,7 +64,7 @@ export function SoSanhDongCo({
             <dt>Xe xăng cùng phân khúc</dt>
             <dd>
               <span
-                className="thanh-ve thanh-ve--doi-chung"
+                className={`${styles.bar} ${styles.comparisonBar}`}
                 style={{ inlineSize: '100%' }}
                 aria-hidden="true"
               />
@@ -72,7 +73,7 @@ export function SoSanhDongCo({
           </div>
         </dl>
 
-        <p className="note">
+        <p className={styles.note}>
           Khác biệt đến từ lịch bảo dưỡng, không từ khuyến mãi: xe điện không có
           dầu động cơ, lọc dầu, bugi hay dây curoa cam trong chu kỳ. Con số xe xăng
           được tính bằng chính {du.tenBangGia}.

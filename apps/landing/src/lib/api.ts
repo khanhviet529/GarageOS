@@ -50,6 +50,13 @@ export async function fetchPublic<T>(host: string, path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Preview is authorized by an opaque, short-lived token, not by the host or an admin cookie. */
+export async function fetchLandingPreview<T>(token: string): Promise<T> {
+  const res = await fetch(`${API_BASE}/api/v1/public/landing-page-preview?token=${encodeURIComponent(token)}`, { cache: 'no-store', headers: { accept: 'application/json' } });
+  if (!res.ok) throw publicApiError(res.status, `Preview API ${res.status}`);
+  return (await res.json()) as T;
+}
+
 /** 404/410 cho landing — không để lộ mã lỗi nội bộ */
 export function httpStatusForPublicApiError(err: unknown): number {
   const status = (err as { status?: number })?.status;

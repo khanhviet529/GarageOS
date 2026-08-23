@@ -1,8 +1,10 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
+import { richTextFromPlainText, type RichTextDocumentV1 } from '@garageos/contracts';
 import { api, errorMessage } from '@/lib/client';
 import { hasAction, useMe } from '@/components/auth';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 
 interface DraftView {
   id: string;
@@ -11,6 +13,7 @@ interface DraftView {
   modelName: string;
   summary: string;
   description: string;
+  descriptionDocument?: RichTextDocumentV1;
   seoTitle: string | null;
   seoDescription: string | null;
   version: number;
@@ -57,6 +60,7 @@ export default function VehicleEditorPage({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [descriptionDocument, setDescriptionDocument] = useState<RichTextDocumentV1 | null>(null);
 
   const canWrite = me !== null && hasAction(me.roles, 'marketing:catalogWrite');
   const canPublish = me !== null && hasAction(me.roles, 'marketing:catalogPublish');
@@ -71,6 +75,7 @@ export default function VehicleEditorPage({
           : Promise.resolve([] as ExperienceView[]),
       ]);
       setProduct(p);
+      setDescriptionDocument(p.draft?.descriptionDocument ?? (p.draft === null ? null : richTextFromPlainText(p.draft.description)));
       setExperiences(ex);
     } catch (e) {
       setError(errorMessage(e));
@@ -111,7 +116,7 @@ export default function VehicleEditorPage({
           version: draft?.version ?? 0,
           name: String(form.get('name') ?? '').trim(),
           summary: String(form.get('summary') ?? '').trim(),
-          description: String(form.get('description') ?? '').trim(),
+          descriptionDocument: descriptionDocument ?? richTextFromPlainText(draft?.description ?? ''),
           seoTitle: String(form.get('seoTitle') ?? '').trim() || null,
           seoDescription: String(form.get('seoDescription') ?? '').trim() || null,
         }),
@@ -139,7 +144,7 @@ export default function VehicleEditorPage({
             >
               <label>Tiêu đề *<input name="name" defaultValue={draft.name} required maxLength={160} /></label>
               <label>Mô tả ngắn<textarea name="summary" defaultValue={draft.summary} rows={2} maxLength={500} /></label>
-              <label>Nội dung<textarea name="description" defaultValue={draft.description} rows={6} maxLength={20000} /></label>
+              <label>Nội dung<RichTextEditor key={draft.id} value={descriptionDocument ?? richTextFromPlainText(draft.description)} onChange={setDescriptionDocument} /></label>
               <label>SEO title<input name="seoTitle" defaultValue={draft.seoTitle ?? ''} maxLength={160} /></label>
               <label>SEO description<input name="seoDescription" defaultValue={draft.seoDescription ?? ''} maxLength={300} /></label>
               <button className="btn" type="submit" disabled={busy || !canWrite}>Lưu bản nháp</button>

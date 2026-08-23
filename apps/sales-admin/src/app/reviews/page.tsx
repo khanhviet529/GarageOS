@@ -1,0 +1,18 @@
+'use client';
+
+import { useState } from 'react';
+import type { Testimonial } from '@/features/catalog-cms/api';
+import { errorMessage } from '@/lib/client';
+import { useCatalogCmsMutations, useTestimonials } from '@/features/catalog-cms/queries';
+
+export default function ReviewsPage(): React.ReactElement {
+  const query = useTestimonials(); const actions = useCatalogCmsMutations();
+  const [editing, setEditing] = useState<Testimonial | null>(null); const [error, setError] = useState<string | null>(null);
+  async function submit(form: FormData): Promise<void> {
+    const rating = String(form.get('rating') ?? '');
+    const input = { displayName: String(form.get('displayName') ?? '').trim(), content: String(form.get('content') ?? '').trim(), rating: rating === '' ? null : Number(rating), vehicleId: null, featured: form.get('featured') === 'on', sortOrder: Number(form.get('sortOrder') ?? 0) };
+    try { if (editing === null) await actions.createTestimonial.mutateAsync(input); else await actions.updateTestimonial.mutateAsync({ id: editing.id, input: { ...input, version: editing.version } }); setEditing(null); } catch (cause) { setError(errorMessage(cause)); }
+  }
+  const action = (operation: Promise<unknown>): void => { void operation.catch((cause: unknown) => setError(errorMessage(cause))); };
+  return <main className="container"><div className="page-heading"><div><p className="eyebrow">Catalog</p><h1>Testimonials</h1><p>Chỉ testimonial Published mới xuất hiện trên website public.</p></div></div>{error !== null && <p className="error" role="alert">{error}</p>}<div className="split-layout"><section className="card"><table className="table"><thead><tr><th>Name</th><th>Rating</th><th>Status</th><th /></tr></thead><tbody>{(query.data?.items ?? []).map((item) => <tr key={item.id}><td>{item.displayName}<br /><small>{item.content}</small></td><td>{item.rating ?? '—'}</td><td>{item.status}</td><td>{item.status === 'DRAFT' && <><button className="btn btn-secondary" type="button" onClick={() => setEditing(item)}>Edit</button>{' '}<button className="btn" type="button" onClick={() => action(actions.publish.mutateAsync(item.id))}>Publish</button></>}{item.status === 'PUBLISHED' && <button className="btn btn-secondary" type="button" onClick={() => action(actions.hide.mutateAsync(item.id))}>Hide</button>}</td></tr>)}</tbody></table></section><form className="form" action={(form) => { void submit(form); }}><h2>{editing === null ? 'Thêm testimonial' : `Sửa ${editing.displayName}`}</h2><label>Tên hiển thị<input name="displayName" required maxLength={120} defaultValue={editing?.displayName} key={`name-${editing?.id ?? 'new'}`} /></label><label>Nội dung<textarea name="content" required maxLength={2000} defaultValue={editing?.content} key={`content-${editing?.id ?? 'new'}`} /></label><label>Rating<select name="rating" defaultValue={editing?.rating?.toString() ?? ''} key={`rating-${editing?.id ?? 'new'}`}><option value="">Không có</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></label><label><input name="featured" type="checkbox" defaultChecked={editing?.featured} key={`featured-${editing?.id ?? 'new'}`} /> Featured</label><label>Sort order<input name="sortOrder" type="number" min="0" defaultValue={editing?.sortOrder ?? 0} key={`sort-${editing?.id ?? 'new'}`} /></label><button className="btn" disabled={actions.createTestimonial.isPending || actions.updateTestimonial.isPending}>{editing === null ? 'Lưu draft' : 'Cập nhật'}</button>{editing !== null && <button className="btn btn-secondary" type="button" onClick={() => setEditing(null)}>Huỷ</button>}</form></div></main>;
+}

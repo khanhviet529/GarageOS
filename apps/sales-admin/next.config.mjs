@@ -22,6 +22,8 @@ const GOC_MONOREPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** @type {import('next').NextConfig} */
 export default {
+  // Allows isolated verification builds without racing a running local dev server.
+  distDir: process.env.GARAGEOS_NEXT_DIST_DIR ?? '.next',
   reactStrictMode: true,
   output: 'standalone',
   outputFileTracingRoot: GOC_MONOREPO,

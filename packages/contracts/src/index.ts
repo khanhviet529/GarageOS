@@ -22,3 +22,5 @@ export * from './reports.js';
 export * from './invoice.js';
 export * from './marketing.js';
 export * from './sales.js';
+export * from './landing-page.js';
+export * from './catalog-cms.js';

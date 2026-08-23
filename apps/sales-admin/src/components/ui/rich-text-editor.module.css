@@ -1,0 +1,7 @@
+.root { border: 1px solid var(--border, #d7dce5); background: var(--surface, #fff); }
+.toolbar { display: flex; flex-wrap: wrap; gap: .25rem; padding: .45rem; border-bottom: 1px solid var(--border, #d7dce5); }
+.toolbar button { min-width: 2rem; min-height: 2rem; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: .2rem; }
+.toolbar button:hover, .toolbar button:focus-visible { background: #eef2f7; outline: 2px solid #2563eb; outline-offset: 1px; }
+.editor { min-height: 11rem; padding: .8rem; outline: none; }
+.editor :global(p:first-child), .editor :global(h2:first-child), .editor :global(h3:first-child) { margin-top: 0; }
+.editor :global(a) { color: #1d4ed8; text-decoration: underline; }
