@@ -147,7 +147,7 @@ export function HopBaoHiem({ repairOrderId }: { repairOrderId: string }) {
     (trangThaiMoi !== 'REJECTED' || rejectionReason.trim().length >= 5);
 
   return (
-    <section className="card" style={{ marginTop: 16 }}>
+    <section className="card">
       <h3>Hồ sơ bảo hiểm</h3>
       {loi !== null && <p className="alert error">{loi}</p>}
 

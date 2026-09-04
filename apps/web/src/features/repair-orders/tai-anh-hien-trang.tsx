@@ -1,7 +1,9 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { Camera } from 'lucide-react';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 /**
  * Tải ảnh hiện trạng lên — BC-01 bước 6.
@@ -73,13 +75,19 @@ export function TaiAnhHienTrang({ orderId, onXong }: Props): React.ReactElement 
   }
 
   return (
-    <div className="stack" style={{ marginTop: 12, gap: 8 }}>
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label>
-          Giai đoạn
+    <div className="flex flex-col gap-2.5">
+      <p className="nhan-ky-thuat">Thêm ảnh hiện trạng</p>
+
+      <div className="row">
+        <div className="field">
+          <label htmlFor="anh-giai-doan">Giai đoạn</label>
           <select
+            id="anh-giai-doan"
+            className="w-auto"
             value={phase}
-            onChange={(e) => { setPhase(e.target.value); }}
+            onChange={(e) => {
+              setPhase(e.target.value);
+            }}
             disabled={dangTai}
           >
             <option value="INTAKE">Lúc tiếp nhận</option>
@@ -88,44 +96,68 @@ export function TaiAnhHienTrang({ orderId, onXong }: Props): React.ReactElement 
             <option value="AFTER">Sau khi sửa</option>
             <option value="DELIVERY">Lúc giao xe</option>
           </select>
-        </label>
+        </div>
 
-        <label style={{ flex: 1, minWidth: 200 }}>
-          Ghi chú (tuỳ chọn)
+        <div className="field min-w-[200px] flex-1">
+          <label htmlFor="anh-ghi-chu">Ghi chú (tuỳ chọn)</label>
           <input
+            id="anh-ghi-chu"
             type="text"
             value={caption}
             maxLength={500}
             placeholder="Ví dụ: vết trầy cửa trái"
-            onChange={(e) => { setCaption(e.target.value); }}
-            disabled={dangTai}
-          />
-        </label>
-
-        <label>
-          {/*
-            `capture="environment"` mở thẳng camera sau trên điện thoại. Người
-            dùng thật của ô này đang đứng cạnh chiếc xe, không ngồi trước máy
-            tính — bắt họ chụp rồi tìm file trong thư viện là thêm hai bước đủ
-            để việc đó không xảy ra.
-          */}
-          <span className="sr-only">Chọn ảnh hiện trạng</span>
-          <input
-            ref={oFile}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            capture="environment"
-            disabled={dangTai}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f !== undefined) void chon(f);
+              setCaption(e.target.value);
             }}
+            disabled={dangTai}
           />
-        </label>
+        </div>
       </div>
 
-      {dangTai && <p className="muted small" role="status">Đang tải ảnh lên…</p>}
-      {loi !== null && <p className="alert error" role="alert">{loi}</p>}
+      {/*
+        Vùng kéo thả của khung `KIT — Ô nhập & xác thực`: viền nét đứt, icon,
+        một dòng nói định dạng và giới hạn. Cả khối là một `<label>` nên bấm ở
+        đâu cũng mở được bộ chọn tệp, và ô `<input type="file">` thật vẫn nằm
+        trong đó cho bàn phím và trình đọc màn hình.
+
+        `capture="environment"` mở thẳng camera sau trên điện thoại. Người dùng
+        thật của ô này đang đứng cạnh chiếc xe, không ngồi trước máy tính — bắt
+        họ chụp rồi đi tìm file trong thư viện là thêm hai bước đủ để việc đó
+        không xảy ra.
+      */}
+      <label
+        className={cn(
+          'flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed border-line-strong px-4 py-[18px] text-center transition-colors',
+          dangTai ? 'cursor-not-allowed opacity-100' : 'hover:border-text-dim hover:bg-ink-2',
+        )}
+      >
+        <Camera className="size-[18px] text-text-dim" aria-hidden />
+        <span className="text-12 font-medium text-text-muted">Bấm để chụp hoặc chọn ảnh</span>
+        <span className="nhan-ky-thuat">JPG, PNG, WebP · tối đa 8 MB mỗi tệp</span>
+        <input
+          ref={oFile}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          disabled={dangTai}
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f !== undefined) void chon(f);
+          }}
+        />
+      </label>
+
+      {dangTai && (
+        <p className="text-12 text-text-dim" role="status">
+          Đang tải ảnh lên…
+        </p>
+      )}
+      {loi !== null && (
+        <p className="alert error" role="alert">
+          {loi}
+        </p>
+      )}
     </div>
   );
 }

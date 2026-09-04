@@ -88,7 +88,7 @@ export function HopDieuChinhHoaDon({
     );
 
   return (
-    <div className="stack" style={{ marginTop: 12 }}>
+    <div className="mt-3 flex flex-col gap-4">
       <p className="alert warn">
         Hoá đơn gốc sẽ không bị sửa. Chứng từ mới chỉ ghi phần chênh lệch; nhập số âm khi cần giảm
         tiền phải thu hoặc hoàn tiền.
@@ -119,16 +119,16 @@ export function HopDieuChinhHoaDon({
             <label htmlFor={`adjust-description-${invoice.id}-${i}`}>Nội dung</label>
             <input id={`adjust-description-${invoice.id}-${i}`} value={d.description} onChange={(e) => sua(i, { description: e.target.value })} />
           </div>
-          <div className="row" style={{ gap: 8 }}>
-            <label className="field" style={{ flex: 1 }}>
+          <div className="row gap-2">
+            <label className="field flex-1">
               Số lượng
               <input type="number" min={0.001} step="any" value={d.quantity} onChange={(e) => sua(i, { quantity: e.target.value })} />
             </label>
-            <label className="field" style={{ flex: 1 }}>
+            <label className="field flex-1">
               Đơn giá chênh lệch
               <input type="number" step={1} value={d.unitPrice} onChange={(e) => sua(i, { unitPrice: e.target.value })} />
             </label>
-            <label className="field" style={{ flex: 1 }}>
+            <label className="field flex-1">
               Thuế (%)
               <input type="number" min={0} max={100} step={1} value={d.taxRatePercent} onChange={(e) => sua(i, { taxRatePercent: e.target.value })} />
             </label>

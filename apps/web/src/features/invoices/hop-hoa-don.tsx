@@ -185,7 +185,7 @@ export function HopHoaDon({
               ⚠️ Lệch {nhap.reconciliation.chenhLechPhanTram}% so với báo giá, vượt ngưỡng{' '}
               {nhap.reconciliation.nguongPhanTram}%. Phải ghi lý do trước khi phát hành — khách
               nhìn thấy con số này lúc thanh toán, và đó là thời điểm tệ nhất để tranh cãi.
-              <div className="field" style={{ marginTop: 8 }}>
+              <div className="field mt-2">
                 <label htmlFor="hd-lydo">Lý do chênh lệch</label>
                 <textarea
                   id="hd-lydo"
@@ -206,7 +206,7 @@ export function HopHoaDon({
             Ghi công nợ thay vì thu ngay (chỉ khách doanh nghiệp có hạn mức)
           </label>
 
-          <div className="row" style={{ marginTop: 8 }}>
+          <div className="row mt-2">
             <button onClick={dungHoaDon} disabled={dangGui} className="secondary">
               Dựng lại từ công việc thực tế
             </button>
@@ -227,7 +227,7 @@ export function HopHoaDon({
       )}
 
       {daPhatHanh.map((hd) => (
-        <div key={hd.id} style={{ marginTop: 16 }}>
+        <div key={hd.id} className="mt-4">
           <h4>
             {hd.code} · {INVOICE_STATUS_LABEL[hd.status]}
             {hd.adjustmentOfInvoiceId !== null && <span className="tag"> điều chỉnh</span>}
@@ -260,7 +260,7 @@ export function HopHoaDon({
               </tbody>
             </table>
           </BangCuon>
-          <div className="kpi-row" style={{ marginTop: 8 }}>
+          <div className="kpi-row mt-2">
             <div className="kpi">
               <span className="kpi-label">Tổng</span>
               <strong>{formatMoney(hd.totalAmount)}</strong>
@@ -277,7 +277,7 @@ export function HopHoaDon({
           {hd.varianceReason !== null && (
             <p className="hint">Giải trình chênh lệch: {hd.varianceReason}</p>
           )}
-          <div className="row" style={{ marginTop: 12 }}>
+          <div className="row mt-3">
             <HopDieuChinhHoaDon
               invoice={hd}
               canAdjust={canAdjust}

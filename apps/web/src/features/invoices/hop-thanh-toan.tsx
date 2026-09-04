@@ -177,7 +177,7 @@ export function HopThanhToan({
   const daDao = new Set((ds ?? []).flatMap((p) => (p.reversalOfPaymentId === null ? [] : [p.reversalOfPaymentId])));
 
   return (
-    <section className="card" style={{ marginTop: 12 }}>
+    <section className="card">
       <h4>Thanh toán</h4>
       {loi !== null && <p className="alert error">{loi}</p>}
 
@@ -191,7 +191,7 @@ export function HopThanhToan({
       )}
 
       {canRecord && moForm && (
-        <div className="stack" style={{ marginTop: 12 }}>
+        <div className="mt-3 flex flex-col gap-4">
           <fieldset className="field">
             <legend>Nguồn thanh toán</legend>
             {(['CUSTOMER', 'INSURER', 'WARRANTY'] as const).map((v) => (
@@ -242,8 +242,8 @@ export function HopThanhToan({
               if (conLai === 0) return null;
               const idLoi = `loi-thu-${l.id}`;
               return (
-                <div key={l.id} style={{ marginTop: 6 }}>
-                  <label className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+                <div key={l.id} className="mt-1.5">
+                  <label className="row justify-between">
                     <span>{l.description} · còn {formatMoney(conLai)}</span>
                     <input
                       aria-label={`Số tiền thu cho ${l.description}`}
@@ -253,7 +253,7 @@ export function HopThanhToan({
                       step={1}
                       value={phanBo[l.id] ?? ''}
                       onChange={(e) => setPhanBo((cu) => ({ ...cu, [l.id]: e.target.value }))}
-                      style={{ maxWidth: 160 }}
+                      className="max-w-[160px]"
                       /*
                        * `aria-invalid` + `aria-describedby` chứ không chỉ đổi
                        * màu viền: người dùng trình đọc màn hình phải biết ô nào
@@ -264,7 +264,7 @@ export function HopThanhToan({
                     />
                   </label>
                   {!hopLe && (
-                    <p className="alert error" id={idLoi} style={{ marginTop: 4 }}>
+                    <p className="alert error mt-1" id={idLoi}>
                       Nhập số nguyên đồng từ 0 đến {formatMoney(conLai)}. Tiền là số
                       nguyên — không có đơn vị nhỏ hơn đồng.
                     </p>
@@ -295,14 +295,14 @@ export function HopThanhToan({
       )}
 
       {ds !== null && ds.length > 0 && (
-        <div style={{ marginTop: 16 }}>
+        <div className="mt-4">
           <h5>Lịch sử khoản thu</h5>
           {ds.map((p) => {
             const phanCuaHoaDon = p.allocations.filter((a) => a.invoiceCode === invoice.code);
             const daoMotHoaDon = new Set(p.allocations.map((a) => a.invoiceCode)).size === 1;
             return (
-              <div key={p.id} className="card" style={{ marginTop: 8 }}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div key={p.id} className="card mt-2">
+                <div className="row justify-between">
                   <strong>{formatMoney(phanCuaHoaDon.reduce((t, a) => t + a.amount, 0))}</strong>
                   <span className="muted">{NHAN_NGUON_TRA[p.payerType]} · {NHAN_HINH_THUC[p.method]}</span>
                 </div>
@@ -315,7 +315,7 @@ export function HopThanhToan({
                 {canRecord && p.reversalOfPaymentId === null && !daDao.has(p.id) && daoMotHoaDon && (
                   <>
                     {dangDao === p.id ? (
-                      <div className="row" style={{ gap: 8 }}>
+                      <div className="row gap-2">
                         <input
                           aria-label={`Lý do đảo khoản thu ${p.id}`}
                           value={lyDoDao}
