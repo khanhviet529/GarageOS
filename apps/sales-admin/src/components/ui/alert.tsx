@@ -19,5 +19,15 @@ export function Alert({
   tone,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof variants>): React.ReactElement {
-  return <div role="status" className={cn(variants({ tone }), className)} {...props} />;
+  /*
+   * `alert` cắt ngang lời trình đọc màn hình đang nói; `status` thì chờ tới lượt.
+   * Một lỗi chặn thao tác đáng để cắt ngang — một dòng thông tin thì không.
+   */
+  return (
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className={cn(variants({ tone }), className)}
+      {...props}
+    />
+  );
 }

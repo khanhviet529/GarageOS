@@ -23,6 +23,7 @@ const GIO_QUA_HAN = 48;
 
 interface TongHop {
   dem: Record<LeadStatus, number>;
+  laiThu: number;
   quaHan: number;
   theoNgay: DiemNgay[];
   ganDay: LeadView[];
@@ -38,6 +39,11 @@ interface TongHop {
 function tongHop(items: LeadView[]): TongHop {
   const dem: Record<LeadStatus, number> = { NEW: 0, CONTACTED: 0, QUALIFIED: 0, LOST: 0 };
   for (const lead of items) dem[lead.status] += 1;
+
+  /* 'Hẹn lái thử' là Ý ĐỊNH khách gửi lên (LeadIntent), không phải một bậc của
+     LeadStatus. Bộ thiết kế xếp nó cạnh ba trạng thái nên dễ đọc nhầm thành bậc
+     thứ tư của phễu — nó không phải, và phễu bên dưới vẫn chỉ có bốn bậc thật. */
+  const laiThu = items.filter((l) => l.intent === 'TEST_DRIVE').length;
 
   const quaHan = items.filter((l) => l.status === 'NEW' && gioKeTu(l.createdAt) > GIO_QUA_HAN).length;
 
@@ -63,7 +69,7 @@ function tongHop(items: LeadView[]): TongHop {
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
     .slice(0, 5);
 
-  return { dem, quaHan, theoNgay, ganDay };
+  return { dem, laiThu, quaHan, theoNgay, ganDay };
 }
 
 export default function DashboardPage(): React.ReactElement {
@@ -102,7 +108,7 @@ export default function DashboardPage(): React.ReactElement {
           <div className="flex flex-wrap gap-4">
             <MetricCard label="Lead mới" value={t.dem.NEW} note="chưa ai liên hệ" loading={leads.isLoading} />
             <MetricCard label="Đã liên hệ" value={t.dem.CONTACTED} note="đang theo đuổi" tone="ok" loading={leads.isLoading} />
-            <MetricCard label="Đủ điều kiện" value={t.dem.QUALIFIED} note="đã xác thực nhu cầu" tone="ok" loading={leads.isLoading} />
+            <MetricCard label="Hẹn lái thử" value={t.laiThu} note="khách chủ động xin lái thử" tone="ok" loading={leads.isLoading} />
             <MetricCard
               label={`Chờ xử lý quá ${GIO_QUA_HAN}h`}
               value={t.quaHan}
