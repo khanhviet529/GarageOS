@@ -6,6 +6,15 @@ import { browserApiOrigin } from '@/lib/api-client';
 
 interface LeadFormProps {
   site: PublicSiteView | null;
+  /**
+   * Nhu cầu chọn sẵn khi khách tới từ một nút cụ thể ("Đăng ký lái thử").
+   *
+   * 💡 Người bấm đúng nút *Đăng ký lái thử* mà vẫn phải tự đổi ô "Nhu cầu" từ
+   *    *Nhận báo giá* sang *Đăng ký lái thử* là một bước thừa do giao diện tạo
+   *    ra, và một phần trong số họ sẽ không đổi — rồi tư vấn viên gọi lại sai
+   *    việc.
+   */
+  intentMacDinh?: 'REQUEST_QUOTE' | 'TEST_DRIVE' | 'GENERAL_CONTACT';
   productId?: string;
   variantId?: string;
   productLabel?: string;
@@ -26,6 +35,7 @@ interface ApiErrorBody {
  */
 export function LeadForm(props: LeadFormProps): React.ReactElement {
   const { site, productId, variantId, productLabel, variants, experienceSelection } = props;
+  const intentMacDinh = props.intentMacDinh ?? 'REQUEST_QUOTE';
   const [state, setState] = useState<'idle' | 'submitting'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
@@ -127,7 +137,7 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
 
       <label htmlFor="intent">
         Nhu cầu
-        <select id="intent" name="intent" defaultValue="REQUEST_QUOTE">
+        <select id="intent" name="intent" defaultValue={intentMacDinh}>
           <option value="REQUEST_QUOTE">Nhận báo giá</option>
           <option value="TEST_DRIVE">Đăng ký lái thử</option>
           <option value="GENERAL_CONTACT">Tư vấn chung</option>
@@ -168,7 +178,7 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
         <textarea id="message" name="message" rows={3} maxLength={2000} />
       </label>
 
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <label className="dong-y">
         <input type="checkbox" name="consent" required />
         <span>Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp *</span>
       </label>
@@ -177,7 +187,7 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
         <p className="error" role="alert">{error}</p>
       )}
 
-      <button className="btn" type="submit" disabled={state === 'submitting'}>
+      <button className="nut" type="submit" disabled={state === 'submitting'}>
         {state === 'submitting' ? 'Đang gửi…' : 'Gửi yêu cầu'}
       </button>
     </form>

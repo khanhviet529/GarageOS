@@ -25,6 +25,7 @@ const CHUNG = {
 const HINH = {
   check: 'M20 6 9 17l-5-5',
   plus: 'M12 5v14M5 12h14',
+  x: 'M18 6 6 18M6 6l12 12',
   'arrow-right': 'M5 12h14M13 6l6 6-6 6',
   'chevron-right': 'm9 6 6 6-6 6',
   'chevron-down': 'm6 9 6 6 6-6',

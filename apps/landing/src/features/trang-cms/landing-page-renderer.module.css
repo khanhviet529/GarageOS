@@ -1,1 +1,63 @@
-.hero{min-height:65vh;display:grid;align-items:end;padding:9rem 0 4rem;background:linear-gradient(135deg,#14191f,#303b42);color:#fff}.hero p:first-child{margin:0 0 1rem;font-size:.78rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.hero h1{max-width:11ch;margin:0;font-size:clamp(3rem,8vw,7rem);line-height:.92;letter-spacing:-.07em}.lead{max-width:55ch;margin:1.5rem 0 2rem;font-size:1.1rem;line-height:1.6}.hero.light{background:#f2f1ed;color:#16181b}.hero.brand{background:#22384c}.copy{padding:clamp(3.5rem,9vw,8rem) 0}.copy h2{max-width:16ch;margin:0 0 1rem;font-size:clamp(2rem,5vw,4rem);letter-spacing:-.055em;line-height:1}.copy p{max-width:60ch;font-size:1.04rem;line-height:1.7}.copy.dark{background:#172027;color:#f5f6f7}.copy.brand{background:#dce9ef}@media(prefers-reduced-motion:reduce){.hero{scroll-behavior:auto}}
+/*
+ * Trình dựng trang do biên tập viên soạn.
+ *
+ * 🔒 Đây là bề mặt KHÁC với trang chủ đã thiết kế: ở đây thứ tự khối, tiêu đề và
+ *    nút đều do biên tập viên đặt, nên khối phải nhận nội dung từ tài liệu chứ
+ *    không mang sẵn chữ. Vì thế nó KHÔNG dùng lại các màn của `trang-chu` — dùng
+ *    lại nghĩa là chữ trong mã đè lên chữ biên tập viên vừa nhập, và họ sẽ sửa
+ *    hoài mà không thấy đổi.
+ *
+ * 🔒 INV-LS-10: không có HTML/CSS/JS tự do. Mọi khối ở đây là một hình dạng đã
+ *    biết, nhận chữ thuần — bề mặt XSS chạy trên chính domain của khách thì
+ *    không có cách nào rào lại cho an toàn.
+ */
+.khoi { padding: var(--s-9) 0; }
+.toi { background: var(--ink-0); color: var(--text); }
+.anh { background: var(--photo); color: var(--text); }
+.giay { background: var(--paper-0); color: var(--paper-ink); }
+.giua { text-align: center; }
+.giua .than { margin-inline: auto; }
+.gon { padding: var(--s-8) 0; }
+.rong { padding: var(--s-10) 0; }
+
+.hero { display: flex; min-height: var(--man-hinh); flex-direction: column; justify-content: flex-end; padding: var(--s-10) 0 var(--s-9); }
+.hero h1 { max-width: 20ch; margin-top: var(--s-4); }
+.hero.giua h1 { margin-inline: auto; }
+
+.than { max-width: var(--measure); margin-top: var(--s-5); font-size: var(--fs-lead); }
+.toi .than, .anh .than { color: var(--text-muted); }
+.giay .than { color: var(--paper-muted); }
+.khoi h2 { margin-top: var(--s-3); }
+.nut { margin-top: var(--s-6); }
+
+.luoi { display: grid; gap: var(--s-5); margin-top: var(--s-7); grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.o { display: flex; flex-direction: column; padding: var(--s-5); background: var(--ink-1); transition: background var(--nhanh) var(--ease-out); }
+.giay .o { background: var(--paper-card); }
+.o:hover { background: var(--ink-2); }
+.giay .o:hover { background: var(--paper-1); }
+.oAnh { display: grid; aspect-ratio: 16 / 10; place-items: center; overflow: clip; margin-bottom: var(--s-4); background: var(--ink-2); color: var(--ink-3); }
+.giay .oAnh { background: var(--paper-1); color: var(--paper-muted); }
+.oAnh img { width: 100%; height: 100%; object-fit: cover; }
+.oPhu { margin-top: 4px; font-size: var(--fs-xs); }
+.toi .oPhu { color: var(--text-dim); }
+.giay .oPhu { color: var(--paper-muted); }
+.oGia { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); font-family: var(--font-mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.giay .oGia { border-top-color: var(--paper-line); }
+
+.noiBat { display: flex; min-height: var(--man-hinh); flex-direction: column; padding: 0; }
+.noiBatAnh { position: relative; flex: 1 1 auto; min-height: 240px; overflow: clip; display: grid; place-items: center; background: var(--ink-1); color: var(--ink-3); }
+.noiBatAnh img { width: 100%; height: 100%; object-fit: cover; }
+.noiBatChu { padding: var(--s-6) 0 var(--s-8); }
+.noiBatTen { margin-top: var(--s-3); font-size: var(--fs-cinema); letter-spacing: -.04em; }
+
+.chang { display: grid; gap: var(--s-5); margin-top: var(--s-7); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.chang > li { padding-top: var(--s-4); border-top: 1px solid var(--line); }
+.giay .chang > li { border-top-color: var(--paper-line); }
+.chang h3 { margin-top: var(--s-2); font-size: var(--fs-lead); }
+.chang p { margin-top: 6px; font-size: var(--fs-xs); }
+.toi .chang p { color: var(--text-muted); }
+.giay .chang p { color: var(--paper-muted); }
+
+.doanVan { max-width: var(--measure); margin-top: var(--s-5); white-space: pre-line; }
+.toi .doanVan { color: var(--text-muted); }
+.giay .doanVan { color: var(--paper-muted); }

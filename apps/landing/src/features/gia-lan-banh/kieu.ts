@@ -59,8 +59,20 @@ export interface BocGiaDayDu {
   };
   promotions: UuDai[];
   financing: ChuongTrinhTraGop[];
-  /** Nhãn PHẠM VI, không bao giờ là số lượng xe — INV-LS-17. */
-  availability: { label: string } | null;
+  /**
+   * Khả năng giao đã GỘP theo mẫu xe.
+   *
+   * 🔒 INV-LS-17: `label` nói PHẠM VI ("Sẵn xe tại 3 chi nhánh"), không bao
+   *    giờ nói số lượng xe. `branchCount` đếm CHI NHÁNH, không đếm xe — nó có
+   *    ở đây để lọc và sắp xếp, không phải để in ra cạnh chữ "xe".
+   */
+  availability: {
+    status: 'SAN_XE' | 'SAP_VE' | 'DAT_HANG' | 'TAM_NGUNG';
+    branchCount: number;
+    label: string;
+    leadTimeDaysMin: number | null;
+    leadTimeDaysMax: number | null;
+  } | null;
   deposit: { amount: string; holdDays: number | null; refundText: string | null } | null;
 }
 

@@ -1,0 +1,79 @@
+/*
+ * Trang Liên hệ — trang CÔNG CỤ, cuộn thường.
+ *
+ * 🔒 Khách mở trang này để LẤY SỐ ĐIỆN THOẠI, không để xem trình diễn. Ép nó
+ *    vào khung nhìn cố định là làm chậm đúng người đang vội nhất trên site.
+ *
+ * 🔒 Trên điện thoại các hàng gọi theo bộ phận đứng TRƯỚC biểu mẫu, và thanh
+ *    dính đáy là "Gọi" chứ không phải "Gửi": người ta mở trang Liên hệ trên điện
+ *    thoại để gọi.
+ */
+.dau { padding: var(--s-9) 0 var(--s-7); background: var(--photo); }
+.dauTrong { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-5); }
+.dauTrong h1 { margin-top: var(--s-3); font-size: var(--fs-title-xl); }
+.hotline { display: grid; gap: 4px; text-align: right; }
+.hotline b {
+  font-family: var(--font-mono);
+  font-size: clamp(1.5rem, 2.6vw, 2.125rem);
+  font-weight: 500;
+  letter-spacing: -.03em;
+}
+
+.than { padding: var(--s-8) 0 var(--s-9); background: var(--paper-0); color: var(--paper-ink); }
+.luoi { display: grid; align-items: start; gap: var(--s-5); grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr); }
+
+.hopBieuMau { padding: var(--s-6); background: var(--paper-card); }
+.hopBieuMau > p { margin-top: 6px; color: var(--paper-muted); font-size: var(--fs-xs); }
+
+.cot { display: grid; gap: var(--s-4); }
+.boPhan { padding: var(--s-6); background: var(--paper-ink); color: var(--paper-1); }
+.boPhan h2 { color: var(--paper-0); font-size: var(--fs-lead); }
+.boPhan li { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4) 0; border-bottom: 1px solid rgb(255 255 255 / 14%); }
+.boPhan li:last-child { border-bottom: 0; }
+.boPhan .ten { flex: 1 1 auto; font-size: var(--fs-xs); font-weight: 500; }
+.boPhan .ten span { display: block; margin-top: 2px; color: var(--text-dim); font-weight: 400; }
+.boPhan a { color: var(--signal-dark); font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 500; }
+
+.kenh { padding: var(--s-5); background: var(--paper-card); }
+.kenh h2 { font-size: var(--fs-lead); }
+.kenh li { display: flex; gap: var(--s-3); padding: var(--s-3) 0; border-bottom: 1px solid var(--paper-line); }
+.kenh li:last-child { border-bottom: 0; }
+.kenh svg { flex: 0 0 auto; margin-top: 2px; }
+.kenh strong { display: block; font-size: var(--fs-xs); }
+.kenh p { color: var(--paper-muted); font-size: var(--fs-label-lg); }
+
+.showroom { padding: var(--s-9) 0; background: var(--ink-0); }
+.showroom h2 { margin-top: var(--s-3); }
+.dsShowroom { display: grid; gap: var(--s-2); margin-top: var(--s-6); grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.the { display: flex; gap: var(--s-4); padding: var(--s-5); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--ink-1); }
+.the svg { flex: 0 0 auto; margin-top: 2px; color: var(--signal-dark); }
+.the h3 { font-size: var(--fs-sm); }
+.the p { margin-top: 3px; color: var(--text-muted); font-size: var(--fs-xs); }
+.the .sdt { color: var(--text); font-family: var(--font-mono); }
+
+.faq { padding: var(--s-9) 0; background: var(--paper-0); color: var(--paper-ink); }
+.faq h2 { font-size: var(--fs-title); }
+.dsFaq { display: grid; gap: 0 var(--s-8); margin-top: var(--s-6); grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.faq details { padding: var(--s-4) 0; border-bottom: 1px solid var(--paper-line); }
+.faq summary { cursor: pointer; font-size: var(--fs-sm); font-weight: 600; list-style: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq details p { margin-top: var(--s-3); color: var(--paper-muted); font-size: var(--fs-xs); }
+
+/* Thanh gọi dính đáy — chỉ trên điện thoại. */
+.thanhGoi { display: none; }
+
+@media (max-width: 960px) { .luoi { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) {
+  .hotline { text-align: left; }
+  .thanhGoi {
+    position: sticky;
+    z-index: 26;
+    bottom: 0;
+    display: flex;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--page-gutter);
+    border-top: 1px solid var(--line);
+    background: var(--ink-1);
+  }
+  .thanhGoi > * { flex: 1 1 0; }
+}
