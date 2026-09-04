@@ -1,4 +1,39 @@
+/*
+ * 🔒 `line-height` chỉ hai giá trị: 1.6 cho đoạn văn, 1.25 cho tiêu đề.
+ *    Không có giá trị thứ ba, kể cả khi mock đo ra 1.07.
+ */
 body { font-family: var(--font-ui); font-size: var(--fs-md); line-height: var(--lh-body); }
-h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: -.028em; line-height: var(--lh-display); text-wrap: balance; }
-p, h1, h2, h3 { margin-top: 0; }
-a { color: inherit; }
+
+h1, h2, h3, h4 {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  line-height: var(--lh-title);
+  letter-spacing: var(--ls-title);
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--fs-hero); letter-spacing: var(--ls-hero); }
+h2 { font-size: var(--fs-title); }
+h3 { font-size: var(--fs-title-sm); letter-spacing: -.02em; }
+
+/*
+ * Nhãn kỹ thuật — Zoox. Mono, viết hoa, giãn chữ rộng. 10 px là SÀN và nó chỉ
+ * hợp lệ vì đây là chữ để liếc, không phải để đọc.
+ */
+.nhan {
+  display: block;
+  margin: 0;
+  color: var(--signal-dark);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-lg);
+  font-weight: 400;
+  letter-spacing: var(--ls-label);
+  line-height: var(--lh-body);
+  text-transform: uppercase;
+}
+.nhan-giay { color: var(--signal-light); }
+.nhan-mo { color: var(--text-dim); }
+.nhan-mo-giay { color: var(--paper-muted); }
+
+/* Số liệu: mono, tabular, để cột số thẳng hàng khi giá trị đổi. */
+.so { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

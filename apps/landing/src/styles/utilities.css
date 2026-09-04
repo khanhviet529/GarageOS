@@ -1,16 +1,154 @@
-.container { width: min(100%, calc(var(--max-w) + (var(--page-gutter) * 2))); margin-inline: auto; padding-inline: var(--page-gutter); }
-.container--wide { max-width: calc(var(--max-w-wide) + (var(--page-gutter) * 2)); }
-.eyebrow { margin: 0 0 var(--s-4); color: var(--brand); font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 500; letter-spacing: .14em; text-transform: uppercase; }
-.note, .muted { color: var(--text-muted); font-size: var(--fs-sm); }
-.tnum { font-variant-numeric: tabular-nums; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.skip-link { position: absolute; left: -9999px; top: 0; z-index: 100; padding: var(--s-3) var(--s-4); color: var(--text-on-action); background: var(--action); text-decoration: none; }
+.container {
+  width: min(100%, calc(var(--max-w) + var(--page-gutter) * 2));
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+/*
+ * Một MÀN. Cuộn là lật trang — nhưng `min-height`, không phải `height`: khi
+ * nội dung không vừa (điện thoại, cỡ chữ hệ thống lớn) thì màn phải cao ra
+ * chứ không được cắt. Ép chiều cao cứng là cách một bố cục đẹp trên máy thiết
+ * kế trở thành một bố cục mất chữ trên máy người dùng.
+ */
+.man {
+  position: relative;
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  background: var(--ink-0);
+}
+.man-toi { color: var(--text); background: var(--ink-0); }
+.man-anh { color: var(--text); background: var(--photo); }
+.man-giay { color: var(--paper-ink); background: var(--paper-0); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  z-index: 100;
+  padding: var(--s-3) var(--s-4);
+  border-radius: 0 0 var(--r-md) 0;
+  background: var(--action);
+  color: var(--text-on-action);
+}
 .skip-link:focus { left: 0; }
-.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: var(--s-3) var(--s-5); border: 1px solid var(--action); border-radius: var(--r-sm); background: var(--action); color: var(--text-on-action) !important; font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 500; letter-spacing: .14em; text-transform: uppercase; text-decoration: none; transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out); }
-.btn:hover { background: var(--action-hover); border-color: var(--action-hover); }
-.btn:active { transform: translateY(1px); }
-.btn-secondary { background: transparent; border-color: var(--line-strong); color: var(--text) !important; }
-.btn-secondary:hover { border-color: var(--text); background: rgb(255 255 255 / 8%); }
-.btn:disabled { cursor: not-allowed; opacity: .55; }
-a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+
+/* ── Nút ─────────────────────────────────────────────────────────────────
+ * Ba dạng, không có dạng thứ tư: đặc (hành động chính), viền (hành động phụ),
+ * đảo (hành động chính khi nền đã là ảnh tối).
+ */
+.nut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  min-height: 48px;
+  padding: 0 30px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--action);
+  color: var(--text-on-action);
+  font-size: .9375rem;
+  font-weight: 600;
+  line-height: var(--lh-body);
+  text-align: center;
+  transition:
+    background var(--nhanh) var(--ease-out),
+    border-color var(--nhanh) var(--ease-out),
+    color var(--nhanh) var(--ease-out);
+}
+.nut:hover { background: var(--action-hover); }
+.nut:disabled { cursor: not-allowed; opacity: .55; }
+
+.nut-vien { border-color: var(--line-strong); background: transparent; color: var(--text); }
+.nut-vien:hover { border-color: var(--text); background: rgb(255 255 255 / 8%); }
+
+.nut-dao { background: var(--paper-card); color: var(--photo); }
+.nut-dao:hover { background: var(--paper-1); }
+
+.nut-giay { background: var(--paper-ink); color: var(--paper-0); }
+.nut-giay:hover { background: var(--paper-action); }
+
+.nut-giay-vien { border-color: var(--paper-line-strong); background: transparent; color: var(--paper-ink); }
+.nut-giay-vien:hover { border-color: var(--paper-ink); background: rgb(22 24 23 / 6%); }
+
+.nut-nho { min-height: 38px; padding: 0 20px; font-size: var(--fs-xs); }
+
+/* ── Chip lọc ────────────────────────────────────────────────────────── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  transition: border-color var(--nhanh) var(--ease-out), color var(--nhanh) var(--ease-out);
+}
+.chip:hover { border-color: var(--text); color: var(--text); }
+.chip[aria-current='true'], .chip[aria-pressed='true'] {
+  border-color: var(--paper-card);
+  background: var(--paper-card);
+  color: var(--photo);
+  font-weight: 600;
+}
+
+/*
+ * Nhãn trạng thái. KHÔNG có nền pha loãng: một chữ xanh trên nền xanh 12 %
+ * đo được 4,05 : 1 khi khối giấy là `--paper-0` — trượt AA ở đúng nơi nó
+ * trông vô hại nhất. Nhãn ngồi thẳng trên bề mặt, hoặc trên một viên trắng.
+ */
+.the-trang-thai {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: var(--r-full);
+  background: var(--ink-2);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: .08em;
+  line-height: var(--lh-body);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.the-trang-thai-ok { color: var(--ok); }
+.the-trang-thai-cho { color: var(--warn); }
+
+.the-giay { background: var(--paper-card); color: var(--paper-muted); }
+.the-giay.the-trang-thai-ok { color: var(--paper-ok); }
+.the-giay.the-trang-thai-cho { color: var(--paper-warn); }
+
+/* ── Ghi chú nguồn — INV-LS-16 ─────────────────────────────────────────
+ * Nhãn ước tính KHÔNG phải chữ nhỏ pháp lý nhét ở chân trang. Nó nằm cạnh con
+ * số, cùng khối, và có cỡ đọc được.
+ */
+.uoc-tinh { color: var(--text-dim); font-size: var(--fs-xs); }
+.uoc-tinh-giay { color: var(--paper-muted); font-size: var(--fs-xs); }
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Ký hiệu tiền luôn mang giọng UI — lý do đầy đủ ở `lib/site.ts`. */
+.gia-ky-hieu { font-family: var(--font-ui); font-size: .68em; }
+.gia-so { font-variant-numeric: tabular-nums; }
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 3px;
+}
+.man-giay :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline-color: var(--paper-action);
+}

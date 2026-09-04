@@ -1,24 +1,24 @@
-.hero { position: relative; min-height: min(88svh, 940px); overflow: clip; isolation: isolate; background: var(--surface-0); }
-.media { position: absolute; inset: 0; z-index: -2; overflow: hidden; background: radial-gradient(circle at 73% 43%, var(--surface-3), var(--surface-0) 55%); }
-.media::after { position: absolute; inset: 0; content: ''; background: linear-gradient(90deg, var(--surface-0) 0%, rgb(10 11 12 / 88%) 26%, rgb(10 11 12 / 34%) 53%, transparent 80%), linear-gradient(0deg, rgb(10 11 12 / 82%), transparent 42%); }
+.hero { position: relative; min-height: min(88svh, 940px); overflow: clip; isolation: isolate; background: var(--ink-0); }
+.media { position: absolute; inset: 0; z-index: -2; overflow: hidden; background: radial-gradient(circle at 73% 43%, var(--ink-3), var(--ink-0) 55%); }
+.media::after { position: absolute; inset: 0; content: ''; background: linear-gradient(90deg, var(--ink-0) 0%, rgb(10 11 12 / 88%) 26%, rgb(10 11 12 / 34%) 53%, transparent 80%), linear-gradient(0deg, rgb(10 11 12 / 82%), transparent 42%); }
 .vehicleVisual { position: absolute; top: 6%; right: -8vw; width: min(76vw, 1260px); height: 88%; }
 .vehicleVisual img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
-.empty { width: 100%; height: 100%; background: radial-gradient(circle at 74% 38%, var(--surface-3), var(--surface-0) 60%); }
+.empty { width: 100%; height: 100%; background: radial-gradient(circle at 74% 38%, var(--ink-3), var(--ink-0) 60%); }
 .container { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .55fr); min-height: inherit; align-items: end; gap: var(--s-7); padding-top: var(--s-10); padding-bottom: var(--s-9); }
 .copy { align-self: end; max-width: 720px; padding-bottom: var(--s-5); }
-.copy h1 { display: grid; gap: .03em; margin: 0; font-size: clamp(3.2rem, 5.4vw, 6.3rem); font-weight: 600; line-height: var(--lh-hero); letter-spacing: -.045em; }
+.copy h1 { display: grid; gap: .03em; margin: 0; font-size: clamp(3.2rem, 5.4vw, 6.3rem); font-weight: 600; line-height: var(--lh-title); letter-spacing: -.045em; }
 .copy h1 span { display: block; }
-.copy > p:not(.proof) { max-width: 48ch; margin: var(--s-5) 0 0; color: var(--text-muted); font-size: var(--fs-lg); }
+.copy > p:not(.proof) { max-width: 48ch; margin: var(--s-5) 0 0; color: var(--text-muted); font-size: var(--fs-lead); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-6); }
 .proof { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: var(--s-7) 0 0; padding-top: var(--s-4); border-top: 1px solid var(--line-strong); color: var(--text-muted); font-size: var(--fs-sm); }
 .proof strong { color: var(--text); }
 .metadata { justify-self: end; width: min(100%, 320px); padding: var(--s-5) 0 0 var(--s-5); border-top: 1px solid var(--line-strong); border-left: 1px solid var(--line); color: var(--text); }
 .metadata > p, .metadata span { margin: 0; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; }
 .metadata > div { display: grid; gap: var(--s-2); }
-.metadata strong { font-size: var(--fs-lg); font-weight: 600; letter-spacing: -.025em; }
-.price { margin: var(--s-5) 0; font-family: var(--font-ui); font-size: var(--fs-xl); font-weight: 600; }
+.metadata strong { font-size: var(--fs-lead); font-weight: 600; letter-spacing: -.025em; }
+.price { margin: var(--s-5) 0; font-family: var(--font-ui); font-size: var(--fs-title-sm); font-weight: 600; }
 .metadata > a { color: var(--text); font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600; letter-spacing: .1em; text-decoration: none; text-transform: uppercase; }
 .metadata > a:hover { color: var(--brand); }
 @media (min-width: 1600px) { .hero { min-height: min(92svh, 1080px); } }
 @media (max-width: 900px) { .hero { min-height: min(900px, 100svh); } .vehicleVisual { top: 9%; right: -26vw; width: 112vw; height: 58%; } .container { grid-template-columns: 1fr; align-content: end; gap: var(--s-5); } .copy { max-width: 580px; padding-bottom: 0; } .metadata { justify-self: start; } }
-@media (max-width: 620px) { .hero { min-height: 860px; } .media::after { background: linear-gradient(180deg, rgb(10 11 12 / 82%) 0%, rgb(10 11 12 / 18%) 40%, var(--surface-0) 82%); } .vehicleVisual { top: 16%; right: -42vw; width: 150vw; height: 43%; } .container { align-content: end; padding-top: var(--s-9); padding-bottom: var(--s-7); } .copy h1 { font-size: clamp(2.85rem, 13.5vw, 4.2rem); line-height: 1.06; letter-spacing: -.045em; } .copy > p:not(.proof) { margin-top: var(--s-4); font-size: var(--fs-md); } .actions { margin-top: var(--s-5); } .proof { margin-top: var(--s-5); } .metadata { width: 100%; max-width: none; padding-top: var(--s-4); padding-left: 0; border-left: 0; } }
+@media (max-width: 620px) { .hero { min-height: 860px; } .media::after { background: linear-gradient(180deg, rgb(10 11 12 / 82%) 0%, rgb(10 11 12 / 18%) 40%, var(--ink-0) 82%); } .vehicleVisual { top: 16%; right: -42vw; width: 150vw; height: 43%; } .container { align-content: end; padding-top: var(--s-9); padding-bottom: var(--s-7); } .copy h1 { font-size: clamp(2.85rem, 13.5vw, 4.2rem); line-height: 1.06; letter-spacing: -.045em; } .copy > p:not(.proof) { margin-top: var(--s-4); font-size: var(--fs-md); } .actions { margin-top: var(--s-5); } .proof { margin-top: var(--s-5); } .metadata { width: 100%; max-width: none; padding-top: var(--s-4); padding-left: 0; border-left: 0; } }

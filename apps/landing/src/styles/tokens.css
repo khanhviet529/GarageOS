@@ -1,57 +1,109 @@
+/*
+ * Bảng token của landing — DES-LS-002 §3.
+ *
+ * 🔒 MỘT TÊN CHO MỘT MÀU. Tên ở đây là tên duy nhất: dùng y hệt ở biến Pencil,
+ *    ở CSS này, và ở nhãn hiện cho biên tập viên trong màn *Giao diện*. Không
+ *    thêm màu ngoài bảng — "cần tối hơn một chút" là cách một thang bốn bậc
+ *    biến thành bảy bậc không ai phân biệt nổi.
+ *
+ * 🔒 Landing KHÔNG có theme sáng/tối. Nó có hai BỀ MẶT trong cùng một trang:
+ *    nền tối (`--ink-*`) cho cảm xúc, khối giấy (`--paper-*`) cho con số. Vì
+ *    thế `--paper-*` không phải "biến thể sáng của ink" — nó là một họ riêng,
+ *    và một khối giấy nằm giữa trang tối vẫn dùng đủ bộ `--paper-*`.
+ */
 :root {
-  --surface-0: #0a0b0c;
-  --surface-1: #111315;
-  --surface-2: #181b1e;
-  --surface-3: #24282c;
+  /* ── Bốn tầng nền tối: một thang bốn bậc, mỗi bậc một việc ───────────── */
+  --ink-0: #08090a;   /* nền trang */
+  --ink-1: #15181b;   /* thẻ nổi trên nền trang */
+  --ink-2: #1d2125;   /* ô nhập, khối lõm trong thẻ */
+  --ink-3: #2a2f34;   /* chip, thanh tiến trình */
+  --photo: #0e1113;   /* giếng ảnh/video — chỉ landing */
+
+  /* ── Khối SÁNG bên trong trang tối ───────────────────────────────────── */
   --paper-0: #f3f1eb;
   --paper-1: #e8e5dd;
+  --paper-card: #ffffff;
   --paper-ink: #161817;
   --paper-muted: #5d605b;
-  /*
-   * 🔒 Thương hiệu TRÊN BỀ MẶT SÁNG. Không dùng `--brand-strong` ở đây.
-   *
-   * `--brand-strong #c73526` là màu cho nền TỐI. Trên giấy nó đo 4,69:1 (trên
-   * `--paper-0`) và **4,21:1** trên `--paper-1` — tức là qua ở tầng này và
-   * trượt ở tầng kia, đúng loại lỗi không ai thấy bằng mắt. axe bắt được đúng
-   * một chỗ; bốn chỗ còn lại chỉ chưa rơi xuống `--paper-1` mà thôi.
-   *
-   * #b32e20 đo 5,01:1 trên `--paper-1` và 5,59:1 trên `--paper-0`.
-   */
-  --paper-brand: #b32e20;
-  --ink-0: var(--surface-0);
-  --ink-1: var(--surface-1);
-  --ink-2: var(--surface-2);
-  --ink-3: var(--surface-3);
+  --paper-line: rgb(22 24 23 / 14%);
+  --paper-line-strong: rgb(22 24 23 / 25%);
+
+  /* ── Chữ trên nền tối ────────────────────────────────────────────────── */
   --text: #f5f5f3;
   --text-muted: #b5b7b4;
-  --text-dim: #b5b7b4;
+  --text-dim: #8b908c;
   --text-on-action: #ffffff;
-  --text-on-ink: var(--text);
-  --text-on-ink-muted: var(--text-muted);
-  --line: rgb(255 255 255 / 14%);
-  --line-strong: rgb(255 255 255 / 38%);
-  --paper-line: rgb(22 24 23 / 20%);
+
+  --line: rgb(255 255 255 / 12%);
+  --line-strong: rgb(255 255 255 / 25%);
+
+  /* ── Thương hiệu và hành động ────────────────────────────────────────── */
   --brand: #ff705c;
-  --brand-strong: #c73526;
-  --brand-dim: rgb(232 75 56 / 14%);
   --action: #c73526;
   --action-hover: #ae2e21;
-  --accent: var(--brand);
+
+  /* ── Trạng thái trên nền tối ─────────────────────────────────────────── */
   --ok: #62d19b;
+  --warn: #e6b877;
   --danger: #ff8f84;
-  --font-display: var(--font-ui-vn), 'Be Vietnam Pro', Inter, ui-sans-serif, system-ui, sans-serif;
+
+  /*
+   * Cùng vai trò, giá trị của cột "nền sáng" trong bảng token — dùng khi vai
+   * trò đó rơi vào một khối giấy. Không phải màu mới: đúng giá trị đã chốt,
+   * đặt tên theo họ `--paper-*` để chỗ dùng tự nói ra nó nằm trên bề mặt nào.
+   */
+  --paper-brand: #b32e20;
+  --paper-action: #b32e20;
+  --paper-action-hover: #96261a;
+  --paper-ok: #177a4e;
+  --paper-warn: #8a5f12;
+  --paper-danger: #b3271a;
+
+  /*
+   * 🔒 Nhãn kỹ thuật chia theo BỀ MẶT, không theo theme. Một khối SÁNG nằm
+   *    trong trang TỐI vẫn phải dùng `--signal-light`. Đây là lý do hai token
+   *    này cố ý KHÔNG được khai thành một cặp đổi theo theme.
+   */
+  --signal-dark: #c9a227;
+  --signal-light: #7a5c00;
+
+  /* ── Chữ ─────────────────────────────────────────────────────────────── */
   --font-ui: var(--font-ui-vn), 'Be Vietnam Pro', Inter, ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono-vn), 'JetBrains Mono', ui-monospace, Consolas, monospace;
-  --fs-xs: .75rem;
-  --fs-sm: .875rem;
+  --font-mono: var(--font-mono-vn), 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  /*
+   * Thang cỡ. Khoảng cách giữa cỡ hero và cỡ nội dung phải LỚN TỚI MỨC THẤY
+   * NGAY — đó là toàn bộ mẹo làm trang trông đắt tiền, không phải màu hay
+   * hiệu ứng.
+   */
+  --fs-hero: clamp(2.5rem, 5.3vw, 4.75rem);      /* 76px @1440 */
+  --fs-cinema: clamp(3rem, 8.6vw, 7.75rem);      /* 124px @1440 — chỉ khối điện ảnh */
+  --fs-title-xl: clamp(2.25rem, 4.3vw, 3.875rem);/* 62px @1440 */
+  --fs-title: clamp(1.75rem, 3.05vw, 2.75rem);   /* 44px @1440 */
+  --fs-title-sm: clamp(1.375rem, 1.8vw, 1.625rem);
+  --fs-lead: 1.0625rem;
   --fs-md: 1rem;
-  --fs-lg: 1.125rem;
-  --fs-xl: clamp(1.4rem, 2.2vw, 1.875rem);
-  --fs-2xl: clamp(2rem, 3.7vw, 3.5rem);
-  --fs-3xl: clamp(3.1rem, 8vw, 7.5rem);
-  --lh-display: 1.1;
-  --lh-hero: 1.04;
+  --fs-sm: .875rem;
+  --fs-xs: .8125rem;
+  /* 🔒 SÀN TUYỆT ĐỐI. Chỉ cho nhãn mono viết hoa có giãn chữ — loại chữ liếc
+     chứ không đọc. Không có chữ nào nhỏ hơn, kể cả chú thích pháp lý. */
+  --fs-label: .625rem;
+  --fs-label-lg: .6875rem;
+
+  /* Số liệu — mono, đo theo từng vai trò trong bản dựng Pencil. */
+  --fs-figure-hero: clamp(2.75rem, 7.2vw, 6.5rem);  /* 104px @1440 */
+  --fs-figure-lg: clamp(1.75rem, 2.1vw, 1.875rem);  /* 30px */
+  --fs-figure: 1.375rem;
+
+  /* 🔒 Chỉ hai giá trị. Không có giá trị thứ ba "cho vừa mắt". */
   --lh-body: 1.6;
+  --lh-title: 1.25;
+
+  --ls-title: -.03em;
+  --ls-hero: -.04em;
+  --ls-label: .18em;
+
+  /* ── Nhịp ────────────────────────────────────────────────────────────── */
   --s-1: 4px;
   --s-2: 8px;
   --s-3: 12px;
@@ -62,25 +114,32 @@
   --s-8: 64px;
   --s-9: 96px;
   --s-10: 128px;
-  --s-11: 160px;
-  --section-space-sm: var(--s-8);
-  --section-space-md: var(--s-10);
-  --section-space-lg: var(--s-11);
-  --r-sm: 2px;
-  --r-md: 4px;
+
+  --r-sm: 4px;
+  --r-md: 6px;
   --r-lg: 8px;
   --r-full: 999px;
-  --shadow-1: 0 1px 0 rgb(255 255 255 / 6%) inset;
-  --shadow-2: 0 24px 70px rgb(0 0 0 / 45%);
-  --max-w: 1180px;
-  --max-w-wide: 1560px;
-  --page-gutter: var(--s-5);
-  --measure: 66ch;
-  --measure-tight: 46ch;
+
+  /*
+   * Bề ngang bản dựng là 1440 với lề 60 → nội dung 1320. Giữ đúng con số đó
+   * thay vì một `max-width` tròn trịa, để bố cục đo được so với thiết kế.
+   */
+  --page-gutter: 60px;
+  --max-w: 1320px;
+  --measure: 62ch;
+
+  /*
+   * 🔒 Chiều cao thật, không phải chiều cao mock. Trên 1920×1080 với thanh
+   *    trình duyệt, vùng nhìn thật còn ~940 px. `svh` bám theo vùng nhìn nhỏ
+   *    nhất nên nó là đơn vị đúng cho "cuộn là lật trang"; `min-height` để
+   *    màn nào không vừa thì tự cao ra thay vì cắt mất nội dung.
+   */
+  --man-hinh: min(100svh, 940px);
+
   --ease-out: cubic-bezier(.16, 1, .3, 1);
-  --duration-fast: 150ms;
-  --duration-base: 280ms;
-  --duration-slow: 600ms;
+  --nhanh: 150ms;
+  --vua: 320ms;
 }
-@media (min-width: 1600px) { :root { --max-w: 1320px; } }
-@media (max-width: 620px) { :root { --page-gutter: var(--s-4); } }
+
+@media (max-width: 1100px) { :root { --page-gutter: 32px; } }
+@media (max-width: 620px) { :root { --page-gutter: 18px; } }
