@@ -107,3 +107,26 @@ export function ngayVN(iso: string): string {
 export function nhanUocTinh(source: { provinceName: string; effectiveFrom: string }): string {
   return `Ước tính theo biểu phí ${source.provinceName} hiệu lực ${ngayVN(source.effectiveFrom)}. Không phải giá cam kết.`;
 }
+
+/**
+ * Mốc thời gian ĐẦY ĐỦ (có `T`) → ngày người Việt đọc được, theo giờ Việt Nam.
+ *
+ * 🔒 Múi giờ ghim `Asia/Ho_Chi_Minh`, KHÔNG lấy múi giờ của máy render.
+ *
+ * ⚠️ `ngayVN` cắt mười ký tự đầu, và với một chuỗi date-only (`effectiveFrom`,
+ *    `rateUpdatedAt` — hợp đồng khai `z.string().date()`) thì đúng. Với một
+ *    timestamptz như `endsAt` thì SAI: `2026-09-30T17:00:00.000Z` là 01/10 ở
+ *    Việt Nam, nên một ưu đãi "đến hết 30/09" bị in thành hết sớm một ngày.
+ *    Cùng loại lỗi `lib/chi-phi.ts` đã ghi lại cho ngày hiệu lực bảng giá.
+ */
+export function ngayGioVN(iso: string): string {
+  if (!iso.includes('T')) return ngayVN(iso);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}

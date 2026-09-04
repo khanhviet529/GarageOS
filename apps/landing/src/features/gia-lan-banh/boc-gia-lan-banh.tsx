@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Icon } from '@/components/ui/icon';
 import { chiaChang } from '@/features/gia-lan-banh/chang';
-import { dungBocGia } from '@/features/gia-lan-banh/queries';
+import { useBocGia } from '@/features/gia-lan-banh/queries';
 import { ngayVN, soTien, TINH, TINH_MAC_DINH, type DongPhi } from '@/features/gia-lan-banh/kieu';
 import css from './boc-gia-lan-banh.module.css';
 
@@ -53,7 +53,7 @@ function Vo({ children }: { children: React.ReactNode }): React.ReactElement {
 export function BocGiaLanBanh({ slug }: { slug: string }): React.ReactElement {
   const [tinh, setTinh] = useState<string>(TINH_MAC_DINH);
   const [ky, setKy] = useState<number | undefined>(undefined);
-  const tt = dungBocGia({ slug, provinceCode: tinh, termMonths: ky });
+  const tt = useBocGia({ slug, provinceCode: tinh, termMonths: ky });
 
   const chonTinh = (
     <p className={css.chonTinh}>

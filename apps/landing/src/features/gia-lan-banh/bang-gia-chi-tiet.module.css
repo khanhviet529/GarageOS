@@ -1,0 +1,159 @@
+/*
+ * Trang chi tiết xe — thanh cấu hình DÍNH + màn giá lăn bánh.
+ *
+ * 🔒 Hai khối này là MỘT component vì chúng là một trạng thái. Chọn phiên bản ở
+ *    thanh dính thì con số ở màn giá phải đổi theo ngay — dựng thành hai
+ *    component gọi API riêng nghĩa là có một khoảnh khắc thanh dính nói phiên
+ *    bản Plus còn bảng phí vẫn đang cộng cho bản Eco.
+ */
+
+/* ── Thanh cấu hình dính ────────────────────────────────────────────────── */
+.thanh {
+  position: sticky;
+  z-index: 30;
+  top: 78px;
+  padding: var(--s-4) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--ink-0);
+}
+.thanhTrong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-6); }
+.nhomChon { display: grid; gap: var(--s-2); }
+.phienBan { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.phienBan button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  transition: border-color var(--nhanh) var(--ease-out), background var(--nhanh) var(--ease-out), color var(--nhanh) var(--ease-out);
+}
+.phienBan button:hover { border-color: var(--text); color: var(--text); }
+.phienBan button[aria-pressed='true'] { border-color: var(--paper-card); background: var(--paper-card); color: var(--photo); font-weight: 600; }
+
+.tinh select {
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--ink-2);
+  color: var(--text);
+  font-size: var(--fs-xs);
+}
+
+.tamTinh { display: grid; margin-left: auto; gap: 2px; text-align: right; }
+.tamTinh b {
+  font-family: var(--font-mono);
+  font-size: var(--fs-figure);
+  font-weight: 500;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Màn giá lăn bánh ───────────────────────────────────────────────────── */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-8) 0;
+  background: var(--paper-0);
+  color: var(--paper-ink);
+}
+.luoi { display: grid; align-items: start; gap: var(--s-5); grid-template-columns: minmax(0, 1.8fr) minmax(320px, 1fr); }
+
+.the { padding: var(--s-6); background: var(--paper-card); }
+.the h2 { font-size: var(--fs-title-sm); }
+.dauThe { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); }
+
+.hang { display: flex; align-items: baseline; gap: var(--s-3); padding: 7px 0; font-size: var(--fs-xs); }
+.hang dt { flex: 0 0 auto; }
+.hang .keo { flex: 1 1 auto; border-bottom: 1px dotted var(--paper-line-strong); }
+.hang dd { flex: 0 0 auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.phu { color: var(--paper-muted); }
+.ngoaiTong { color: var(--paper-muted); }
+
+.tong {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--paper-line-strong);
+}
+.tong > span:first-child { font-size: var(--fs-sm); font-weight: 600; }
+.tong .keo { flex: 1 1 auto; }
+.tong b {
+  font-family: var(--font-mono);
+  font-size: var(--fs-figure-lg);
+  font-weight: 500;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.themKhoan {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-5);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--paper-line);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.themKhoan dd { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 500; }
+.themKhoan p { margin-top: 3px; color: var(--paper-muted); font-size: var(--fs-label-lg); }
+
+.cot { display: grid; gap: var(--s-4); }
+
+.traGop { padding: var(--s-6); background: var(--paper-ink); color: var(--paper-1); }
+.traGop h3 { color: var(--paper-0); }
+.traGopSo { display: flex; align-items: baseline; gap: var(--s-2); margin-top: var(--s-4); }
+.traGopSo b {
+  color: var(--signal-dark);
+  font-family: var(--font-mono);
+  font-size: clamp(2rem, 3vw, 2.75rem);
+  font-weight: 500;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+.traGopSo span { font-size: var(--fs-sm); }
+.giaiDoan2 { display: flex; align-items: baseline; gap: var(--s-2); margin-top: var(--s-2); }
+.giaiDoan2 b { font-family: var(--font-mono); font-size: var(--fs-figure); font-weight: 500; font-variant-numeric: tabular-nums; }
+.giaiDoan2 span { font-size: var(--fs-xs); }
+
+.nhomNut { margin-top: var(--s-5); }
+.o { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--s-2); }
+.o button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--paper-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  transition: border-color var(--nhanh) var(--ease-out), background var(--nhanh) var(--ease-out);
+}
+.o button:hover { border-color: var(--paper-card); }
+.o button[aria-pressed='true'] { border-color: var(--paper-card); background: var(--paper-card); color: var(--paper-ink); }
+.nguonTraGop { margin-top: var(--s-4); color: var(--text-dim); font-size: var(--fs-label-lg); }
+
+.uuDai { padding: var(--s-5); background: var(--paper-card); }
+.uuDai h3 { font-size: var(--fs-lead); }
+.uuDai li { display: flex; gap: var(--s-3); padding: var(--s-3) 0; border-bottom: 1px solid var(--paper-line); }
+.uuDai li:last-child { border-bottom: 0; }
+.uuDai svg { flex: 0 0 auto; margin-top: 2px; color: var(--signal-light); }
+.uuDai strong { display: block; font-size: var(--fs-xs); }
+.uuDai p { color: var(--paper-muted); font-size: var(--fs-label-lg); }
+
+.ghiChu { margin-top: var(--s-5); }
+.trangThai { color: var(--paper-muted); }
+
+@media (max-width: 1000px) {
+  .luoi { grid-template-columns: minmax(0, 1fr); }
+  .thanh { top: 60px; padding: var(--s-3) 0; }
+  .thanhTrong { gap: var(--s-4); }
+  .tamTinh { margin-left: 0; text-align: left; }
+}

@@ -24,7 +24,7 @@ export type TrangThaiBocGia =
  *    biến thứ HỎNG thành thứ TRỐNG — và trạng thái rỗng luôn trông vô hại, nên
  *    nó là chỗ trú tốt nhất cho lỗi.
  */
-export function dungBocGia(t: ThamSoBocGia): TrangThaiBocGia {
+export function useBocGia(t: ThamSoBocGia): TrangThaiBocGia {
   const { slug, provinceCode, variantKey, termMonths, downPaymentBp } = t;
   const [tt, setTt] = useState<TrangThaiBocGia>({ pha: 'dang-tai' });
 
