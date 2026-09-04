@@ -40,9 +40,19 @@ Khách truy cập landing
 
 ### 2.2 Ngoài phạm vi đến hết Phase 4
 
+> 📌 **Cập nhật 2026-09-03.** Mục này được thu hẹp bởi
+> [SRS-LS-EXP-001](2026-09-03-sales-admin-ecommerce-expansion.md). Ranh giới mới
+> là **hiển thị ≠ giao dịch**: tính và hiển thị giá lăn bánh, khoản trả góp tham
+> khảo, ưu đãi có thời hạn, khả năng giao xe theo chi nhánh — tất cả **trong**
+> phạm vi. Danh sách dưới đây là phần **vẫn** nằm ngoài.
+
 - Checkout mua xe và thanh toán online.
-- Hợp đồng điện tử, tính khoản vay/trả góp và tích hợp ngân hàng.
-- Quản lý tồn xe vật lý theo VIN, mua xe từ hãng hoặc điều chuyển đại lý.
+- Hợp đồng điện tử; nộp và xét duyệt hồ sơ vay; tích hợp ngân hàng; cam kết lãi
+  suất. Tính khoản trả hàng tháng để tham khảo thì **được**, kèm nhãn ước tính
+  (`INV-LS-16`).
+- Quản lý tồn xe vật lý theo VIN, mua xe từ hãng hoặc điều chuyển đại lý. Khai
+  báo khả năng giao theo chi nhánh ở mức trạng thái thì **được**; hiển thị số
+  lượng xe thì không (`INV-LS-17`).
 - Kế toán bán xe, hoa hồng sales và DMS đầy đủ.
 - HTML, CSS hoặc JavaScript tùy ý trong page builder.
 - Đa ngôn ngữ hoặc đa tiền tệ; hệ thống dùng tiếng Việt và VND.

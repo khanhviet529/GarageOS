@@ -106,12 +106,18 @@ Ghi rõ để về sau không trôi phạm vi:
 Riêng nhánh bán xe, ngoài phạm vi cho tới khi có khách hàng thật:
 
 - **Checkout và thanh toán mua xe online** — đặt cọc ghi nhận thủ công.
-- **Hợp đồng điện tử, trả góp, tích hợp ngân hàng.**
+- **Hợp đồng điện tử; nộp và xét duyệt hồ sơ vay; tích hợp ngân hàng.**
 - **Quản lý tồn xe vật lý theo VIN**, mua xe từ hãng, điều chuyển giữa đại lý.
   Vì chưa có mô hình tồn xe, **landing không quảng cáo xe cũ** — không có
   availability thật thì không được hiển thị như thể có.
 - **Kế toán bán xe, hoa hồng sales, DMS đầy đủ.**
 - **Nhập HTML/CSS/JS tự do trong trình soạn trang** — xem `INV-LS-10`.
+
+Ranh giới của nhánh bán xe được chốt lại ngày 2026-09-03 theo nguyên tắc
+**hiển thị ≠ giao dịch**: hệ thống được tính và hiển thị giá lăn bánh, khoản trả
+góp tham khảo, ưu đãi có thời hạn và khả năng giao xe theo chi nhánh; hệ thống
+không thu tiền, không xét duyệt, không cam kết. Chi tiết và các bất biến kèm
+theo: [`superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md`](superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md).
 
 ## Điểm khác biệt so với phần mềm garage hiện có
 

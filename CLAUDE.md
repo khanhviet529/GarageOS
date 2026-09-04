@@ -28,7 +28,7 @@ Stack: **NestJS + Next.js + Expo + PostgreSQL 16**, monorepo pnpm.
 ### Bất biến
 
 - 🔒 Trước khi sửa gì chạm **kho, tiền, phân quyền, tenant công khai** → đọc
-  [`docs/05-invariants.md`](docs/05-invariants.md) (41 bất biến lõi + 14 `INV-LS-*`
+  [`docs/05-invariants.md`](docs/05-invariants.md) (41 bất biến lõi + 22 `INV-LS-*`
   cho landing/bán xe)
 - 🔒 Thêm bất biến mới → **phải có test** trước khi merge
 - 🔒 Commit chạm bất biến → ghi mã (`INV-S-01`) ở chân commit
@@ -165,10 +165,17 @@ kế toán đầy đủ · tính lương · mua hàng/PO · đồng sơn · cứ
 
 Riêng nhánh landing bán xe ([`docs/superpowers/specs/`](docs/superpowers/specs/)):
 
-checkout/thanh toán xe online · hợp đồng điện tử · trả góp · tồn xe vật lý theo
-VIN · xe cũ trên landing · hoa hồng sales · DMS đầy đủ ·
+checkout/thanh toán xe online · hợp đồng điện tử · xét duyệt hồ sơ vay và tích
+hợp ngân hàng · tồn xe vật lý theo VIN · xe cũ trên landing · hoa hồng sales ·
+DMS đầy đủ ·
 🔒 **nhập HTML/CSS/JS tự do trong trình soạn trang** (`INV-LS-10` — bề mặt XSS
 chạy trên chính domain của khách)
+
+🔒 Ranh giới nhánh bán xe là **hiển thị ≠ giao dịch** (chốt 2026-09-03,
+[SRS-LS-EXP-001](docs/superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md)):
+tính và hiện **giá lăn bánh, khoản trả góp tham khảo, ưu đãi có thời hạn, khả
+năng giao theo chi nhánh** thì được — kèm nhãn ước tính (`INV-LS-16`) và không
+bao giờ kèm số lượng xe (`INV-LS-17`). Thu tiền, xét duyệt, cam kết thì không.
 
 Kiến trúc **cố ý loại bỏ** ([`docs/12-architecture.md`](docs/12-architecture.md) mục 12):
 
@@ -190,6 +197,7 @@ microservices · event sourcing toàn hệ thống · CQRS đầy đủ · Graph
 | Làm gì tiếp theo | [`15-roadmap.md`](docs/15-roadmap.md) |
 | Landing bán xe, catalog, lead | [`superpowers/specs/`](docs/superpowers/specs/) |
 | Lỗi đã tìm ra, chưa sửa | [`reviews/`](docs/reviews/) |
+| Người dùng thao tác thế nào | [`huong-dan/`](docs/huong-dan/) |
 
 ## Ngôn ngữ
 

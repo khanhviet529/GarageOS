@@ -47,10 +47,10 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 615 (domain 42, db 42, api 521, infra 10) |
+| Test tự động | 704 (domain 96, api 598, infra 10) |
 | E2E Playwright | 86 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 63 |
-| Vòng review đã chạy | 10 vòng `/codex-review` + 2 vòng rà soát thủ công |
+| Migration | 74 |
+| Vòng review đã chạy | 10 vòng `/codex-review` + 2 vòng rà soát thủ công + 3 vòng rà soát thiết kế |
 | Phát hiện đã xử lý | 25 + ~50 + 22 |
 
 🔒 Bộ test **độc lập với thứ tự chạy**: chạy E2E sinh đoạn giờ thật rồi chạy bộ
@@ -299,6 +299,100 @@ khởi động trong task không thấy bí mật JWT. Nghĩa là toàn bộ ph�
 **Một tham số được nhận nhưng không dùng.** `listProducts` nhận `cursor`, trả
 `nextCursor`, và không đưa `cursor` vào câu SQL. Tệ hơn một tham số không tồn
 tại: API trả `nextCursor`, tức là NÓI RẰNG phân trang hoạt động.
+
+## Mở rộng phạm vi 2026-09-03 — catalog thương mại cho landing bán xe
+
+Giao diện được vẽ trước ở Pencil (`D:\pencil-welcome.pen`), **code sẽ bám theo
+giao diện**, không ngược lại. Hai hàng màn hình: nền tối `y=5000`, nền sáng
+`y=6100`, mỗi hàng **28 khung** cao 940 px.
+
+Ba vòng rà soát (một bản tự review, một [rà soát độc lập 30 phát hiện](docs/reviews/2026-09-03-ra-soat-thiet-ke-pencil.md),
+rồi vòng sửa hết nợ ngày 2026-09-04) đổi nhiều thứ đủ để đáng ghi lại ở đây:
+
+| Vòng | Nhóm lỗi nặng nhất tìm ra |
+|---|---|
+| Tự review | Tương phản — `text-dim` trượt AA ở **2.631 chỗ dùng** |
+| Rà soát độc lập | **Số học**: trả góp không khớp phép tính nào, giá một mẫu xe khác nhau giữa ba tab, giá lăn bánh lệch 12,5 triệu so với chính công cụ tính trong admin |
+| Vòng ba | **Dữ liệu mẫu không cùng một thế giới**: admin liệt kê catalog sáu xe VinFast, landing liệt kê ba VinFast + ba Hyundai; năm trong sáu giá lăn bánh không cộng ra được từ biểu phí |
+
+🔒 Bài học cho lúc code: bộ thiết kế này **là dữ liệu mẫu để đối chiếu tay** theo
+§7 của đặc tả. Mọi con số trong đó phải cộng ra được từ biểu phí Hà Nội đang
+hiệu lực — `giá niêm yết + trước bạ theo powertrain + 22.380.000` (biển 20 triệu
++ đăng kiểm 340 nghìn + đường bộ 1,56 triệu + BHTNDS 480 nghìn). Con số vẽ đẹp
+mà không cộng ra được là con số sẽ đi thẳng vào test rồi vào production.
+
+### L5.1 — lõi tiền, đã code 2026-09-04
+
+| Lớp | Đã có |
+|---|---|
+| Migration | `0071` biểu phí lăn bánh (khoá theo **tỉnh × loại động cơ × ngày hiệu lực**, `EXCLUDE USING gist` chống chồng lấn) · `0072` màu, ưu đãi, trả góp, cọc, thuê pin · `0073` khả năng giao theo chi nhánh (**không có cột số lượng**) · `0074` nhật ký giá chỉ `INSERT` |
+| Hàm thuần | `gia-lan-banh.ts` · `tra-gop.ts` · `showroom-trang-thai.ts` · `so-thap-phan.ts` — 40 test |
+| API | `api/v1/showroom/*` (quản trị) · `api/v1/public/vehicle-products/:slug/gia-lan-banh` (công khai) |
+| Landing | Khối *Bóc giá lăn bánh* trên trang chi tiết xe |
+| Quyền | `showroom:feeScheduleRead/Write` · `priceWrite` · `commerceWrite` · `availabilityWrite` |
+
+🔒 Ba quyết định đáng nhớ khi đọc lại mã:
+
+- **Luỹ thừa lãi suất chạy trên `bigint` thang cố định 10^18**, không trên
+  `number`. `(1+r)^n` trên dấu phẩy động lệch vài phần tỷ giữa hai máy; nhân với
+  gốc vay tám chữ số rồi làm tròn về nghìn đồng thì chênh lệch đó **lật được một
+  bậc làm tròn**, và khoản trả góp lệch 1.000 đồng giữa máy chủ với máy khách là
+  một khiếu nại có cơ sở.
+- **Trước bạ là một chiều của khoá, không phải một cột giá trị.** Cùng Hà Nội:
+  xe xăng 12 %, xe điện 0 %. Bản đầu của đặc tả viết "xe điện là 0 bp, không cần
+  cờ đặc biệt" — câu đó chỉ đúng nếu tỷ lệ không phụ thuộc loại động cơ.
+- **Khả năng giao xe KHÔNG đi qua revision.** Nhét nó vào revision nghĩa là mỗi
+  lần một showroom đổi *Sắp về* thành *Sẵn xe*, hệ thống phải publish lại cả
+  trang xe — kéo theo nội dung marketing đang soạn dở ra công khai. Ngoại lệ có
+  tên cho `INV-LS-13`, và tên của nó kiểm được bằng test.
+
+⚠️ `@garageos/sales-admin` **typecheck đỏ từ trước lát cắt này** — thiếu
+`@tanstack/react-query`, `@tiptap/*`, `@dnd-kit/utilities` trong `node_modules`.
+Đã xác nhận bằng cách stash toàn bộ thay đổi rồi chạy lại: vẫn đỏ. `pnpm install`
+đòi xoá sạch `node_modules` mới cài được, nên chưa xử lý trong lượt này.
+
+Việc vẽ màn "Sửa xe" làm lộ ra điều mà đọc tài liệu không lộ: catalog Phase 1
+trả lời được *"xe này tên gì, giá niêm yết bao nhiêu"* nhưng **không** trả lời
+được bốn câu người mua ô tô ở Việt Nam thực sự hỏi trước khi để lại số điện
+thoại — lăn bánh bao nhiêu, trả góp mỗi tháng bao nhiêu, có màu tôi muốn không,
+bao giờ nhận được xe.
+
+Ranh giới cũ ("không làm trả góp") bị thay bằng ranh giới sắc hơn và **kiểm được
+bằng test**: *hệ thống được tính và hiển thị, không được cam kết hay thu tiền.*
+
+| Chốt | Nội dung |
+|---|---|
+| Đặc tả | [SRS-LS-EXP-001](docs/superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md) |
+| Bất biến mới | `INV-LS-16` → `INV-LS-22` |
+| Roadmap | Phase **L5**, 3 tuần |
+| Migration dự kiến | `0071` → `0074` |
+
+Quyết định kiến trúc đáng chú ý nhất: **tồn và thời gian giao xe KHÔNG đi qua
+revision.** Sáu nhóm dữ liệu mới là nội dung (giá, màu, ảnh, ưu đãi, trả góp,
+SEO) nên đi đường publish. Nhóm thứ bảy là *trạng thái vận hành* — nhân viên chi
+nhánh sửa vài lần mỗi tuần. Nếu nhét nó vào revision thì mỗi lần một showroom
+đổi *Sắp về* → *Sẵn xe*, hệ thống buộc phải publish lại cả trang, **kéo theo nội
+dung marketing đang soạn dở ra công khai**. Đây là ngoại lệ **có tên** cho
+`INV-LS-13` — ngoại lệ có tên thì kiểm được, ngoại lệ ngầm thì không.
+
+Hai quyết định nhỏ hơn cùng loại "chặn ở schema thay vì chặn ở lời hứa":
+
+- `vehicle_availability` **không có cột số lượng**. Không lưu số thì không thể
+  vô tình hiển thị số — mà hệ thống không nắm tồn theo VIN, nên "còn 2 xe" là
+  nói một điều mình không biết (`INV-LS-17`).
+- Giá lăn bánh **không lưu**, luôn tính lại từ bảng phí đang hiệu lực. Lưu một
+  con số suy ra là tự tạo hai nguồn sự thật.
+
+⚠️ Ba chỗ cố ý chưa quyết, ghi ở §8 của đặc tả: ai chịu trách nhiệm cập nhật
+bảng phí trước bạ, ràng buộc pháp lý của con số trả góp hiển thị, và vai nào
+được sửa `vehicle_availability` (vai nhân viên chi nhánh chưa tồn tại trong
+`ACTION_ROLES`).
+
+🔒 Khi viết `0071`–`0074`: **grant quyền theo cột phải viết `GRANT` tường minh.**
+Lỗi "viết `REVOKE` như thể `GRANT` đã tồn tại" đã xảy ra **ba lần** trên nhánh
+này (`sales_lead` + bốn bảng draft marketing), mỗi lần đều là 500 im lặng từ lúc
+ra đời. Thêm mọi bảng mới vào bài quét quyền so cột service `UPDATE` với cột
+được cấp.
 
 ## Nợ kỹ thuật đã biết
 

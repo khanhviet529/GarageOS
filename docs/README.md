@@ -59,14 +59,20 @@ Xuyên suốt             adr/         Nhật ký quyết định kiến trúc
 
 | Thư mục | Nội dung |
 |---|---|
+| [huong-dan/](huong-dan/) | **Hướng dẫn sử dụng cho người dùng cuối** — [phần mềm xưởng](huong-dan/xuong.md) và [Sales Admin](huong-dan/sales-admin.md). Không dành cho lập trình viên |
 | [adr/](adr/) | Architecture Decision Records — mỗi quyết định lớn một file, ghi lại **bối cảnh, lựa chọn, đánh đổi** |
 | [reviews/](reviews/) | Nhật ký review — phát hiện nào là thật, test nào đỏ trước khi sửa, chỗ nào bác bỏ reviewer và vì sao |
-| [superpowers/specs/](superpowers/specs/) | **Nhánh mở rộng landing bán xe và Sales Admin** — SRS tổng thể, SRS Phase 1, SEO, thiết kế trải nghiệm |
+| [superpowers/specs/](superpowers/specs/) | **Nhánh mở rộng landing bán xe và Sales Admin** — SRS tổng thể, SRS Phase 1, SEO, thiết kế trải nghiệm, [mở rộng catalog thương mại](superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md) |
 
 > Nhánh landing bán xe (2026-08-12) mở rộng đối tượng phục vụ từ xưởng dịch vụ
 > sang **showroom có xưởng hậu mãi**. Phạm vi ở [00-vision.md](00-vision.md#bán-xe-và-chăm-sóc-sau-bán),
 > bất biến `INV-LS-*` ở [05-invariants.md](05-invariants.md#9-landing-bán-xe-catalog-marketing-và-lead),
 > lộ trình ở [15-roadmap.md](15-roadmap.md#nhánh-mở-rộng-l--landing-bán-xe-và-sales-admin).
+>
+> **Cập nhật 2026-09-03:** catalog mở rộng sang giá lăn bánh, trả góp tham khảo,
+> ưu đãi có thời hạn, màu xe, ảnh/360° và khả năng giao theo chi nhánh. Ranh giới
+> mới là **hiển thị ≠ giao dịch**, kèm bất biến `INV-LS-16` → `INV-LS-22` —
+> [SRS-LS-EXP-001](superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md).
 
 ## Quy ước trong tài liệu
 
