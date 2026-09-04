@@ -24,12 +24,19 @@ export function Metric({
   giaTri,
   phu,
   tone = 'dim',
+  co = 'lon',
   className,
 }: {
   nhan: string;
   giaTri: ReactNode;
   phu?: ReactNode;
   tone?: Tone;
+  /**
+   * `vua` cho ô chứa TIỀN. Một con số đếm được ("18") đọc tốt ở 34px, nhưng
+   * "486.200.000đ" ở cùng cỡ thì tràn ô và xuống dòng giữa hàng nghìn — đúng
+   * chỗ mắt cần đọc liền mạch nhất.
+   */
+  co?: 'lon' | 'vua';
   className?: string;
 }) {
   return (
@@ -41,7 +48,14 @@ export function Metric({
     >
       <span className="nhan-ky-thuat">{nhan}</span>
       <div className="flex flex-wrap items-baseline gap-2.5">
-        <span className="text-34 font-bold tracking-[-1px] text-text">{giaTri}</span>
+        <span
+          className={cn(
+            'font-bold text-text',
+            co === 'lon' ? 'text-34 tracking-[-1px]' : 'mono text-22 tracking-[-0.4px]',
+          )}
+        >
+          {giaTri}
+        </span>
         {phu !== undefined && (
           <span className={cn('font-mono text-11', mauPhu[tone])}>{phu}</span>
         )}

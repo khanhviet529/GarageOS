@@ -69,9 +69,25 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
   { className, variant, size, asChild = false, dangXuLy = false, children, disabled, ...props },
   ref,
 ) {
-  const Comp = asChild ? Slot : 'button';
+  /*
+   * 🔒 Ở chế độ `asChild`, KHÔNG chèn thêm con nào và KHÔNG truyền `disabled`.
+   *
+   * `Slot` của Radix đếm số con bằng `React.Children.count`, mà hàm đó tính cả
+   * `false` do `{cond && <Icon/>}` sinh ra. Nên một nút `asChild` bọc thẻ <a>
+   * nhận hai con và Slot ném "Expected a single React element child" — và vì
+   * `next build` kết xuất tĩnh, lỗi đó dừng cả lượt build chứ không chỉ hỏng
+   * một lần render. `disabled` cũng không phải thuộc tính hợp lệ của <a>.
+   */
+  if (asChild) {
+    return (
+      <Slot ref={ref} className={cn(bienThe({ variant, size }), className)} {...props}>
+        {children}
+      </Slot>
+    );
+  }
+
   return (
-    <Comp
+    <button
       ref={ref}
       className={cn(bienThe({ variant, size }), className)}
       disabled={disabled === true || dangXuLy}
@@ -80,7 +96,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
     >
       {dangXuLy && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
       {children}
-    </Comp>
+    </button>
   );
 });
 
