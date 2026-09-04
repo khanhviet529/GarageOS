@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthProvider, AppShell } from '@/components/auth';
-import { QueryProvider } from '@/components/QueryProvider';
+import { QueryProvider } from '@/components/query-provider';
 import '../styles/tokens.css';
 import './globals.css';
 
