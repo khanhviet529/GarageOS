@@ -1,8 +1,32 @@
 import type {
-  AvailabilityStatus, FinancingQuote, OnroadPriceBreakdown,
+  AvailabilityStatus, FinancingQuote, OnroadFeeScheduleInput, OnroadPriceBreakdown, Powertrain,
   VehicleAvailabilityInput, VehicleColorInput, VehiclePromotionInput,
 } from '@garageos/contracts';
 import { api } from '@/lib/client';
+
+/**
+ * Một dòng biểu phí, đúng hình dạng SQL trong `showroom.service.ts` trả về.
+ *
+ * Các khoản tiền về dưới dạng CHUỖI (`::text`) chứ không phải số: chúng là
+ * `bigint` ở DB, và đi qua JSON dưới dạng số thì mất chính xác ở khoảng tiền
+ * tỉ. Đổi sang `BigInt` ngay tại chỗ dùng, đừng để lọt vào `Number`.
+ */
+export interface FeeScheduleRow {
+  id: string;
+  provinceCode: string;
+  provinceName: string;
+  powertrain: Powertrain;
+  registrationFeeRateBp: number;
+  plateFeeAmount: string;
+  inspectionFeeAmount: string;
+  roadMaintenanceFeeAmount: string;
+  civilInsuranceFeeAmount: string;
+  materialInsuranceRateBp: number;
+  dealerFeeAmount: string;
+  dealerFeeLabel: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
 
 /** Một dòng nhật ký giá. `reason` luôn có — contract bắt buộc khi ghi. */
 export interface PriceLogEntry {
@@ -65,5 +89,8 @@ export const showroomApi = {
     api(`${goc}/revisions/${revisionId}/promotions`, { method: 'PUT', body: JSON.stringify(input) }),
 
   feeSchedules: (provinceCode?: string) =>
-    api<{ items: unknown[] }>(`${goc}/fee-schedules${provinceCode === undefined ? '' : `?provinceCode=${encodeURIComponent(provinceCode)}`}`),
+    api<FeeScheduleRow[]>(`${goc}/fee-schedules${provinceCode === undefined ? '' : `?provinceCode=${encodeURIComponent(provinceCode)}`}`),
+
+  upsertFeeSchedule: (input: OnroadFeeScheduleInput) =>
+    api(`${goc}/fee-schedules`, { method: 'PUT', body: JSON.stringify(input) }),
 };
