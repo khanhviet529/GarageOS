@@ -9,6 +9,7 @@ import { buildPageTitle } from '@garageos/domain';
 import { BocGiaLanBanh } from '@/features/gia-lan-banh/boc-gia-lan-banh';
 import { SiteFooter } from '@/components/layout/site-footer';
 import { SiteHeader } from '@/components/layout/site-header';
+import { ThanhCtaDay } from '@/components/thanh-cta-day';
 import { CtaCuoi } from '@/features/trang-chu/cta-cuoi';
 import { ManChiNhanh, type DanhGiaTomTat } from '@/features/trang-chu/man-chi-nhanh';
 import { ManHero } from '@/features/trang-chu/man-hero';
@@ -19,6 +20,7 @@ import { LandingPageRenderer } from '@/features/trang-cms/landing-page-renderer'
 import { fetchPublic, noIndex, requestHost } from '@/lib/api';
 import { layChiPhiTrangChu } from '@/lib/chi-phi';
 import { layBocGiaNhieuXe } from '@/features/gia-lan-banh/api';
+import { soTien } from '@/features/gia-lan-banh/kieu';
 import { buildMetadata } from '@/lib/seo';
 import { loadSite } from '@/lib/site';
 import { docThongSo } from '@/lib/thong-so';
@@ -166,6 +168,17 @@ export default async function HomePage({
           </>
         )}
       </main>
+      {noiBat !== null && document === null && (
+        <ThanhCtaDay
+          nhan="Lăn bánh từ"
+          gia={(() => {
+            const bg = bocGia.get(noiBat.slug);
+            return bg === undefined ? null : `${soTien(bg.breakdown.total)} ₫`;
+          })()}
+          href="/lien-he?nhu-cau=lai-thu"
+          nhanNut="Lái thử"
+        />
+      )}
       <SiteFooter site={site} />
       <script
         type="application/ld+json"

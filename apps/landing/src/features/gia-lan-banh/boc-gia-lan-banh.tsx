@@ -71,7 +71,7 @@ export function BocGiaLanBanh({ slug }: { slug: string }): React.ReactElement {
   const dau = (
     <>
       <p className="nhan nhan-giay">Chi tiết từng khoản phí</p>
-      <h2 id="boc-gia-tieu-de" className={css.tieuDe}>Con số này không thay đổi tại showroom.</h2>
+      <h2 id="boc-gia-tieu-de" className={css.tieuDe}>Con số không đổi tại showroom.</h2>
     </>
   );
 

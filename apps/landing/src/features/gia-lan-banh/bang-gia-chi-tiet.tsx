@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { ThanhCtaDay } from '@/components/thanh-cta-day';
 import { Icon } from '@/components/ui/icon';
 import { ngayGioVN, ngayVN, soTien, TINH, TINH_MAC_DINH } from '@/features/gia-lan-banh/kieu';
 import { useBocGia } from '@/features/gia-lan-banh/queries';
@@ -279,6 +280,12 @@ export function BangGiaChiTiet({
           </div>
         </div>
       </section>
+      <ThanhCtaDay
+        nhan={`Lăn bánh · ${day.variantName}`}
+        gia={`${soTien(day.breakdown.total)} ₫`}
+        href="/lien-he?nhu-cau=lai-thu"
+        nhanNut="Lái thử"
+      />
     </>
   );
 }

@@ -157,3 +157,14 @@
   .thanhTrong { gap: var(--s-4); }
   .tamTinh { margin-left: 0; text-align: left; }
 }
+
+/*
+ * 🔒 Dưới 760 px thanh cấu hình THÔI dính, vì thanh CTA đáy đã nhận việc "giá
+ *    lăn bánh luôn trong tầm mắt". Hai thanh dính cùng lúc trên một màn hình
+ *    điện thoại ăn mất hơn một phần tư vùng nhìn — tức lấy đi đúng chỗ của thứ
+ *    cả hai đang quảng cáo.
+ */
+@media (max-width: 760px) {
+  .thanh { position: static; }
+  .tamTinh { display: none; }
+}
