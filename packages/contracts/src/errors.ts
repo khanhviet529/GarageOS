@@ -32,6 +32,17 @@ export const ErrorCode = {
   INVALID_LEAD_TRANSITION: 'INVALID_LEAD_TRANSITION',
   LEAD_ALREADY_CLOSED: 'LEAD_ALREADY_CLOSED',
   ASSIGNEE_OUT_OF_SCOPE: 'ASSIGNEE_OUT_OF_SCOPE',
+
+  /**
+   * 🔒 Có quyền, nhưng KHÔNG cho đối tượng đó.
+   *
+   * Tách khỏi 403 có chủ ý: 403 nghĩa là "vai của bạn không làm được việc này",
+   * còn đây nghĩa là "vai của bạn làm được, nhưng không phải với chi nhánh này".
+   * Gộp hai chuyện lại thì một bài soát "ai bị từ chối vì thiếu quyền" bị trộn
+   * lẫn với những lần từ chối vì sai phạm vi — và bài soát đó là cách duy nhất
+   * phát hiện ma trận quyền khai sai.
+   */
+  BRANCH_OUT_OF_SCOPE: 'BRANCH_OUT_OF_SCOPE',
   LANDING_PAGE_NOT_PUBLISHABLE: 'LANDING_PAGE_NOT_PUBLISHABLE',
   PREVIEW_NOT_FOUND: 'PREVIEW_NOT_FOUND',
 } as const;
@@ -68,6 +79,7 @@ export const HTTP_STATUS_OF_ERROR: Record<ErrorCode, number> = {
   INVALID_LEAD_TRANSITION: 409,
   LEAD_ALREADY_CLOSED: 409,
   ASSIGNEE_OUT_OF_SCOPE: 422,
+  BRANCH_OUT_OF_SCOPE: 422,
   LANDING_PAGE_NOT_PUBLISHABLE: 422,
   PREVIEW_NOT_FOUND: 404,
 };

@@ -5,3 +5,7 @@ export * from './lead.js';
 export * from './seo.js';
 export * from './chi-phi-so-huu.js';
 export * from './tom-tat-chi-phi.js';
+export * from './so-thap-phan.js';
+export * from './gia-lan-banh.js';
+export * from './tra-gop.js';
+export * from './showroom-trang-thai.js';
