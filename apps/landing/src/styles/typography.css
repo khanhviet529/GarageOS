@@ -34,6 +34,3 @@ h3 { font-size: var(--fs-title-sm); letter-spacing: -.02em; }
 .nhan-giay { color: var(--signal-light); }
 .nhan-mo { color: var(--text-dim); }
 .nhan-mo-giay { color: var(--paper-muted); }
-
-/* Số liệu: mono, tabular, để cột số thẳng hàng khi giá trị đổi. */
-.so { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }

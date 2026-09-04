@@ -18,7 +18,7 @@
   letter-spacing: var(--ls-label);
   text-transform: uppercase;
 }
-.note, .muted { color: var(--text-muted); font-size: var(--fs-sm); }
+.note { color: var(--text-muted); font-size: var(--fs-sm); }
 .price { margin: var(--s-4) 0 0; font-family: var(--font-mono); font-size: var(--fs-figure); font-variant-numeric: tabular-nums; }
 /*
  * `.btn` / `.btn-secondary` là tên cũ của `.nut` / `.nut-vien`, giữ lại cho

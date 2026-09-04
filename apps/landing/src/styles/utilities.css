@@ -78,8 +78,6 @@
 .nut-giay { background: var(--paper-ink); color: var(--paper-0); }
 .nut-giay:hover { background: var(--paper-action); }
 
-.nut-giay-vien { border-color: var(--paper-line-strong); background: transparent; color: var(--paper-ink); }
-.nut-giay-vien:hover { border-color: var(--paper-ink); background: rgb(22 24 23 / 6%); }
 
 .nut-nho { min-height: 38px; padding: 0 20px; font-size: var(--fs-xs); }
 
@@ -138,8 +136,6 @@
  */
 .uoc-tinh { color: var(--text-dim); font-size: var(--fs-xs); }
 .uoc-tinh-giay { color: var(--paper-muted); font-size: var(--fs-xs); }
-
-.tnum { font-variant-numeric: tabular-nums; }
 
 /* Ký hiệu tiền luôn mang giọng UI — lý do đầy đủ ở `lib/site.ts`. */
 .gia-ky-hieu { font-family: var(--font-ui); font-size: .68em; }

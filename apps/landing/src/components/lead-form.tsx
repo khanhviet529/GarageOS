@@ -15,6 +15,14 @@ interface LeadFormProps {
    *    việc.
    */
   intentMacDinh?: 'REQUEST_QUOTE' | 'TEST_DRIVE' | 'GENERAL_CONTACT';
+  /**
+   * `true` khi biểu mẫu đặt trên khối GIẤY (trang Liên hệ).
+   *
+   * 🔒 Ô nhập tối trên thẻ trắng không chỉ xấu — nó là hai bề mặt chồng nhau,
+   *    và `--text-dim` của placeholder đo 1,4 : 1 trên nền trắng. Biểu mẫu phải
+   *    biết mình đang đứng trên bề mặt nào.
+   */
+  nenGiay?: boolean;
   productId?: string;
   variantId?: string;
   productLabel?: string;
@@ -36,6 +44,7 @@ interface ApiErrorBody {
 export function LeadForm(props: LeadFormProps): React.ReactElement {
   const { site, productId, variantId, productLabel, variants, experienceSelection } = props;
   const intentMacDinh = props.intentMacDinh ?? 'REQUEST_QUOTE';
+  const lopForm = props.nenGiay === true ? 'lead-form lead-form--giay' : 'lead-form';
   const [state, setState] = useState<'idle' | 'submitting'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
@@ -111,7 +120,7 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
   const branches = site?.publicBranches ?? [];
 
   return (
-    <form className="lead-form" ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate>
+    <form className={lopForm} ref={formRef} onSubmit={(e) => void onSubmit(e)} noValidate>
       <h2>{productLabel !== undefined ? `Nhận tư vấn: ${productLabel}` : 'Đăng ký nhận tư vấn'}</h2>
 
       {/* Honeypot — bot điền thì bị coi là spam, người thật không nhìn thấy */}
@@ -187,7 +196,7 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
         <p className="error" role="alert">{error}</p>
       )}
 
-      <button className="nut" type="submit" disabled={state === 'submitting'}>
+      <button className={props.nenGiay === true ? 'nut nut-giay' : 'nut'} type="submit" disabled={state === 'submitting'}>
         {state === 'submitting' ? 'Đang gửi…' : 'Gửi yêu cầu'}
       </button>
     </form>

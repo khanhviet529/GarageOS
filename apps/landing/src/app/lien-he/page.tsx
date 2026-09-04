@@ -61,6 +61,7 @@ export default async function ContactPage({
             <div className={css.hopBieuMau}>
               <LeadForm
                 site={site}
+                nenGiay
                 intentMacDinh={laiThu ? 'TEST_DRIVE' : 'REQUEST_QUOTE'}
               />
             </div>
