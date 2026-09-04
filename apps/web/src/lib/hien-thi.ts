@@ -31,6 +31,33 @@ export function toneTrangThai(status: string): Tone {
   return TONE_TRANG_THAI[status as RepairOrderStatus] ?? 'trung';
 }
 
+/**
+ * Sáu chặng của con đường sửa xe, gom từ mười một trạng thái.
+ *
+ * 🔒 Gom ở đây là chuyện TRÌNH BÀY, không phải chuyện nghiệp vụ: máy trạng
+ * thái thật vẫn nằm ở `packages/contracts` và ở trigger database. Bảng này chỉ
+ * trả lời "đang ở đoạn nào của con đường" — câu hỏi mà cố vấn phải trả lời cho
+ * khách qua điện thoại trong ba giây, và là câu duy nhất khách quan tâm khi mở
+ * link tra cứu.
+ *
+ * Dùng chung giữa màn nội bộ và trang khách để hai bên không bao giờ vẽ ra hai
+ * tiến độ khác nhau cho cùng một chiếc xe. NHÃN thì khác nhau — nội bộ nói
+ * "Khách duyệt", trang khách nói "Bạn đã duyệt" — nên nhãn nằm ở chỗ dùng.
+ */
+export const CHANG_GOM: readonly (readonly RepairOrderStatus[])[] = [
+  ['RECEIVED', 'DIAGNOSING'],
+  ['QUOTED'],
+  ['AWAITING_APPROVAL'],
+  ['IN_PROGRESS', 'AWAITING_PARTS'],
+  ['QUALITY_CHECK'],
+  ['AWAITING_PAYMENT', 'AWAITING_DELIVERY', 'DELIVERED'],
+];
+
+/** Chặng hiện tại, `-1` khi trạng thái nằm ngoài con đường (đơn đã huỷ) */
+export function chiSoChang(status: string): number {
+  return CHANG_GOM.findIndex((c) => c.includes(status as RepairOrderStatus));
+}
+
 /** Giờ:phút theo giờ Việt Nam — dùng cho mốc trong ngày */
 export function gioPhut(iso: string): string {
   return new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });

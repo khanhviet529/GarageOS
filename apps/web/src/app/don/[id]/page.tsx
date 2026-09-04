@@ -37,31 +37,24 @@ import { TieuDeTrang } from '@/components/tieu-de-trang';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DongKhoaGiaTri } from '@/components/ui/card';
-import { toneTrangThai } from '@/lib/hien-thi';
+import { chiSoChang, toneTrangThai } from '@/lib/hien-thi';
 import { formatPlate } from '@garageos/domain';
 import { useRepairOrder } from '@/features/repair-orders/queries';
 import { useRefreshRepairOrder } from '@/features/repair-orders/mutations';
 import { cn } from '@/lib/utils';
 
-/**
- * Sáu chặng của bộ thiết kế, gom từ mười một trạng thái của máy trạng thái.
- *
- * 🔒 Gom ở đây là chuyện TRÌNH BÀY, không phải chuyện nghiệp vụ: máy trạng
- * thái thật vẫn nằm ở `packages/contracts` và ở trigger database. Bảng này chỉ
- * trả lời "đang ở đoạn nào của con đường", câu hỏi mà cố vấn phải trả lời cho
- * khách qua điện thoại trong ba giây.
- */
-const CHANG: { nhan: string; gom: RepairOrderStatus[] }[] = [
-  { nhan: 'Tiếp nhận', gom: ['RECEIVED', 'DIAGNOSING'] },
-  { nhan: 'Báo giá', gom: ['QUOTED'] },
-  { nhan: 'Khách duyệt', gom: ['AWAITING_APPROVAL'] },
-  { nhan: 'Đang sửa', gom: ['IN_PROGRESS', 'AWAITING_PARTS'] },
-  { nhan: 'Kiểm tra', gom: ['QUALITY_CHECK'] },
-  { nhan: 'Bàn giao', gom: ['AWAITING_PAYMENT', 'AWAITING_DELIVERY', 'DELIVERED'] },
-];
+/** Nhãn nội bộ của sáu chặng. Bảng gom trạng thái ở `lib/hien-thi`. */
+const CHANG = [
+  'Tiếp nhận',
+  'Báo giá',
+  'Khách duyệt',
+  'Đang sửa',
+  'Kiểm tra',
+  'Bàn giao',
+].map((nhan) => ({ nhan }));
 
 function ChangDuong({ status }: { status: RepairOrderStatus }) {
-  const hienTai = CHANG.findIndex((c) => c.gom.includes(status));
+  const hienTai = chiSoChang(status);
   if (status === 'CANCELLED' || hienTai < 0) return null;
 
   return (

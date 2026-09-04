@@ -704,10 +704,42 @@
      Mở trên điện thoại, ngoài trời, người dùng không được đào tạo: chữ to,
      nút to, ít chữ, số tiền rõ ràng tuyệt đối.
      ======================================================================= */
+  .public-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 64px;
+    padding-inline: 16px;
+    background: var(--ink-1);
+    border-bottom: 1px solid var(--line);
+  }
+  @media (min-width: 640px) {
+    .public-header {
+      padding-inline: 28px;
+    }
+  }
+  .public-header .garage {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .public-header .plate {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
   .public {
     max-width: 720px;
     margin-inline: auto;
     padding: 24px 16px 48px;
+  }
+  .public-foot {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    text-align: center;
   }
   .public .card {
     padding: 24px;
