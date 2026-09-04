@@ -27,6 +27,29 @@ import type { ChiPhiSoHuuView } from '@garageos/contracts';
 
 const MOC_KM = [5_000, 10_000, 15_000, 20_000, 30_000];
 
+/**
+ * Ngày hiệu lực bảng giá, theo giờ VIỆT NAM.
+ *
+ * 🔒 Múi giờ ghim `Asia/Ho_Chi_Minh`, không lấy múi giờ của máy đang xem.
+ *
+ * ⚠️ `toLocaleDateString('vi-VN')` trần lấy múi giờ của TRÌNH DUYỆT. API trả
+ *    `2025-12-31T17:00:00.000Z`, tức 01/01/2026 ở Việt Nam — một khách mở
+ *    trang từ máy đặt múi giờ khác sẽ thấy ngày khác. Cả khối này tồn tại để
+ *    con số kiểm chứng được, nên một ngày hiệu lực đổi theo máy người xem làm
+ *    hỏng đúng điều nó khẳng định. Cùng quy tắc `lib/chi-phi.ts` đã ghi cho
+ *    bản render phía máy chủ.
+ */
+function ngayHieuLuc(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(d);
+}
+
 function dinhDang(d: number): string {
   return `${d.toLocaleString('vi-VN')} ₫`;
 }
@@ -153,7 +176,7 @@ export function ChiPhiSoHuu({ slug }: { slug: string }): React.ReactElement {
       <p className="chi-phi-nguon">
         Tính theo <strong>{du.tenBangGia}</strong> đang áp dụng tại xưởng
         (công {dinhDang(du.giaCongMoiGio)}/giờ), hiệu lực từ{' '}
-        {new Date(du.ápDụngTừ).toLocaleDateString('vi-VN')}. Chưa gồm lốp, ắc quy 12V và
+        {ngayHieuLuc(du.ápDụngTừ)}. Chưa gồm lốp, ắc quy 12V và
         hao mòn theo cách lái. Giá có thể đổi khi bảng giá xưởng thay đổi.
       </p>
     </section>

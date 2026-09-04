@@ -22,7 +22,7 @@ import { layBocGiaNhieuXe } from '@/features/gia-lan-banh/api';
 import { buildMetadata } from '@/lib/seo';
 import { loadSite } from '@/lib/site';
 import { docThongSo } from '@/lib/thong-so';
-import { powertrainLabel } from '@/lib/utils/vehicle';
+import { powertrainShort } from '@/lib/utils/vehicle';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,7 +90,7 @@ export default async function HomePage({
   const hangXe = [...new Set(products.map((p) => p.makeName))];
   const loaiDongCo = [...new Set(products.map((p) => p.powertrain))]
     .sort((a, b) => (THU_TU_DONG_CO[a] ?? 9) - (THU_TU_DONG_CO[b] ?? 9))
-    .map((p) => powertrainLabel(p).toLowerCase());
+    .map(powertrainShort);
   const chiNhanh = site?.publicBranches ?? [];
   const hotline = chiNhanh.find((b) => b.phone !== null)?.phone ?? null;
   const thuongHieu = site?.brandName ?? 'Showroom ô tô';
