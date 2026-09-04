@@ -1,16 +1,44 @@
-.ticket { padding: var(--s-9) 0; border-bottom: 1px solid var(--paper-line); background: var(--paper-1); }
-.container { color: var(--paper-ink); }
-.container :global(.eyebrow) { color: var(--paper-action); }
-.container h2 { max-width: 30ch; margin: var(--s-4) 0 var(--s-7); font-size: var(--fs-title); }
-.amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.amountLarge { font-size: 1.16em; }
-.currency { font-family: var(--font-ui); font-size: .7em; }
-.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-6) var(--s-5); margin: 0; }
-.facts > div { padding-top: var(--s-3); border-top: 1px solid var(--paper-line); }
-.facts dt { color: var(--paper-muted); font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: .11em; text-transform: uppercase; }
-.facts dd { margin: var(--s-3) 0 0; color: var(--paper-ink); font-family: var(--font-ui); font-size: var(--fs-lead); }
-.source { max-width: var(--measure); margin: var(--s-7) 0 0; padding-top: var(--s-4); border-top: 1px solid var(--paper-line); color: var(--paper-muted); font-size: var(--fs-sm); }
-.source strong { color: var(--paper-ink); }
-.cta { margin: var(--s-6) 0 0; }
-@media (min-width: 960px) { .facts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-@media (max-width: 620px) { .ticket { padding: var(--s-8) 0; } .facts { gap: var(--s-5) var(--s-4); } }
+/*
+ * Phiếu chi phí sở hữu — khối GIẤY nằm giữa một màn TỐI.
+ *
+ * 🔒 "Tối cho cảm xúc, sáng cho con số." Màn Xưởng dịch vụ kể một câu chuyện
+ *    hậu mãi trên nền tối; bằng chứng của câu chuyện đó là một bảng số, và một
+ *    bảng số trên nền tối đọc mệt hơn hẳn — người mua ô tô ở Việt Nam có tuổi
+ *    trung bình cao.
+ *
+ * 🔒 Khối sáng này dùng `--signal-light`, không phải `--signal-dark`: nhãn kỹ
+ *    thuật chia theo BỀ MẶT, không theo theme (DES-LS-002 §3).
+ */
+.phieu {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-6);
+  border-radius: var(--r-lg);
+  background: var(--paper-0);
+  color: var(--paper-ink);
+}
+
+.tong { display: flex; align-items: baseline; gap: var(--s-2); }
+.tong b {
+  font-family: var(--font-mono);
+  font-size: var(--fs-figure-lg);
+  font-weight: 500;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+.tong span { font-family: var(--font-ui); font-size: var(--fs-lead); }
+
+.soLieu { display: grid; gap: var(--s-3) var(--s-5); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.soLieu > div { padding-top: var(--s-3); border-top: 1px solid var(--paper-line); }
+.soLieu dd { margin-top: 2px; font-family: var(--font-mono); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+
+/*
+ * Dòng xuất xứ nằm TRONG luồng đọc chính, không ở chân trang dạng chữ nhỏ. Nó
+ * là phần khiến cả khối này có giá trị: quãng đường, tên bảng giá, ngày hiệu
+ * lực — bỏ ba dòng đó thì đây chỉ còn là một con số đẹp không ai xác nhận được.
+ */
+.nguon { padding-top: var(--s-3); border-top: 1px solid var(--paper-line); }
+.nguon strong { color: var(--paper-ink); }
+
+.cta { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--paper-ink); font-size: var(--fs-xs); font-weight: 600; }
+.cta:hover { color: var(--paper-action); }

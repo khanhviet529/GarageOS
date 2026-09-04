@@ -1,30 +1,221 @@
-.block { padding: var(--s-9) 0; border-bottom: 1px solid var(--paper-line); background: var(--paper-0); color: var(--paper-ink); }
-.head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-4); }
-.head h2 { margin: var(--s-3) 0 0; font-size: var(--fs-title); }
-.tinh { display: flex; align-items: center; gap: var(--s-3); }
-.tinh select { padding: .5em .7em; border: 1px solid var(--paper-line); border-radius: var(--r-md); background: var(--paper-card); color: var(--paper-ink); font: inherit; }
-.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-6); margin-top: var(--s-7); }
-.card { padding: var(--s-6); border: 1px solid var(--paper-line); border-radius: var(--r-lg); background: var(--paper-card); }
-.lines { margin: 0; }
-.line { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--paper-line); }
-.line dt { color: var(--paper-muted); font-size: var(--fs-sm); }
-.line dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.ngoaiTong { color: var(--paper-muted); }
-.ngoaiTong dd { color: var(--paper-muted); }
-.tong { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-4); margin-top: var(--s-5); padding-top: var(--s-5); border-top: 2px solid var(--paper-ink); }
-.tong span:first-child { font-weight: 600; }
-.tongSo { font-family: var(--font-mono); font-size: var(--fs-title); font-variant-numeric: tabular-nums; }
-.uocTinh { margin: var(--s-4) 0 0; color: var(--paper-muted); font-size: var(--fs-sm); line-height: 1.55; }
-.traGop { padding: var(--s-6); border-radius: var(--r-lg); background: var(--paper-ink); color: var(--paper-0); }
-.traGopSo { display: flex; align-items: baseline; gap: var(--s-3); margin: var(--s-4) 0 0; }
-.traGopSo b { font-family: var(--font-mono); font-size: var(--fs-hero); font-weight: 500; font-variant-numeric: tabular-nums; }
-.giaiDoan2 { display: flex; align-items: baseline; gap: var(--s-3); margin: var(--s-3) 0 0; opacity: .72; }
-.giaiDoan2 b { font-family: var(--font-mono); font-size: var(--fs-lead); font-weight: 500; }
-.ky { display: flex; flex-wrap: wrap; gap: var(--s-3); margin: var(--s-5) 0 0; }
-.ky button { padding: .45em .9em; border: 1px solid rgb(255 255 255 / .28); border-radius: var(--r-md); background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.kyChon { border-color: transparent !important; background: rgb(255 255 255 / .16) !important; }
-.uuDai { margin: var(--s-5) 0 0; padding: 0; list-style: none; }
-.uuDai li { padding: var(--s-3) 0; border-bottom: 1px solid var(--paper-line); font-size: var(--fs-sm); }
-.badge { display: inline-block; padding: .25em .7em; border-radius: var(--r-sm); background: var(--paper-1); color: var(--paper-muted); font-family: var(--font-mono); font-size: var(--fs-xs); letter-spacing: .08em; text-transform: uppercase; }
-.note { margin: var(--s-4) 0 0; color: var(--paper-muted); font-size: var(--fs-sm); }
-@media (min-width: 960px) { .grid { grid-template-columns: 1.35fr 1fr; } }
+/*
+ * Khoảnh khắc chữ ký — "Bóc giá lăn bánh khi cuộn" (DES-LS-002 §9).
+ *
+ * 🔒 Đây là khối DUY NHẤT của trang được phép giữ người xem lại, và toàn bộ
+ *    bốn chặng phải xong TRONG MỘT MÀN HÌNH CUỘN.
+ *
+ *    Khoảng `cover` của một khối cao đúng một khung nhìn dài bằng HAI khung
+ *    nhìn (khối đi từ dưới lên qua hết trên). Nên cửa sổ 18 %–68 % — đúng một
+ *    nửa khoảng đó — là đúng một màn hình cuộn. Đó là lý do hai con số này là
+ *    18 và 68 chứ không phải 0 và 100.
+ */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-8) 0;
+  background: var(--paper-0);
+  color: var(--paper-ink);
+  text-align: center;
+}
+
+.trong { display: flex; flex-direction: column; align-items: center; }
+
+.tieuDe { max-width: 20ch; margin-top: var(--s-3); }
+
+.chonTinh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+  color: var(--paper-muted);
+  font-size: var(--fs-xs);
+}
+.chonTinh select {
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--paper-line-strong);
+  border-radius: var(--r-full);
+  background: var(--paper-card);
+  color: var(--paper-ink);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* ── Con số ────────────────────────────────────────────────────────────── */
+.khungSo { display: grid; margin-top: var(--s-6); }
+.chang { display: grid; gap: var(--s-3); grid-area: 1 / 1; justify-items: center; }
+
+.moc {
+  color: var(--paper-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-lg);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.so {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-figure-hero);
+  font-weight: 500;
+  letter-spacing: -.04em;
+  line-height: var(--lh-title);
+  font-variant-numeric: tabular-nums;
+}
+.so span:last-child {
+  padding-bottom: .12em;
+  color: var(--paper-muted);
+  font-family: var(--font-ui);
+  font-size: .36em;
+  letter-spacing: 0;
+}
+
+.tienTrinh {
+  width: min(100%, 820px);
+  height: 4px;
+  margin-top: var(--s-6);
+  background: var(--paper-line);
+}
+.tienTrinh > span { display: block; height: 100%; background: var(--signal-light); transform-origin: left center; }
+
+/* ── Các khoản ─────────────────────────────────────────────────────────── */
+.cacKhoan { width: min(100%, 820px); margin-top: var(--s-6); text-align: left; }
+.hang {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) 0;
+  border-bottom: 1px solid var(--paper-line);
+}
+.hang svg { flex: 0 0 auto; color: var(--signal-light); }
+.hang dt { flex: 1 1 auto; font-size: var(--fs-sm); }
+.hang dd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-md);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+ * 🔒 Bảo hiểm vật chất là TỰ NGUYỆN: hiện SAU tổng, không cộng vào. Máy chủ
+ *    đánh dấu `insideTotal: false`; ở đây chỉ việc tôn trọng cờ đó. Dấu `+`
+ *    thay cho dấu tick là để mắt phân biệt được ngay "đã cộng" với "cộng thêm
+ *    nếu bạn muốn".
+ */
+.ngoaiTong { color: var(--paper-muted); border-bottom: 0; }
+.ngoaiTong svg { color: var(--paper-muted); }
+
+/* ── Trả góp ───────────────────────────────────────────────────────────── */
+.traGop {
+  display: flex;
+  width: min(100%, 820px);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-6);
+  margin-top: var(--s-6);
+  padding: var(--s-5) var(--s-6);
+  border-radius: var(--r-lg);
+  background: var(--paper-ink);
+  color: var(--paper-1);
+  text-align: left;
+}
+.traGopNguon { flex: 1 1 220px; }
+.traGopNguon p { margin-top: 6px; font-size: var(--fs-xs); }
+.traGopSo { display: flex; align-items: baseline; gap: var(--s-2); }
+.traGopSo b {
+  color: var(--signal-dark);
+  font-family: var(--font-mono);
+  font-size: clamp(1.75rem, 2.6vw, 2.375rem);
+  font-weight: 500;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+.traGopSo span { font-size: var(--fs-xs); font-weight: 600; }
+/*
+ * 🔒 INV-LS-18: HAI con số, luôn luôn. Ép về một con số là nói với khách rằng
+ *    tháng 13 vẫn trả như tháng 12.
+ */
+.giaiDoan2 { display: flex; align-items: baseline; gap: var(--s-2); }
+.giaiDoan2 b { font-family: var(--font-mono); font-size: var(--fs-figure); font-weight: 500; font-variant-numeric: tabular-nums; }
+.giaiDoan2 span { font-size: var(--fs-xs); }
+
+.ky { display: flex; flex-wrap: wrap; gap: var(--s-2); width: 100%; }
+.ky button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--paper-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  transition: border-color var(--nhanh) var(--ease-out), background var(--nhanh) var(--ease-out);
+}
+.ky button:hover { border-color: var(--paper-card); }
+.ky button[aria-pressed='true'] { border-color: var(--paper-card); background: var(--paper-card); color: var(--paper-ink); }
+
+.ghiChu { width: min(100%, 820px); margin-top: var(--s-5); text-align: left; }
+.trangThai { margin-top: var(--s-6); color: var(--paper-muted); font-size: var(--fs-sm); }
+
+@media (max-width: 760px) {
+  .hang { gap: var(--s-3); padding: var(--s-3) 0; }
+  .hang dt { font-size: var(--fs-xs); }
+  .traGop { gap: var(--s-4); padding: var(--s-4); }
+  .tieuDe { max-width: none; }
+}
+
+/* ── Diễn hoạt theo vị trí cuộn ───────────────────────────────────────────
+ * Timeline ĐẶT TÊN gắn vào cả màn hình, không phải vào từng con số: `view()`
+ * của một dòng chữ cao 100 px sẽ chạy hết trong 100 px cuộn.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: --t) and (animation-timeline: view()) {
+    .man { view-timeline-name: --boc-gia; view-timeline-axis: block; }
+
+    .chang {
+      animation: chang-hien linear both;
+      animation-timeline: --boc-gia;
+      animation-range: var(--tu) var(--den);
+    }
+    .changCuoi { animation-name: chang-cuoi; }
+
+    .tienTrinh > span {
+      animation: tien-trinh linear both;
+      animation-timeline: --boc-gia;
+      animation-range: var(--tu) var(--den);
+    }
+
+    .hang {
+      animation: hang-sang linear both;
+      animation-timeline: --boc-gia;
+      animation-range: var(--tu) var(--den);
+    }
+  }
+}
+
+@keyframes chang-hien {
+  0% { opacity: 0; }
+  16%, 84% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Chặng cuối vào rồi Ở LẠI — nó là kết luận, không phải một khung hình. */
+@keyframes chang-cuoi {
+  0% { opacity: 0; }
+  18%, 100% { opacity: 1; }
+}
+
+@keyframes tien-trinh {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes hang-sang {
+  from { opacity: .3; }
+  to { opacity: 1; }
+}
