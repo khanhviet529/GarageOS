@@ -3,7 +3,8 @@ import { requestHost, fetchPublic, noIndex } from '@/lib/api';
 import { loadSite } from '@/lib/site';
 import { Gia } from '@/components/ui/gia';
 import { buildMetadata } from '@/lib/seo';
-import { Header, Footer } from '@/components/layout/chrome';
+import { SiteFooter } from '@/components/layout/site-footer';
+import { SiteHeader } from '@/components/layout/site-header';
 import type { PublicProductSummary } from '@garageos/contracts';
 import type { Metadata } from 'next';
 import { buildPageTitle } from '@garageos/domain';
@@ -73,7 +74,7 @@ export default async function CatalogPage({
 
   return (
     <>
-      <Header site={site} />
+      <SiteHeader site={site} />
       {noIndex() && <meta name="robots" content="noindex,nofollow" />}
       <main id="main" tabIndex={-1}>
         <section className="catalog-hero"><div className="container">
@@ -113,7 +114,7 @@ export default async function CatalogPage({
           </div>
         )}</section>
       </main>
-      <Footer site={site} />
+      <SiteFooter site={site} />
     </>
   );
 }

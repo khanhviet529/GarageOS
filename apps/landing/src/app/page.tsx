@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import type { LandingPageDocument, PublicProductSummary } from '@garageos/contracts';
 import { buildPageTitle } from '@garageos/domain';
-import { Footer, Header } from '@/components/layout/chrome';
+import { SiteFooter } from '@/components/layout/site-footer';
+import { SiteHeader } from '@/components/layout/site-header';
 import { FeaturedVehicle } from '@/features/trang-chu/featured-vehicle';
 import { FinalCta } from '@/features/trang-chu/final-cta';
 import { LandingPageRenderer } from '@/features/trang-cms/landing-page-renderer';
@@ -49,7 +50,7 @@ export default async function HomePage(): Promise<React.ReactElement> {
 
   return (
     <>
-      <Header site={site} />
+      <SiteHeader site={site} />
       {noIndex() && <meta name="robots" content="noindex,nofollow" />}
       <main id="main" tabIndex={-1}>
         {document === null ? <><HomeHero
@@ -76,7 +77,7 @@ export default async function HomePage(): Promise<React.ReactElement> {
         <TrustSection />
         <FinalCta /></> : <LandingPageRenderer document={document} products={products} site={site} />}
       </main>
-      <Footer site={site} />
+      <SiteFooter site={site} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}

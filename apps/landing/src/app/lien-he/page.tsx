@@ -1,5 +1,6 @@
 import { loadSite } from '@/lib/site';
-import { Header, Footer } from '@/components/layout/chrome';
+import { SiteFooter } from '@/components/layout/site-footer';
+import { SiteHeader } from '@/components/layout/site-header';
 import { LeadForm } from '@/components/lead-form';
 import { noIndex } from '@/lib/api';
 
@@ -10,7 +11,7 @@ export default async function ContactPage(): Promise<React.ReactElement> {
 
   return (
     <>
-      <Header site={site} />
+      <SiteHeader site={site} />
       {noIndex() && <meta name="robots" content="noindex,nofollow" />}
       <main className="container contact-layout" id="main" tabIndex={-1}>
         <section className="contact-intro">
@@ -47,7 +48,7 @@ export default async function ContactPage(): Promise<React.ReactElement> {
         </section>
         <aside className="contact-aside"><LeadForm site={site} /></aside>
       </main>
-      <Footer site={site} />
+      <SiteFooter site={site} />
     </>
   );
 }

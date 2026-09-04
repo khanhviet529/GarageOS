@@ -3,7 +3,8 @@ import { requestHost, fetchPublic, noIndex, httpStatusForPublicApiError } from '
 import { loadSite, formatPrice, isGone } from '@/lib/site';
 import { Gia } from '@/components/ui/gia';
 import { buildMetadata } from '@/lib/seo';
-import { Header, Footer } from '@/components/layout/chrome';
+import { SiteFooter } from '@/components/layout/site-footer';
+import { SiteHeader } from '@/components/layout/site-header';
 import { DetailActions } from '@/features/chi-tiet-xe/detail-actions';
 import { BocGiaLanBanh } from '@/features/gia-lan-banh/boc-gia-lan-banh';
 import { ChiPhiSoHuu } from '@/features/chi-tiet-xe/chi-phi-so-huu';
@@ -39,7 +40,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
     if (gone) {
       return (
         <>
-          <Header site={site} />
+          <SiteHeader site={site} />
           <main className="container section" id="main" tabIndex={-1}>
             <h1>Xe đã ngừng giới thiệu</h1>
             <p className="note">
@@ -47,7 +48,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
             </p>
             <p><a className="btn" href="/xe">Xem danh sách xe</a></p>
           </main>
-          <Footer site={site} />
+          <SiteFooter site={site} />
         </>
       );
     }
@@ -86,7 +87,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
 
   return (
     <>
-      <Header site={site} />
+      <SiteHeader site={site} />
       {noIndex() && <meta name="robots" content="noindex,nofollow" />}
       <main id="main" tabIndex={-1}>
         <div className="container"><nav className="breadcrumb" aria-label="Breadcrumb">
@@ -172,7 +173,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
           }))}
         /></div>
       </main>
-      <Footer site={site} />
+      <SiteFooter site={site} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
