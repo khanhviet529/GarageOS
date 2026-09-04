@@ -265,6 +265,8 @@ async function main(): Promise<void> {
     media_import_item, media_import_job,
     vehicle_product_media, vehicle_experience_version_media,
     vehicle_experience_version, vehicle_experience,
+    vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
+    vehicle_color, onroad_fee_schedule,
     testimonial, vehicle_variant_revision, vehicle_variant,
     vehicle_product_revision, vehicle_product, vehicle_product_category,
     media_publication, media_rendition, media_asset,
@@ -1732,6 +1734,114 @@ async function main(): Promise<void> {
      VALUES ($1,$2,$3,'POSTER','Meridian X5 nhìn từ phía trước trong bóng tối, đèn pha bật sáng',0,true)`,
     [TENANT_A, revisionX5Id, coverX5Id],
   );
+
+  /*
+   * ───────────────────────────────────────────────────────────────────────────
+   * Catalog thương mại — SRS-LS-EXP-001 §4.
+   *
+   * 🔒 Bộ số ở đây là bộ ĐỐI CHIẾU TAY: mọi con số landing hiện ra phải cộng
+   *    được từ biểu phí này bằng một cái máy tính bỏ túi. Đổi một dòng ở đây là
+   *    đổi kết quả của `apps/api/test/showroom.spec.ts`, và đó là chủ ý.
+   *
+   *    Lăn bánh = giá xe + trước bạ theo powertrain + 22.380.000
+   *               (biển 20tr + đăng kiểm 340k + đường bộ 1,56tr + BHTNDS 480k)
+   */
+  const PHI_CO_DINH = {
+    plate: 20_000_000, inspection: 340_000, road: 1_560_000, civil: 480_000,
+  };
+  const TINH = [
+    { code: '01', name: 'Hà Nội', ice: 1200, plate: PHI_CO_DINH.plate },
+    { code: '79', name: 'TP. Hồ Chí Minh', ice: 1000, plate: 20_000_000 },
+    { code: '31', name: 'Hải Phòng', ice: 1000, plate: 1_000_000 },
+    { code: '48', name: 'Đà Nẵng', ice: 1000, plate: 1_000_000 },
+  ];
+  for (const t of TINH) {
+    for (const pt of ['ICE', 'HYBRID', 'BEV'] as const) {
+      await db.query(
+        `INSERT INTO onroad_fee_schedule
+           (tenant_id, province_code, province_name, powertrain, registration_fee_rate_bp,
+            plate_fee_amount, inspection_fee_amount, road_maintenance_fee_amount,
+            civil_insurance_fee_amount, material_insurance_rate_bp, effective_from,
+            created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,120,'2026-07-01',$10,$10)`,
+        [
+          TENANT_A, t.code, t.name, pt,
+          // Xe điện hiện được miễn lệ phí trước bạ — biểu diễn bằng 0 bp, và đó
+          // là lý do `powertrain` phải là một chiều của khoá chứ không phải một
+          // cột giá trị.
+          pt === 'BEV' ? 0 : t.ice,
+          t.plate, PHI_CO_DINH.inspection, PHI_CO_DINH.road, PHI_CO_DINH.civil,
+          publisherId,
+        ],
+      );
+    }
+  }
+
+  // Màu, ưu đãi, trả góp và điều khoản cọc cho Aurora E1.
+  await db.query(
+    `UPDATE vehicle_product_revision
+        SET deposit_amount = 20000000, deposit_hold_days = 14,
+            deposit_refund_text = 'Hoàn 100 % nếu huỷ trước 7 ngày'
+      WHERE id = $1`,
+    [revisionId],
+  );
+  for (const [i, c] of [
+    { name: 'Xanh đại dương', hex: '#1f4d7a', kind: 'DON', surcharge: 0 },
+    { name: 'Trắng ngọc trai', hex: '#e8e6e1', kind: 'KIM_LOAI', surcharge: 12_000_000 },
+    { name: 'Đen huyền', hex: '#141414', kind: 'DON', surcharge: 0 },
+  ].entries()) {
+    await db.query(
+      `INSERT INTO vehicle_color (tenant_id, product_revision_id, name, hex_code, kind, surcharge_amount, display_order)
+       VALUES ($1,$2,$3,$4,$5::vehicle_color_kind,$6,$7)`,
+      [TENANT_A, revisionId, c.name, c.hex, c.kind, c.surcharge, i],
+    );
+  }
+  await db.query(
+    `INSERT INTO vehicle_promotion
+       (tenant_id, product_revision_id, kind, title, condition_text, value_amount,
+        is_enabled, starts_at, ends_at, display_order)
+     VALUES
+       ($1,$2,'HO_TRO_PHI','Hỗ trợ 100 % phí đăng ký biển số','Áp dụng khi nhận xe trong tháng',20000000,true,now() - interval '10 days', now() + interval '26 days',0),
+       ($1,$2,'QUA_TANG','Tặng 1 năm sạc miễn phí','Mọi trạm trong hệ thống',NULL,true,now() - interval '3 days', now() + interval '5 days',1),
+       -- 🔒 "Đã hẹn": ngày bắt đầu còn ở tương lai. Không hiện trên landing
+       --    nhưng PHẢI nhìn thấy trong admin, nếu không biên tập viên hẹn ưu đãi
+       --    tháng sau sẽ tưởng hệ thống nuốt mất.
+       ($1,$2,'GIAM_TIEN','Giảm 30 triệu cho khách đổi xe cũ','Áp dụng khi thu đổi tại showroom',30000000,true,now() + interval '20 days', now() + interval '50 days',2),
+       ($1,$2,'QUA_TANG','Tặng gói bảo dưỡng 3 năm','Chương trình đã kết thúc',NULL,false,now() - interval '90 days', now() - interval '30 days',3)`,
+    [TENANT_A, revisionId],
+  );
+  await db.query(
+    `INSERT INTO financing_program
+       (tenant_id, product_revision_id, bank_name, min_down_payment_bp, promo_rate_bp,
+        promo_months, standard_rate_bp, allowed_terms_months, down_payment_options_bp,
+        rate_updated_at, display_order)
+     VALUES
+       ($1,$2,'Techcombank',2000,750,12,1050,'{36,48,60,84}','{2000,3000,4000,5000}','2026-08-28',0),
+       ($1,$2,'VPBank',2000,790,12,1080,'{36,48,60}','{2000,3000,4000}','2026-08-28',1),
+       ($1,$2,'VIB',3000,820,6,1120,'{36,48,60}','{3000,4000,5000}','2026-08-20',2)`,
+    [TENANT_A, revisionId],
+  );
+
+  /*
+   * Khả năng giao xe theo chi nhánh — KHÔNG đi qua revision (§3).
+   *
+   * Ba trạng thái khác nhau trên ba chi nhánh để nhãn gộp có gì để gộp: nếu mọi
+   * chi nhánh cùng một trạng thái thì `nhanKhaNangGiao` không bao giờ bị thử.
+   */
+  const trangThaiChiNhanh: { status: string; min: number | null; max: number | null }[] = [
+    { status: 'SAN_XE', min: null, max: null },
+    { status: 'SAP_VE', min: 7, max: 10 },
+    { status: 'DAT_HANG', min: 30, max: 45 },
+  ];
+  for (const [i, b] of branchesA.entries()) {
+    const tt = trangThaiChiNhanh[i % trangThaiChiNhanh.length]!;
+    await db.query(
+      `INSERT INTO vehicle_availability
+         (tenant_id, product_id, branch_id, status, lead_time_days_min, lead_time_days_max, updated_by)
+       VALUES ($1,$2,$3,$4::vehicle_availability_status,$5,$6,$7)`,
+      [TENANT_A, productId, b.id, tt.status, tt.min, tt.max, publisherId],
+    );
+  }
 
   await db.query('COMMIT');
 

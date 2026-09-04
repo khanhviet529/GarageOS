@@ -124,6 +124,44 @@ export class PublicLandingController {
     res.json(kq);
   }
 
+  /**
+   * Bóc giá lăn bánh — phép cộng, khoản trả góp, ưu đãi và khả năng giao xe
+   * trong MỘT lượt gọi. Xem `PublicLandingService.bocGiaLanBanh`.
+   */
+  @Get('vehicle-products/:slug/gia-lan-banh')
+  async bocGia(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('slug') slug: string,
+    @Query('provinceCode') provinceCode?: string,
+    @Query('variantKey') variantKey?: string,
+    @Query('colorId') colorId?: string,
+    @Query('termMonths') termMonths?: string,
+    @Query('downPaymentBp') downPaymentBp?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+
+    // Tham số từ URL công khai: chốt về mặc định thay vì tin đầu vào.
+    if (provinceCode === undefined || !/^[0-9]{2,3}$/.test(provinceCode)) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Thiếu mã tỉnh/thành hợp lệ.');
+    }
+    const term = Number(termMonths);
+    const down = Number(downPaymentBp);
+    const kq = await this.svc.bocGiaLanBanh(ctx, slug, {
+      provinceCode,
+      variantKey,
+      colorId: /^[0-9a-f-]{36}$/i.test(colorId ?? '') ? colorId : undefined,
+      termMonths: Number.isInteger(term) && term > 0 ? term : undefined,
+      downPaymentBp: Number.isInteger(down) && down >= 0 ? down : undefined,
+    });
+    // `bigint` không đi qua JSON.stringify mặc định — đổi sang chuỗi, không sang
+    // `number`: một con số tiền tám chữ số vẫn an toàn, nhưng quy tắc phải đồng
+    // nhất ở mọi bề mặt, nếu không có ngày nó lọt qua chỗ không an toàn.
+    res.json(JSON.parse(JSON.stringify(kq, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))));
+  }
+
   @Get('vehicle-products/:slug/experiences/:stableKey')
   async experience(
     @Req() req: Request,

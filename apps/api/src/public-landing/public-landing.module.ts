@@ -4,9 +4,10 @@ import { PublicLandingService } from './public-landing.service';
 import { PublicLandingController } from './public-landing.controller';
 import { SalesModule } from '../sales/sales.module';
 import { LandingPageModule } from '../landing-page/landing-page.module';
+import { ShowroomModule } from '../showroom/showroom.module';
 
 @Module({
-  imports: [SalesModule, LandingPageModule],
+  imports: [SalesModule, LandingPageModule, ShowroomModule],
   providers: [TenantContextService, PublicLandingService],
   controllers: [PublicLandingController],
   exports: [TenantContextService],

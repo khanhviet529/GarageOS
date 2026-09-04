@@ -5,6 +5,7 @@ import { Gia } from '@/components/gia';
 import { buildMetadata } from '@/lib/seo';
 import { Header, Footer } from '@/components/chrome';
 import { DetailActions } from '@/components/detail-actions';
+import { BocGiaLanBanh } from '@/components/boc-gia-lan-banh';
 import { ChiPhiSoHuu } from '@/components/chi-phi-so-huu';
 import type { PublicProductDetail, PublicSiteView } from '@garageos/contracts';
 import type { Metadata } from 'next';
@@ -142,6 +143,13 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
             </table></section>
           </div>
         </div>
+
+        {/*
+          Bóc giá lăn bánh đứng NGAY SAU bảng phiên bản: khách vừa đọc giá niêm
+          yết xong thì câu hỏi kế tiếp luôn là "lăn bánh hết bao nhiêu". Hero
+          của trang chủ hứa đúng điều này, nên bằng chứng phải đứng sát lời hứa.
+        */}
+        <BocGiaLanBanh slug={slug} />
 
         {/*
           Chi phí sở hữu đặt NGAY SAU bảng phiên bản và TRƯỚC form đăng ký.
