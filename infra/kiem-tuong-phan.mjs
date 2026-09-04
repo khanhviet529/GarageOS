@@ -21,6 +21,8 @@
  * cùng một phép tính, không phải bản sao thứ hai sẽ lệch dần theo thời gian.
  */
 
+import { pathToFileURL } from 'node:url';
+
 /* ── Phép tính ─────────────────────────────────────────────────────────── */
 
 /** Độ chói tương đối theo WCAG 2.x. */
@@ -57,70 +59,27 @@ export function tren(hex, alpha, nen) {
   );
 }
 
-/* ── Theme mặc định: đúng các giá trị trong apps/landing/src/styles/tokens.css ── */
-
-const NEN_0 = '#0a0b0c';
-const NEN_1 = '#111315';
-const NEN_2 = '#181b1e';
-const NEN_3 = '#24282c';
-const GIAY = '#f3f1eb';
+/* ── Phân giải cặp khai bằng TÊN TOKEN ─────────────────────────────────── */
 
 /**
- * Một cặp cần kiểm.
+ * Đổi một cặp `[tên, tokenChữ, tokenNền, ngưỡng]` thành hai mã màu đã bẹt.
  *
- * `min` là 4.5 cho chữ thường, 3 cho chữ lớn (>=24px, hoặc >=19px in đậm) và cho
- * ranh giới của một thành phần điều khiển (SC 1.4.11). Một đường kẻ chia nội dung
- * là trang trí và không bị SC 1.4.11 điều chỉnh — nó có mặt ở đây để ghi nhận,
- * với `min: 1`.
- */
-const CAP = [
-  /* --- Chữ trên bốn tầng bề mặt ---
-     Kiểm CẢ BỐN, không chỉ tầng sâu nhất. Một token chữ chỉ đạt trên nền tối
-     nhất là token không thể giao cho component: `.card` nằm trên `--surface-2`,
-     `.lead-form input` nằm trên `--surface-3`. */
-  ['chữ chính trên nền 0', '#f5f5f3', NEN_0, 4.5],
-  ['chữ chính trên nền 1', '#f5f5f3', NEN_1, 4.5],
-  ['chữ chính trên nền 2', '#f5f5f3', NEN_2, 4.5],
-  ['chữ chính trên nền 3', '#f5f5f3', NEN_3, 4.5],
-  ['chữ mờ trên nền 0', '#b5b7b4', NEN_0, 4.5],
-  ['chữ mờ trên nền 1', '#b5b7b4', NEN_1, 4.5],
-  ['chữ mờ trên nền 2', '#b5b7b4', NEN_2, 4.5],
-  ['chữ mờ trên nền 3', '#b5b7b4', NEN_3, 4.5],
-
-  /* --- Thương hiệu và hành động --- */
-  ['brand làm chữ trên nền 0', '#ff705c', NEN_0, 4.5],
-  ['brand làm chữ trên nền 1', '#ff705c', NEN_1, 4.5],
-  ['brand làm chữ trên nền 2', '#ff705c', NEN_2, 4.5],
-  ['brand làm chữ trên nền 3', '#ff705c', NEN_3, 4.5],
-  /* Vòng focus và điểm mốc là ĐỒ HOẠ → ngưỡng 3:1, không phải 4.5. */
-  ['vòng focus trên nền 3', '#ff705c', NEN_3, 3],
-  ['đỏ tiến trình làm đồ hoạ trên nền 3', '#ff705c', NEN_3, 3],
-  ['chữ trắng trên nút chính', '#ffffff', '#c73526', 4.5],
-  ['chữ trắng trên nút hover', '#ffffff', '#ae2e21', 4.5],
-  ['chữ chính trên nền giấy', '#161817', GIAY, 4.5],
-  ['chữ phụ trên nền giấy', '#5d605b', GIAY, 4.5],
-  ['accent biên tập trên nền giấy', '#c73526', GIAY, 4.5],
-
-  /* --- Trạng thái --- */
-  ['thành công trên nền 0', '#62d19b', NEN_0, 4.5],
-  ['thành công trên nền 2', '#62d19b', NEN_2, 4.5],
-  ['lỗi trên nền 0', '#ff8f84', NEN_0, 4.5],
-  ['lỗi trên nền 2', '#ff8f84', NEN_2, 4.5],
-  ['lỗi trên nền 3', '#ff8f84', NEN_3, 4.5],
-
-  /* --- Ranh giới điều khiển (SC 1.4.11) và đường chia --- */
-  ['viền điều khiển trên nền 0', tren('#ffffff', 0.38, NEN_0), NEN_0, 3],
-  ['viền điều khiển trên nền 2', tren('#ffffff', 0.38, NEN_2), NEN_2, 3],
-  ['đường chia trên nền 0 — trang trí', tren('#ffffff', 0.14, NEN_0), NEN_0, 1],
-  ['đường chia trên nền 2 — trang trí', tren('#ffffff', 0.14, NEN_2), NEN_2, 1],
-];
-
-/**
- * Kiểm một danh sách cặp. Trả về `{ dat, truot }`.
+ * 🔒 Nền phải đục. Một nền trong suốt nằm trên một nền trong suốt là chuỗi
+ *    không xác định — nếu gặp, đó là lỗi khai báo token, không phải lỗi đo.
  *
- * Luồng publish `BrandTheme` gọi hàm này với các cặp dựng từ màu tenant chọn,
- * rồi chặn publish nếu `truot.length > 0` (mục 4.1 của thiết kế landing).
+ * 🔒 Token không tra được thì NỔ, không bỏ qua. Bỏ qua âm thầm là cách cổng cũ
+ *    hỏng: nó đo cái nó có và im lặng về cái nó không có.
  */
+export function phanGiaiCap(bang, [ten, tokenChu, tokenNen, min]) {
+  const chu = bang.get(tokenChu);
+  const nen = bang.get(tokenNen);
+  if (chu === undefined) throw new Error(`Không có token ${tokenChu} (cặp "${ten}")`);
+  if (nen === undefined) throw new Error(`Không có token ${tokenNen} (cặp "${ten}")`);
+  if (nen.alpha < 1) throw new Error(`Nền ${tokenNen} trong suốt — không đo được (cặp "${ten}")`);
+  const truoc = chu.alpha < 1 ? tren(chu.hex, chu.alpha, nen.hex) : chu.hex;
+  return { ten, truoc, sau: nen.hex, min, tokenChu, tokenNen };
+}
+
 export function kiemTheme(cap) {
   const dat = [];
   const truot = [];
@@ -131,25 +90,56 @@ export function kiemTheme(cap) {
   return { dat, truot };
 }
 
-/* ── Chạy trực tiếp ────────────────────────────────────────────────────── */
 
+/* ── Chạy trực tiếp: đo cả ba app theo CSS thật ────────────────────────── */
+
+/*
+ * 🔒 So sánh bằng URL thật, không bằng so khớp chuỗi tên file.
+ *
+ * Bản trước cắt đường dẫn rồi so phần đuôi — nên bất kỳ file nào trùng tên ở
+ * thư mục khác cũng kích hoạt khối này. `pathToFileURL` cho đúng một câu trả
+ * lời trên cả Windows lẫn POSIX, và không phải né dấu gạch chéo ngược.
+ */
 const chayTrucTiep =
-  process.argv[1] !== undefined &&
-  import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/').split('/').pop());
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (chayTrucTiep) {
-  const { dat, truot } = kiemTheme(CAP);
-  const rong = Math.max(...CAP.map((c) => c[0].length));
+  const { docToken, APP_CO_TOKEN } = await import('./doc-token.mjs');
+  const { CAP_THEO_APP } = await import('./cap-mau.mjs');
 
-  console.log('\n  WCAG 2.2 — theme mặc định của landing (dark cinematic)\n');
-  for (const [ten, truoc, sau, min] of CAP) {
-    const r = tiLe(truoc, sau);
-    const ok = r >= min;
-    console.log(
-      `  ${ok ? 'ĐẠT ' : 'TRƯỢT'}  ${ten.padEnd(rong)}  ${r.toFixed(2)}:1` +
-        `  (cần ${min}:1)  ${truoc} trên ${sau}`,
-    );
+  const chon = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+  const app_chay = chon.length > 0 ? chon : APP_CO_TOKEN;
+
+  let tongDat = 0;
+  let tongTruot = 0;
+
+  for (const app of app_chay) {
+    const bang_theme = docToken(app);
+    const cap_theme = CAP_THEO_APP[app];
+    if (cap_theme === undefined) throw new Error(`Chưa khai cặp màu cho app "${app}"`);
+
+    for (const [theme, bang] of Object.entries(bang_theme)) {
+      const khai = cap_theme[theme];
+      if (khai === undefined) throw new Error(`Chưa khai cặp cho ${app}/${theme}`);
+
+      const cap = khai.map((c) => phanGiaiCap(bang, c));
+      const { dat, truot } = kiemTheme(cap.map((c) => [c.ten, c.truoc, c.sau, c.min]));
+      tongDat += dat.length;
+      tongTruot += truot.length;
+
+      console.log(`\n  ${app} · ${theme} — WCAG 2.2 AA, đo từ apps/${app}/src/styles/tokens.css\n`);
+      const rong = Math.max(...cap.map((c) => c.ten.length));
+      for (const c of cap) {
+        const r = tiLe(c.truoc, c.sau);
+        console.log(
+          `  ${r >= c.min ? 'ĐẠT ' : 'TRƯỢT'}  ${c.ten.padEnd(rong)}  ${r.toFixed(2)}:1` +
+            `  (cần ${c.min}:1)  ${c.tokenChu} ${c.truoc} trên ${c.tokenNen} ${c.sau}`,
+        );
+      }
+      console.log(`  ── ${dat.length}/${cap.length} đạt${truot.length > 0 ? ` — ${truot.length} TRƯỢT` : ''}`);
+    }
   }
-  console.log(`\n  ${dat.length}/${CAP.length} đạt${truot.length > 0 ? ` — ${truot.length} TRƯỢT` : ''}\n`);
-  process.exit(truot.length > 0 ? 1 : 0);
+
+  console.log(`\n  TỔNG: ${tongDat}/${tongDat + tongTruot} đạt${tongTruot > 0 ? ` — ${tongTruot} TRƯỢT` : ''}\n`);
+  process.exit(tongTruot > 0 ? 1 : 0);
 }

@@ -8,8 +8,7 @@
     "start": "node ../../infra/chay-standalone.mjs landing 3003",
     "lint": "eslint src --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'landing: E2E chay rieng bang playwright'",
-    "kiem:tuong-phan": "node scripts/kiem-tuong-phan-landing.mjs"
+    "test": "echo 'landing: E2E chay rieng bang playwright'"
   },
   "dependencies": {
     "@garageos/contracts": "workspace:*",

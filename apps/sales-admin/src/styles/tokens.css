@@ -30,8 +30,18 @@
   --text-on-action: #ffffff;
 
   /* ── Đường kẻ ──────────────────────────────────────────────────────────── */
+  /*
+   * 🔒 `--line-strong` là RANH GIỚI ĐIỀU KHIỂN, không phải đường trang trí.
+   *
+   * Ô nhập ở đây chỉ khác nền thẻ 1,10:1, nên viền là dấu hiệu DUY NHẤT nhận ra
+   * ô — tức SC 1.4.11 áp và cần 3:1. Ở 25% nó đo 2,27:1 (tối) và 1,70:1 (sáng):
+   * trượt ở cả hai theme, và trượt theo kiểu mắt thường không thấy.
+   *
+   * Nâng độ đục, giữ nguyên sắc độ — vẫn là mực của bảng token. Cùng giá trị
+   * `apps/web` đã dùng và đã đo đạt.
+   */
   --line: rgb(255 255 255 / 12%);
-  --line-strong: rgb(255 255 255 / 25%);
+  --line-strong: rgb(255 255 255 / 36%);
 
   /* ── Thương hiệu và hành động ──────────────────────────────────────────── */
   --brand: #ff705c;
@@ -69,7 +79,7 @@
   --text-on-action: #ffffff;
 
   --line: rgb(22 24 23 / 12%);
-  --line-strong: rgb(22 24 23 / 25%);
+  --line-strong: rgb(22 24 23 / 55%);   /* ranh giới điều khiển — xem chú thích ở khối tối */
 
   --brand: #b32e20;
   --action: #b32e20;
