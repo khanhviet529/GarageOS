@@ -125,14 +125,14 @@ export function HopHuyDon({
 
   return (
     <section className="card stack" aria-label="Hủy đơn và quyết toán">
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h2 style={{ margin: 0 }}>Hủy đơn & quyết toán</h2>
-          <p className="hint" style={{ marginBottom: 0 }}>
+          <h2 className="mb-0">Hủy đơn & quyết toán</h2>
+          <p className="hint">
             Hủy đơn sẽ đóng giờ, nhả phân công/giữ chỗ và lập bảng nghĩa vụ trong một lần.
           </p>
         </div>
-        {settlement !== null && <span className="tag status">{NHAN_TRANG_THAI[settlement.status]}</span>}
+        {settlement !== null && <span className="tag status ml-auto">{NHAN_TRANG_THAI[settlement.status]}</span>}
       </div>
       {error !== null && <div className="alert error" role="alert">{error}</div>}
 

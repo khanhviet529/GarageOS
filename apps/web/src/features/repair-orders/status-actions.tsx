@@ -9,6 +9,13 @@
  * làm gì tiếp" chỉ còn đúng những đáp án đúng.
  *
  * Đây là lớp trải nghiệm. Lớp chặn thật nằm ở service và ở trigger database.
+ *
+ * 🔒 CỐ Ý không phải trình đơn thả xuống, dù bộ thiết kế vẽ một nút "Chuyển
+ * trạng thái" ở hàng tiêu đề. Giấu các bước hợp lệ sau một cú bấm biến câu hỏi
+ * "bây giờ làm gì tiếp" thành một việc phải đi tìm — và với màn hình cố vấn mở
+ * suốt ngày thì đó là đánh đổi sai. Nó cũng làm mất luôn tính chất nhìn-thấy-
+ * được của bất biến: bốn kịch bản E2E khẳng định nút KHÔNG hợp lệ không có mặt
+ * trong DOM, điều mà một trình đơn đóng làm cho vô nghĩa.
  */
 import { useState } from 'react';
 import {
@@ -20,9 +27,13 @@ import {
 } from '@garageos/contracts';
 import { ApiCallError } from '@/lib/api-client';
 import { useUpdateRepairOrderStatus } from '@/features/repair-orders/mutations';
+import { Button } from '@/components/ui/button';
 
 export function StatusActions({
-  orderId, status, version, odometerIn,
+  orderId,
+  status,
+  version,
+  odometerIn,
 }: {
   orderId: string;
   status: RepairOrderStatus;
@@ -34,8 +45,9 @@ export function StatusActions({
   const [odometerOut, setOdometerOut] = useState('');
   // Huỷ là một quy trình quyết toán riêng (BC-10), không được gọi route đổi
   // trạng thái chung vì sẽ bỏ qua hoàn kho và chứng từ quyết toán.
-  const nexts = (REPAIR_ORDER_TRANSITIONS[status] ?? [])
-    .filter((to) => to !== 'CANCELLED') as readonly ChangeOrderStatusInput['to'][];
+  const nexts = (REPAIR_ORDER_TRANSITIONS[status] ?? []).filter(
+    (to) => to !== 'CANCELLED',
+  ) as readonly ChangeOrderStatusInput['to'][];
 
   async function go(
     to: ChangeOrderStatusInput['to'],
@@ -54,53 +66,64 @@ export function StatusActions({
 
   if (nexts.length === 0) {
     return (
-      <div className="card">
+      <section className="card">
         <h2>Trạng thái</h2>
         <div className="alert info">
           Đơn đã ở trạng thái cuối ({REPAIR_ORDER_STATUS_LABEL[status] ?? status}). Xe quay lại
           vì lỗi cũ thì tạo <strong>đơn mới</strong>, không mở lại đơn này.
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="card">
+    <section className="card">
       <h2>Bước tiếp theo</h2>
+
       {updateStatus.error !== null && (
-        <div className="alert error" role="alert">
-          {updateStatus.error instanceof ApiCallError ? updateStatus.error.api.message : 'Lỗi kết nối'}
+        <div className="alert error mb-3" role="alert">
+          {updateStatus.error instanceof ApiCallError
+            ? updateStatus.error.api.message
+            : 'Lỗi kết nối'}
         </div>
       )}
 
       {pending === null && (
         <>
-          <div className="row" style={{ marginTop: 12 }}>
-            {nexts.map((to) => (
-              <button
+          <div className="row">
+            {nexts.map((to, i) => (
+              <Button
                 key={to}
-                disabled={updateStatus.isPending}
+                /* Bước đầu tiên là đường đi thường ngày — nó mang dáng nút chính */
+                variant={i === 0 ? 'chinh' : 'vien'}
+                dangXuLy={updateStatus.isPending}
                 onClick={() => (needsForm(to) ? setPending(to) : void go(to))}
               >
                 {ORDER_ACTION_LABEL[to] ?? to}
-              </button>
+              </Button>
             ))}
           </div>
-          <p className="hint" style={{ marginTop: 10 }}>
-            Chỉ hiện những bước hợp lệ từ trạng thái hiện tại. Bảng chuyển đổi nằm ở
-            một chỗ duy nhất và được kiểm tra lại ở database.
+          <p className="hint mt-2.5">
+            Chỉ hiện những bước hợp lệ từ trạng thái hiện tại. Bảng chuyển đổi nằm ở một chỗ
+            duy nhất và được kiểm tra lại ở database.
           </p>
         </>
       )}
 
       {pending === 'DELIVERED' && (
-        <div className="stack" style={{ marginTop: 12 }}>
-          <div className="field" style={{ maxWidth: 260 }}>
-            <label htmlFor="odo-out">Số km lúc giao xe <span className="req">*</span></label>
+        <div className="flex flex-col gap-3.5">
+          <div className="field max-w-[260px]">
+            <label htmlFor="odo-out">
+              Số km lúc giao xe <span className="req">*</span>
+            </label>
             <input
-              id="odo-out" type="number" className="mono" value={odometerOut}
+              id="odo-out"
+              type="number"
+              className="mono"
+              value={odometerOut}
               onChange={(e) => setOdometerOut(e.target.value)}
-              placeholder={odometerIn === null ? '' : String(odometerIn)} autoFocus
+              placeholder={odometerIn === null ? '' : String(odometerIn)}
+              autoFocus
             />
             <span className="hint">
               {odometerIn === null
@@ -109,17 +132,19 @@ export function StatusActions({
             </span>
           </div>
           <div className="row">
-            <button
-              disabled={updateStatus.isPending || odometerOut === ''}
+            <Button
+              dangXuLy={updateStatus.isPending}
+              disabled={odometerOut === ''}
               onClick={() => void go('DELIVERED', { odometerOut: Number(odometerOut) })}
             >
               Xác nhận giao xe
-            </button>
-            <button className="secondary" onClick={() => setPending(null)}>Bỏ qua</button>
+            </Button>
+            <Button variant="vien" onClick={() => setPending(null)}>
+              Bỏ qua
+            </Button>
           </div>
         </div>
       )}
-
-    </div>
+    </section>
   );
 }

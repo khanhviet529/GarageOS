@@ -14,6 +14,7 @@ export function TieuDeTrang({
   phu,
   children,
   className,
+  lopTieuDe,
   cap = 'h1',
 }: {
   tieuDe: ReactNode;
@@ -21,13 +22,24 @@ export function TieuDeTrang({
   /** Nút hành động, dồn về mép phải */
   children?: ReactNode;
   className?: string;
+  /**
+   * Class thêm cho chính thẻ tiêu đề.
+   *
+   * 🔒 Có mặt vì mã đơn phải là `h2.mono`: hai kịch bản E2E đọc mã đơn bằng
+   * `page.locator('h2.mono')`. Bọc mã trong một `<span class="mono">` bên trong
+   * `<h2>` trông giống hệt nhau trên màn hình nhưng làm hai bài đó đỏ, với
+   * thông báo lỗi không nói gì về nguyên nhân.
+   */
+  lopTieuDe?: string;
   cap?: 'h1' | 'h2';
 }) {
   const The = cap;
   return (
     <div className={cn('flex flex-wrap items-center gap-4', className)}>
       <div className="flex min-w-0 flex-col gap-1">
-        <The className="text-26 font-bold tracking-[-0.7px] text-text">{tieuDe}</The>
+        <The className={cn('text-26 font-bold tracking-[-0.7px] text-text', lopTieuDe)}>
+          {tieuDe}
+        </The>
         {phu !== undefined && <p className="text-13 text-text-dim">{phu}</p>}
       </div>
       {children !== undefined && (
