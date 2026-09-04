@@ -748,11 +748,6 @@
     border: 0;
   }
 
-  .co-icon {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
 
   /* =======================================================================
      Trang CÔNG KHAI cho khách — nguyên tắc khác hẳn phần nội bộ.
