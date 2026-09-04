@@ -103,7 +103,13 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 .themKhoan dd { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-sm); font-weight: 500; }
-.themKhoan p { margin-top: 3px; color: var(--paper-muted); font-size: var(--fs-label-lg); }
+/*
+ * 🔒 `<dl>` chỉ được chứa `<dt>`, `<dd>`, `<div>` nhóm chúng lại — không được
+ *    chứa `<p>`. axe bắt đúng lỗi này (quy tắc `definition-list`), và trình đọc
+ *    màn hình mất luôn quan hệ thuật ngữ–định nghĩa khi cấu trúc sai.
+ *    Ghi chú giờ nằm TRONG `<dd>` dưới dạng span khối.
+ */
+.themKhoan dd .ghiChu { display: block; margin-top: 3px; color: var(--paper-muted); font-family: var(--font-ui); font-size: var(--fs-label-lg); font-weight: normal; }
 
 .cot { display: grid; gap: var(--s-4); }
 

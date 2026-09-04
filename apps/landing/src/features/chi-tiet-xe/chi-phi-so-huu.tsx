@@ -81,8 +81,33 @@ export function ChiPhiSoHuu({ slug }: { slug: string }): React.ReactElement {
     return () => { huy = true; };
   }, [slug, kmMoiNam]);
 
-  if (loi !== null) return <p className="note" role="status">{loi}</p>;
-  if (du === null) return <p className="note" role="status">Đang tính chi phí…</p>;
+  /*
+   * 🔒 Trạng thái tải và trạng thái lỗi phải nằm TRONG `.chi-phi`, không đứng
+   *    trần.
+   *
+   * `.chi-phi .note` đổi màu chữ sang `--paper-muted` vì khối này là bề mặt
+   *    SÁNG. Bản trước trả về `<p class="note">` trước khi có phần tử cha đó,
+   *    nên quy tắc không áp và chữ giữ nguyên `--text-muted` — token của bề mặt
+   *    TỐI. Kết quả đo bằng axe: **1,78:1**.
+   *
+   * 💡 Lỗi chỉ tồn tại trong lúc chờ dữ liệu, nên nhìn trang đã tải xong thì
+   *    không bao giờ thấy. Đây là loại lỗi chỉ có bài kiểm tự động bắt được —
+   *    và nó đã sống sót qua cả một vòng dựng lại giao diện.
+   */
+  if (loi !== null) {
+    return (
+      <section className="chi-phi">
+        <p className="note" role="status">{loi}</p>
+      </section>
+    );
+  }
+  if (du === null) {
+    return (
+      <section className="chi-phi">
+        <p className="note" role="status">Đang tính chi phí…</p>
+      </section>
+    );
+  }
 
   const dinh = Math.max(...du.theoNam.map((n) => n.tong), 1);
   const chenh = du.soSanhXeXang === null ? null : du.soSanhXeXang - du.tong;

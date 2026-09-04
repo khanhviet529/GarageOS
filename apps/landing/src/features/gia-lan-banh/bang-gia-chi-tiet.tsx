@@ -175,25 +175,31 @@ export function BangGiaChiTiet({
                 {day.batteryRentalAmount !== null && (
                   <div>
                     <dt className="nhan nhan-mo-giay">Thuê pin mỗi tháng</dt>
-                    <dd>{soTien(day.batteryRentalAmount)} ₫</dd>
-                    <p>Bản thuê pin có giá xe thấp hơn — hỏi showroom.</p>
+                    <dd>
+                      {soTien(day.batteryRentalAmount)} ₫
+                      <span className={css.ghiChu}>Bản thuê pin có giá xe thấp hơn — hỏi showroom.</span>
+                    </dd>
                   </div>
                 )}
                 {day.deposit !== null && (
                   <div>
                     <dt className="nhan nhan-mo-giay">Đặt cọc giữ xe</dt>
-                    <dd>{soTien(day.deposit.amount)} ₫</dd>
-                    <p>
-                      {day.deposit.holdDays !== null && <>Giữ {day.deposit.holdDays} ngày</>}
-                      {day.deposit.holdDays !== null && day.deposit.refundText !== null && ' · '}
-                      {day.deposit.refundText}
-                    </p>
+                    <dd>
+                      {soTien(day.deposit.amount)} ₫
+                      <span className={css.ghiChu}>
+                        {day.deposit.holdDays !== null && <>Giữ {day.deposit.holdDays} ngày</>}
+                        {day.deposit.holdDays !== null && day.deposit.refundText !== null && ' · '}
+                        {day.deposit.refundText}
+                      </span>
+                    </dd>
                   </div>
                 )}
                 <div>
                   <dt className="nhan nhan-mo-giay">Thu tiền</dt>
-                  <dd>Tại showroom</dd>
-                  <p>Trang này không nhận thanh toán.</p>
+                  <dd>
+                    Tại showroom
+                    <span className={css.ghiChu}>Trang này không nhận thanh toán.</span>
+                  </dd>
                 </div>
               </dl>
 

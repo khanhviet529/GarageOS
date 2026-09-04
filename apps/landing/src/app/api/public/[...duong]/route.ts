@@ -55,6 +55,17 @@ const DUONG_CHO_PHEP: { method: 'GET' | 'POST'; mau: RegExp }[] = [
   { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+$/ },
   { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+\/experiences\/[a-z0-9-]+$/ },
   { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+\/chi-phi-so-huu$/ },
+  /*
+   * ⚠️ Thêm 2026-09-04, và nó ĐÃ THIẾU một vòng: endpoint bóc giá lăn bánh được
+   *    dựng ở API và khối `BocGiaLanBanh` gọi nó qua chính proxy này, nhưng
+   *    không ai thêm dòng vào danh sách cho phép — nên khối chữ ký của trang
+   *    chủ nhận 404 và rơi về thông báo "Chưa lấy được bảng giá lăn bánh".
+   *
+   * 💡 Danh sách trắng làm đúng việc của nó: chặn đường không khai. Cái sai là
+   *    quy trình — thêm một route công khai ở API mà không thêm ở đây thì bề
+   *    mặt duy nhất khách dùng được vẫn đóng.
+   */
+  { method: 'GET', mau: /^vehicle-products\/[a-z0-9-]+\/gia-lan-banh$/ },
   { method: 'POST', mau: /^leads$/ },
 ];
 
