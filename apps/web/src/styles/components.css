@@ -1,0 +1,815 @@
+/* =========================================================================
+   4 · Component — lớp mỏng trên tiện ích Tailwind
+
+   Ở đây chỉ có những thứ lặp lại ở khắp nơi và có TÊN trong bộ thiết kế. Mọi
+   lớp còn lại dựng bằng tiện ích ngay tại chỗ dùng.
+
+   🔒 Vài tên class dưới đây (`.card`, `.alert`, `.mono`, `.viec`, `.choices`,
+   `tr.grand`, `td.phai`) là ĐIỂM NEO của bộ E2E: 86 kịch bản chọn phần tử qua
+   chúng. Đổi tên là làm đỏ những bài chẳng liên quan gì tới thay đổi vừa làm,
+   với thông báo lỗi nói về locator chứ không nói về nghiệp vụ. Giữ tên, đổi
+   giá trị.
+   ========================================================================= */
+
+@layer components {
+  /* ── Thẻ ──────────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+  .card > h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  .card > h3,
+  .card > h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+
+  /* Khối lõm trong thẻ — ô nhập, vùng rỗng, bảng con */
+  .khoi-lom {
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+
+  /* ── Bố cục dùng lại ──────────────────────────────────────────────────── */
+  .container {
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
+    padding: 20px;
+  }
+  @media (min-width: 768px) {
+    .container {
+      padding: 28px;
+    }
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .card-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .row.top {
+    align-items: flex-start;
+  }
+  /* Mặc định của flexbox là `min-width: auto` — một `<select>` rộng bằng
+     option DÀI NHẤT và đẩy cả trang trượt ngang ở 375px. */
+  .row > .field {
+    min-width: 0;
+  }
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ── Chữ ──────────────────────────────────────────────────────────────── */
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  .muted {
+    color: var(--text-muted);
+  }
+  .small {
+    font-size: 12px;
+  }
+  .hint {
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  /* Nhãn kỹ thuật viết hoa — cỡ sàn 10px, mono, giãn chữ */
+  .nhan-ky-thuat {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.25;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .truncate-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  /* Chuỗi liền không dấu cách (URL, VIN) — bẻ giữa chữ, không cho tràn ô */
+  .be-chu {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* ── Biểu mẫu ─────────────────────────────────────────────────────────── */
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field > label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .field .req {
+    color: var(--danger);
+    font-weight: 700;
+  }
+
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font: inherit;
+    width: 100%;
+    max-width: 100%;
+    min-height: 38px;
+    padding: 10px 12px;
+    color: var(--text);
+    background: var(--ink-2);
+    /* 🔒 `--line-strong`, không phải `--line`: đây là ranh giới của một thành
+       phần điều khiển. Nền ô (`--ink-2`) chỉ hơn nền thẻ (`--ink-1`) 1,1:1 nên
+       viền là dấu hiệu DUY NHẤT nhận ra ô nhập — SC 1.4.11 đòi 3:1. */
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
+  }
+  input:not([type='checkbox']):not([type='radio']):hover:not(:disabled),
+  select:hover:not(:disabled),
+  textarea:hover:not(:disabled) {
+    border-color: var(--text-dim);
+  }
+  /* Đang nhập: viền dày 2px màu hành động — theo khung `KIT — Ô nhập` */
+  input:not([type='checkbox']):not([type='radio']):focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--action);
+    box-shadow: inset 0 0 0 1px var(--action);
+  }
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  input[readonly] {
+    color: var(--text-dim);
+    background: var(--ink-1);
+    cursor: not-allowed;
+  }
+  /* Ô lỗi — viền đỏ + nền tô mờ, và LUÔN kèm một dòng chữ bên dưới */
+  input[aria-invalid='true'],
+  select[aria-invalid='true'],
+  textarea[aria-invalid='true'] {
+    border-color: var(--danger);
+    background: var(--danger-soft);
+  }
+  select {
+    appearance: none;
+    padding-right: 32px;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 16px) calc(50% + 1px),
+      calc(100% - 11px) calc(50% + 1px);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-repeat: no-repeat;
+  }
+  textarea {
+    resize: vertical;
+    min-height: 74px;
+    line-height: 1.6;
+  }
+  input[type='checkbox'] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--action);
+    cursor: pointer;
+  }
+  input.plate {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    min-height: 46px;
+  }
+  input.otp {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    letter-spacing: 10px;
+    text-align: center;
+    min-height: 56px;
+  }
+  /* Ô chọn nằm ngang cùng nhãn — vùng bấm ≥ 24px (WCAG 2.2 SC 2.5.8) */
+  .check,
+  .hop-kiem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 32px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .hop-kiem {
+    align-self: flex-end;
+  }
+
+  /* ── Nút ──────────────────────────────────────────────────────────────
+     Nút mặc định của trang (thẻ <button> trần) mang dáng nút CHÍNH. Các biến
+     thể có mặt trong bộ thiết kế nằm ở `components/ui/button.tsx`; class ở
+     đây giữ cho những chỗ chưa chuyển sang component vẫn đúng hệ. */
+  button {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    background: var(--action);
+    color: var(--on-action);
+    cursor: pointer;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      opacity 120ms ease;
+  }
+  button:hover:not(:disabled) {
+    background: var(--action-hover);
+  }
+  button:active:not(:disabled) {
+    transform: translateY(0.5px);
+  }
+  button:disabled {
+    /* 🔒 Màu riêng, KHÔNG dùng `opacity`: opacity kéo cả viền lẫn chữ xuống
+       dưới ngưỡng tương phản cùng lúc, nút vô hiệu trở thành nút không đọc được. */
+    background: var(--ink-3);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+  button.secondary {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--line-strong);
+  }
+  button.secondary:hover:not(:disabled) {
+    background: var(--ink-2);
+    color: var(--text);
+  }
+  button.ghost {
+    background: transparent;
+    color: var(--text-muted);
+  }
+  button.ghost:hover:not(:disabled) {
+    background: var(--ink-2);
+    color: var(--text);
+  }
+  button.block {
+    width: 100%;
+  }
+  button.small-btn {
+    min-height: 28px;
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  /* ── Nhãn trạng thái (Badge trong bộ thiết kế) ────────────────────────── */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.25;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--ink-3);
+    color: var(--text);
+    /* 🔒 Nhãn trạng thái không bao giờ bị cắt — chật thì đổi nhãn ngắn hơn */
+    white-space: nowrap;
+  }
+  .tag.ice {
+    background: var(--ink-3);
+    color: var(--text-muted);
+  }
+  .tag.hyb {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .tag.bev {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+  .tag.status {
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+  .tag.canh-bao {
+    background: var(--warn-soft);
+    color: var(--warn);
+    margin-left: 8px;
+  }
+  .tag.von-chet {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  /* ── Thông báo trong trang ────────────────────────────────────────────
+     Không tự tắt. Toast là cho phản hồi sau hành động; băng báo là cho điều
+     người dùng phải đọc. */
+  .alert {
+    display: block;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--line);
+    background: var(--ink-2);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-muted);
+  }
+  .alert.error {
+    border-color: var(--danger);
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .alert.warn {
+    border-color: var(--warn);
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .alert.success {
+    border-color: var(--ok);
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+  .alert.info {
+    border-color: var(--line-strong);
+    background: var(--ink-2);
+    color: var(--text-muted);
+  }
+  .alert strong {
+    color: inherit;
+  }
+
+  /* ── Bảng ─────────────────────────────────────────────────────────────── */
+  /* 🔒 Bảng rộng cuộn TRONG khung của nó. `BangCuon` thêm role + tabIndex để
+     người dùng bàn phím cuộn được (WCAG 2.1.1). */
+  .table-scroll {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .table-scroll:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  th {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--ink-2);
+    white-space: nowrap;
+  }
+  tbody tr {
+    transition: background-color 120ms ease;
+  }
+  tbody tr:hover {
+    background: var(--ink-2);
+  }
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  td.mono,
+  th.mono {
+    font-family: var(--font-mono);
+  }
+  /* Số và tiền căn phải — hàng nghìn thẳng cột thì mắt so được nhanh */
+  td.phai,
+  th.phai {
+    text-align: right;
+  }
+  td.nowrap,
+  th.nowrap {
+    white-space: nowrap;
+  }
+  /* Số âm: màu KHÔNG phải kênh thông tin duy nhất — dấu trừ đứng ngay đó */
+  td.am,
+  .am {
+    color: var(--danger);
+    font-weight: 600;
+  }
+  .group-row td {
+    background: var(--ink-2);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  tbody tr.group-row:hover td {
+    background: var(--ink-2);
+  }
+  tr.rejected td {
+    text-decoration: line-through;
+    color: var(--text-muted);
+  }
+  /* Dòng vừa đổi — nháy nền một lần, rồi thôi */
+  tr.vua-doi td {
+    animation: var(--animate-vua-doi);
+  }
+
+  .totals {
+    width: auto;
+    margin-left: auto;
+  }
+  .totals th {
+    background: none;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: right;
+    padding-right: 16px;
+    color: var(--text-dim);
+  }
+  .totals td {
+    text-align: right;
+    min-width: 140px;
+    font-family: var(--font-mono);
+  }
+  .totals tr.grand th,
+  .totals tr.grand td {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    border-top: 1px solid var(--line-strong);
+    border-bottom: none;
+  }
+  .totals tr.grand.selected th,
+  .totals tr.grand.selected td {
+    color: var(--brand);
+  }
+
+  /* ── Danh sách thẻ nhỏ (tài sản trên xe) ─────────────────────────────── */
+  .chips {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chips li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 4px 4px 4px 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .chips li button {
+    background: none;
+    color: var(--text-dim);
+    min-height: 24px;
+    min-width: 24px;
+    padding: 0;
+  }
+  .chips li button:hover {
+    background: none;
+    color: var(--danger);
+  }
+
+  /* ── Trạng thái rỗng ──────────────────────────────────────────────────── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    text-align: center;
+    padding: 28px 22px;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .empty-state .empty-icon {
+    color: var(--text-dim);
+    line-height: 1;
+  }
+  .empty-state .empty-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .empty-state .empty-desc {
+    max-width: 42ch;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  .empty-state .empty-action {
+    margin-top: 4px;
+  }
+
+  /* ── Khung xương ──────────────────────────────────────────────────────
+     Giữ ĐÚNG số dòng và chiều cao của bảng thật, để trang không nhảy khi dữ
+     liệu về. */
+  .skeleton {
+    display: block;
+    background: var(--ink-3);
+    border-radius: var(--radius-sm);
+    animation: var(--animate-nhap-nhay);
+  }
+
+  /* ── Lịch xưởng ───────────────────────────────────────────────────────── */
+  .lich th[scope='row'] {
+    text-align: left;
+    background: var(--ink-2);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .lich td.o-lich {
+    vertical-align: top;
+    min-width: 128px;
+    padding: 5px;
+  }
+  /*
+   * Một việc trên lịch. Viền trái mang màu trạng thái — KHÔNG nền màu: chữ
+   * trên nền màu ở cỡ này khó đạt 4,5:1, mà đây là màn hình nhìn cả ngày.
+   */
+  .viec {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 10px;
+    font-size: 11px;
+    background: var(--ink-1);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--text-muted);
+    border-radius: var(--radius-sm);
+  }
+  .viec.tt-scheduled {
+    border-left-color: var(--brand);
+  }
+  .viec.tt-in_progress {
+    border-left-color: var(--action);
+  }
+  .viec.tt-done,
+  .viec.tt-qc_passed {
+    border-left-color: var(--ok);
+  }
+  .viec.tt-qc_failed {
+    border-left-color: var(--danger);
+  }
+  .viec.tt-paused {
+    border-left-color: var(--warn);
+  }
+  .viec.tt-cancelled {
+    border-left-color: var(--line-strong);
+    color: var(--text-dim);
+  }
+
+  /* ── Tab ──────────────────────────────────────────────────────────────── */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    background: none;
+    color: var(--text-dim);
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+  .tab:hover:not(:disabled) {
+    background: var(--ink-2);
+    color: var(--text);
+  }
+  .tab.active {
+    color: var(--text);
+    border-bottom-color: var(--action);
+  }
+
+  /* ── Nhảy tới nội dung ────────────────────────────────────────────────── */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    z-index: 100;
+    padding: 10px 16px;
+    background: var(--ink-1);
+    color: var(--text);
+    border: 2px solid var(--action);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+  }
+  .skip-link:focus {
+    left: 12px;
+    top: 12px;
+  }
+
+  /*
+   * Chỉ dành cho trình đọc màn hình.
+   *
+   * 🔒 `left: 0` là dòng dễ bỏ sót nhất, và thiếu nó thì cả TRANG trượt ngang:
+   * `position: absolute` không có `left` giữ nguyên vị trí TĨNH của phần tử,
+   * và một `<span>` 1×1px nằm trong cột cuối của bảng cuộn ngang đẩy
+   * `scrollWidth` lên 478px trong khung 375px. Vô hình với mắt, đỏ với test.
+   */
+  .sr-only {
+    position: absolute;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .co-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* =======================================================================
+     Trang CÔNG KHAI cho khách — nguyên tắc khác hẳn phần nội bộ.
+     Mở trên điện thoại, ngoài trời, người dùng không được đào tạo: chữ to,
+     nút to, ít chữ, số tiền rõ ràng tuyệt đối.
+     ======================================================================= */
+  .public {
+    max-width: 720px;
+    margin-inline: auto;
+    padding: 24px 16px 48px;
+  }
+  .public .card {
+    padding: 24px;
+  }
+  .public table th {
+    white-space: nowrap;
+  }
+  .choices {
+    list-style: none;
+  }
+  .choices li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+  /*
+   * Hạng mục khách đã từ chối: KHÔNG dùng `opacity`.
+   *
+   * `opacity: .5` kéo tương phản xuống dưới ngưỡng đúng ở phần khách mở lại
+   * link để xem mình đã từ chối những gì và bao nhiêu tiền. Dùng token màu
+   * riêng đạt ≥4,5:1, và giữ dấu hiệu phi màu (gạch ngang + chữ "Đã từ chối").
+   */
+  .choices li.off .choice-name,
+  .choices li.off .choice-amount {
+    color: var(--text-muted);
+  }
+  .choices li.off .choice-amount {
+    text-decoration: line-through;
+  }
+  .choice-main {
+    flex: 1 1 240px;
+  }
+  .choice-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  /* 🔒 INV-Q-02: phụ tùng nằm BÊN TRONG hạng mục công, không có công tắc riêng */
+  .choice-parts {
+    list-style: none;
+    margin-top: 4px;
+  }
+  .choice-parts li {
+    display: block;
+    padding: 0;
+    border: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .choice-amount {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .choice-actions {
+    display: flex;
+    gap: 8px;
+  }
+  /* Nút to, bấm được bằng ngón cái, ≥44px */
+  .pick {
+    min-height: 44px;
+    min-width: 96px;
+    font-size: 14px;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--line-strong);
+  }
+  .pick:hover:not(:disabled) {
+    background: var(--ink-2);
+  }
+  .pick.on {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: var(--ink-1);
+  }
+  .pick.on:hover:not(:disabled) {
+    background: var(--ok);
+  }
+  .pick.off-btn {
+    background: var(--ink-3);
+    border-color: var(--line-strong);
+    color: var(--text);
+  }
+  .pick.off-btn:hover:not(:disabled) {
+    background: var(--ink-3);
+  }
+  .decided {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .decided.yes {
+    color: var(--ok);
+  }
+  .decided.no {
+    color: var(--text-muted);
+  }
+}

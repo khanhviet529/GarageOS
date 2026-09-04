@@ -1,0 +1,98 @@
+/* =========================================================================
+   3 · Nền tảng
+   ========================================================================= */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid var(--line);
+  }
+
+  html {
+    /* Cuộn tới neo không được chui xuống dưới thanh trên cùng dính */
+    scroll-padding-top: 84px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    /*
+     * 🔒 CỐ Ý KHÔNG đặt `overflow-x: hidden` ở đây.
+     *
+     * Nó sẽ giấu đi triệu chứng của trượt ngang mà không sửa nguyên nhân: bảng
+     * vẫn rộng hơn khung, chỉ là phần thừa bị cắt và người dùng mất luôn cách
+     * đọc nó. Bảng rộng phải cuộn TRONG khung của chính nó (`.table-scroll`) —
+     * xem khung thiết kế "KIT — Bảng rộng & chữ dài". Bài `responsive.spec.ts`
+     * đo `scrollWidth` ở 20 điểm ngắt để giữ nguyên tắc này còn hiệu lực.
+     */
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    line-height: 1.25;
+    font-weight: 600;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /*
+   * Viền tiêu điểm: `--ring` = `--brand`. Đo trên bốn tầng nền, thấp nhất
+   * 4,92:1 — trên ngưỡng 3:1 mà SC 1.4.11 đòi cho thành phần giao diện.
+   */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Chữ số đều bề rộng ở mọi con số — hàng nghìn thẳng cột thì mắt so được */
+  .font-mono,
+  input[type='number'],
+  table td,
+  table th {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::placeholder {
+    color: var(--text-dim);
+    opacity: 1;
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+  }
+
+  /*
+   * 🔒 `prefers-reduced-motion`: TẮT HẲN, không phải giảm.
+   *
+   * Người bị rối loạn tiền đình bật tuỳ chọn này ở cấp hệ điều hành. Với họ,
+   * chuyển động ngoài ý muốn gây chóng mặt thật — nên rút ngắn thời lượng
+   * xuống 1ms vẫn còn một cú giật. `animation: none` là câu trả lời đúng.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
