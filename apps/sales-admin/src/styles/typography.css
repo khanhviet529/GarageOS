@@ -1,0 +1,37 @@
+/*
+ * Thang chữ và hai lớp chữ chuyên dụng.
+ *
+ * 🔒 `line-height` CHỈ HAI GIÁ TRỊ trong toàn hệ: 1.6 cho đoạn văn, 1.25 cho
+ *    tiêu đề. Một thang ba, bốn giá trị nghe có vẻ tinh tế hơn, nhưng nó làm
+ *    nhịp dọc của trang không bao giờ khớp giữa hai khối cạnh nhau.
+ */
+
+@layer components {
+  /*
+   * Nhãn kỹ thuật: mono, viết hoa, giãn chữ.
+   *
+   * 🔒 SÀN CỠ CHỮ 10px. Đây là chỗ DUY NHẤT trong hệ được xuống tới 10px, và chỉ
+   *    vì mono viết hoa có giãn chữ đọc được ở cỡ đó. Không có chữ nào nhỏ hơn
+   *    10px, kể cả chú thích pháp lý.
+   */
+  .tech-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+    text-transform: uppercase;
+  }
+
+  /*
+   * Số tiền và số đo.
+   *
+   * `tabular-nums` để các chữ số đều bề ngang: trong một cột tiền xếp chồng,
+   * chữ số tỉ lệ làm hàng nghìn của dòng này lệch khỏi hàng nghìn của dòng kia,
+   * và mắt mất khả năng so hai con số bằng hình dạng.
+   */
+  .numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}

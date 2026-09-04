@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/layout/admin-shell';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/client';
 
 interface Me extends ActorContext {
@@ -40,13 +42,38 @@ export function AppShell({ children }: { children: React.ReactNode }): React.Rea
   const pathname = usePathname();
 
   if (pathname === '/login') return <>{children}</>;
-  if (loading) return <p className="note">Đang kiểm tra phiên…</p>;
+
+  /* Khung xương giả trong lúc kiểm phiên: giữ nguyên hình dạng trang để nội dung
+     thật không làm giao diện nhảy khi nó về. */
+  if (loading) {
+    return (
+      <div className="flex h-dvh overflow-hidden bg-ink-0" aria-busy="true">
+        <div className="w-[236px] shrink-0 border-r border-line bg-ink-1 p-3">
+          <Skeleton className="mb-4 h-[30px] w-full" />
+          {Array.from({ length: 8 }, (_, i) => (
+            <Skeleton key={i} className="mb-1.5 h-[38px] w-full" />
+          ))}
+        </div>
+        <div className="flex-1 p-6">
+          <Skeleton className="mb-5 h-8 w-56" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+        <span className="sr-only">Đang kiểm tra phiên đăng nhập…</span>
+      </div>
+    );
+  }
+
   if (me === null) {
     return (
-      <main className="container">
-        <h1>GarageOS</h1>
-        <p>Bạn cần đăng nhập để tiếp tục.</p>
-        <p><Link className="btn" href="/login">Đăng nhập</Link></p>
+      <main className="flex h-dvh flex-col items-center justify-center gap-4 bg-ink-0 px-6 text-center">
+        <p className="tech-label text-text-dim">GarageOS · Sales Admin</p>
+        <h1 className="text-2xl font-semibold text-text">Bạn cần đăng nhập để tiếp tục</h1>
+        <p className="max-w-md text-[13px] text-text-muted">
+          Phiên làm việc đã hết hạn hoặc chưa được thiết lập.
+        </p>
+        <Button asChild>
+          <Link href="/login">Đăng nhập</Link>
+        </Button>
       </main>
     );
   }
