@@ -409,12 +409,29 @@
     border-collapse: collapse;
     font-size: 12px;
   }
+  /*
+   * Đệm NGANG nhỏ ở giữa, rộng ở hai mép.
+   *
+   * 🔒 Con số này quyết định cột chữ tự do còn lại bao nhiêu chỗ. Với đệm
+   * 14px đều, một bảng sáu cột nuốt 168px chỉ riêng cho khoảng trắng — và cột
+   * "lời khách mô tả" ở màn Xe trong xưởng tụt xuống 135px, tức là cắt ngay
+   * sau hai chữ. Bộ thiết kế dùng 18px ở mép và 12px giữa các cột; đây là cách
+   * diễn đạt điều đó bằng đệm ô.
+   */
   th,
   td {
     text-align: left;
-    padding: 12px 14px;
+    padding: 12px 8px;
     border-bottom: 1px solid var(--line);
     vertical-align: middle;
+  }
+  th:first-child,
+  td:first-child {
+    padding-left: 18px;
+  }
+  th:last-child,
+  td:last-child {
+    padding-right: 18px;
   }
   th {
     font-family: var(--font-mono);
@@ -535,6 +552,44 @@
   .chips li button:hover {
     background: none;
     color: var(--danger);
+  }
+
+  /* ── Dải chỉ số gọn trong một thẻ ─────────────────────────────────────
+     Khác `Metric` ở chỗ nó nằm TRONG một thẻ đã có tiêu đề, nên con số nhỏ
+     hơn và không có nhãn mono viết hoa cỡ lớn.
+
+     🔒 Mọi ô CÙNG cỡ chữ. Ở hộp hoá đơn, "chênh lệch" phải nặng ngang "tổng
+     hoá đơn" — làm nó nhỏ hơn là ngầm bảo thu ngân bỏ qua đúng con số quyết
+     định có được phát hành hay không. */
+  .kpi-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .kpi {
+    display: flex;
+    min-width: 150px;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 14px;
+    background: var(--ink-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .kpi-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.25;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .kpi strong {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
   }
 
   /* ── Trạng thái rỗng ──────────────────────────────────────────────────── */

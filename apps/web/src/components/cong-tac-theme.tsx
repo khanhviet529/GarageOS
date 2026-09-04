@@ -46,10 +46,20 @@ export function CongTacTheme() {
           aria-pressed={hoat}
           onClick={() => setTheme(key)}
           className={cn(
-            'grid size-[26px] min-h-0 place-items-center rounded-full p-0 transition-colors',
+            'grid size-[26px] min-h-0 place-items-center rounded-full border p-0 transition-colors',
+            /*
+             * Nút đang chọn là một viên TRẮNG ở CẢ HAI theme — đúng như bộ
+             * thiết kế vẽ, và đó là lý do nó dùng `paper-card`/`paper-ink`
+             * (cặp token của "khối sáng", vốn không đảo theo theme) chứ không
+             * dùng `text`/`ink-1` (đảo, nên ở chế độ sáng sẽ thành viên đen).
+             *
+             * Viền `line-strong` để TRẠNG THÁI nhận ra được ở chế độ sáng:
+             * trắng trên #f7f6f2 chỉ hơn nhau 1,05:1, mà SC 1.4.11 đòi 3:1 cho
+             * dấu hiệu trạng thái của một thành phần điều khiển.
+             */
             hoat
-              ? 'bg-text text-ink-1 hover:bg-text'
-              : 'bg-transparent text-text-dim hover:bg-ink-3 hover:text-text',
+              ? 'border-line-strong bg-paper-card text-paper-ink hover:bg-paper-card'
+              : 'border-transparent bg-transparent text-text-dim hover:bg-ink-3 hover:text-text',
           )}
         >
           <Icon className="size-3.5" aria-hidden />

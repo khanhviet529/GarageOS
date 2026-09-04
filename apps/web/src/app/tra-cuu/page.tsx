@@ -73,9 +73,14 @@ export default function TraCuuLanding() {
         <form onSubmit={di} className="flex flex-col gap-4">
           <div className="field">
             <label htmlFor="ma-truy-cap">Mã truy cập <span className="req">*</span></label>
+            {/*
+              Mono, KHÔNG dùng class `.otp`. `.otp` giãn chữ 10px cho mã sáu số
+              — đúng ở đó, sai ở đây: mã truy cập dài 43 ký tự, giãn ra thì nó
+              tràn khỏi ô và khách không soi được mình dán thiếu ký tự nào.
+            */}
             <input
               id="ma-truy-cap"
-              className="otp"
+              className="mono min-h-[46px] text-14"
               autoFocus
               autoComplete="off"
               autoCorrect="off"

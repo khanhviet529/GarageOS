@@ -85,7 +85,14 @@ export function AppHeader({ current }: { current: ManHinh }) {
         Bỏ qua thanh điều hướng
       </a>
 
-      <div className="flex min-h-16 flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 md:px-7">
+      {/*
+        Khoảng cách và bề rộng ở đây được ĐO chứ không ước lượng: ở 1440px —
+        đúng bề rộng của bộ thiết kế — tổng của thương hiệu + 5 mục nav + ô tìm
+        + công tắc + người dùng + nút đăng xuất phải nhỏ hơn 1384px (1440 trừ
+        padding). Rộng hơn thì nút "Đăng xuất" rơi xuống hàng hai, và thanh trên
+        cùng cao gấp rưỡi trên MỌI màn hình của mọi người dùng.
+      */}
+      <div className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 md:px-6">
         {/* Thương hiệu */}
         <Link href="/tiep-nhan" className="flex shrink-0 items-center gap-2.5">
           <span className="grid size-[26px] place-items-center rounded-sm bg-action">
@@ -111,7 +118,7 @@ export function AppHeader({ current }: { current: ManHinh }) {
                 href={href}
                 aria-current={dangMo ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-2 rounded-md px-2.5 py-2 text-13 transition-colors md:px-3.5',
+                  'flex items-center gap-2 rounded-md px-2.5 py-2 text-13 transition-colors',
                   dangMo
                     ? 'bg-ink-3 font-semibold text-text'
                     : 'font-medium text-text-dim hover:bg-ink-2 hover:text-text',
@@ -131,7 +138,7 @@ export function AppHeader({ current }: { current: ManHinh }) {
           <label htmlFor="tim-nhanh" className="sr-only">
             Tìm nhanh trong danh sách xe
           </label>
-          <div className="flex w-[230px] items-center gap-2 rounded-md border border-line-strong bg-ink-2 px-3 focus-within:border-action">
+          <div className="flex w-[200px] items-center gap-2 rounded-md border border-line-strong bg-ink-2 px-3 focus-within:border-action">
             <Search className="size-[15px] shrink-0 text-text-dim" aria-hidden />
             <input
               id="tim-nhanh"
@@ -149,7 +156,7 @@ export function AppHeader({ current }: { current: ManHinh }) {
 
         <CongTacTheme />
 
-        <div className="mx-1 hidden h-5 w-px bg-line md:block" />
+        <div className="hidden h-5 w-px bg-line md:block" />
 
         {who !== null && (
           <span className="flex min-w-0 items-center gap-2.5">
@@ -161,7 +168,7 @@ export function AppHeader({ current }: { current: ManHinh }) {
               tồn tại vì `ROLE_LABEL` từng sai 3 trong 6 khoá suốt Phase 1 mà
               không ai thấy. Giữ một phần tử là giữ cái bẫy đó luôn được canh.
             */}
-            <span className="who truncate text-12 font-semibold text-text">
+            <span className="who max-w-[180px] truncate text-12 font-semibold text-text">
               {who.fullName} · {who.roles.map(roleLabel).join(', ')}
             </span>
           </span>

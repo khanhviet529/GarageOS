@@ -375,23 +375,36 @@ function WorkshopPage() {
 
             {orders !== null && hienThi.length > 0 && (
               <BangCuon moTa="Danh sách xe đang trong xưởng">
+                {/*
+                  Sáu cột, đúng số cột của khung thiết kế. Loại động cơ nằm
+                  NGAY DƯỚI biển số chứ không chiếm một cột riêng: nó là thuộc
+                  tính của chiếc xe, không phải một trục để quét mắt theo, và
+                  cột thứ bảy đẩy bảng rộng hơn khung ngay ở 1440px — tức là
+                  cuộn ngang ở đúng bề rộng mà bảng lẽ ra vừa vặn.
+                */}
                 <table>
                   <thead>
                     <tr>
                       <th className="w-[130px]">Biển số</th>
-                      <th className="w-[150px]">Mã đơn</th>
-                      <th className="nowrap w-[170px]">Khách hàng</th>
+                      <th className="w-[145px]">Mã đơn</th>
+                      <th className="nowrap w-[150px]">Khách hàng</th>
                       <th>Lời khách mô tả</th>
-                      <th className="w-[170px]">Trạng thái</th>
-                      <th className="w-[86px]">Động cơ</th>
-                      <th className="w-[140px]">Tiếp nhận lúc</th>
+                      <th className="w-[160px]">Trạng thái</th>
+                      <th className="w-[130px]">Tiếp nhận lúc</th>
                     </tr>
                   </thead>
                   <tbody>
                     {hienThi.map((o) => (
                       <tr key={o.id}>
-                        <td className="mono nowrap font-medium text-text">
-                          {formatPlate(o.plateNumber)}
+                        <td className="nowrap">
+                          <span className="mono block font-medium text-text">
+                            {formatPlate(o.plateNumber)}
+                          </span>
+                          <span
+                            className={`tag ${POWERTRAIN_CLASS[o.powertrain]} mt-1 px-1.5 py-0.5 text-10`}
+                          >
+                            {POWERTRAIN_LABEL[o.powertrain]}
+                          </span>
                         </td>
                         <td className="mono nowrap">
                           <Link
@@ -403,7 +416,7 @@ function WorkshopPage() {
                         </td>
                         <td className="nowrap">{o.customerName}</td>
                         <td>
-                          <span className="truncate-1 max-w-[38ch]" title={o.customerComplaint}>
+                          <span className="truncate-1 max-w-[26ch]" title={o.customerComplaint}>
                             {o.customerComplaint}
                           </span>
                         </td>
@@ -411,11 +424,6 @@ function WorkshopPage() {
                           <Badge tone={toneTrangThai(o.status)}>
                             {ORDER_STATUS_LABEL[o.status] ?? o.status}
                           </Badge>
-                        </td>
-                        <td>
-                          <span className={`tag ${POWERTRAIN_CLASS[o.powertrain]}`}>
-                            {POWERTRAIN_LABEL[o.powertrain]}
-                          </span>
                         </td>
                         <td className="mono nowrap text-text-dim">
                           {formatDateTime(o.receivedAt)}

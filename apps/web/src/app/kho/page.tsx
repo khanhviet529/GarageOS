@@ -166,9 +166,11 @@ export default function TrangKho() {
         <TieuDeTrang
           tieuDe="Kho phụ tùng"
           phu={
-            ton === null
-              ? 'Đang tải tồn kho…'
-              : `${sapHet} mã dưới tồn tối thiểu · ${choXuat.length} phiếu chờ xuất`
+            loi !== null
+              ? 'Không đọc được tồn kho'
+              : ton === null
+                ? 'Đang tải tồn kho…'
+                : `${sapHet} mã dưới tồn tối thiểu · ${choXuat.length} phiếu chờ xuất`
           }
         >
           {capNhatLuc !== '' && (
@@ -212,6 +214,7 @@ export default function TrangKho() {
           {xemGiaVon && (
             <Metric
               nhan="Giá trị tồn"
+              co="vua"
               giaTri={formatMoney(chiSo.giaTri)}
               phu={dangLoc ? 'theo giá vốn · phần đang hiện' : 'theo giá vốn'}
               tone="dim"
@@ -261,11 +264,17 @@ export default function TrangKho() {
             </p>
           )}
 
-          {ton === null ? (
+          {/*
+            Khung xương chỉ hiện khi ĐANG CHỜ, không hiện khi đã hỏng. Bản
+            trước để nó chạy mãi sau một lỗi 403: người dùng nhìn thấy một bảng
+            xám nhấp nháy vô tận bên dưới dòng "bạn không được xem mục này", và
+            hai thứ đó nói hai điều khác nhau.
+          */}
+          {ton === null && loi === null ? (
             <div className="p-4 md:p-[18px]">
               <SkeletonTable rows={6} cols={xemGiaVon ? 8 : 7} />
             </div>
-          ) : ton.length === 0 ? (
+          ) : ton === null ? null : ton.length === 0 ? (
             <div className="p-4 md:p-[18px]">
               <EmptyState
                 title="Không có mã hàng nào khớp bộ lọc"
