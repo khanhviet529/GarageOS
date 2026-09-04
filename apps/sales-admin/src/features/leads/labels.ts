@@ -24,3 +24,14 @@ export const LEAD_STATUS_TONE: Record<LeadStatus, 'ok' | 'warn' | 'danger' | 'br
   QUALIFIED: 'ok',
   LOST: 'neutral',
 };
+
+export const LEAD_ACTIVITY_LABEL: Record<
+  'CREATED' | 'ASSIGNED' | 'STATUS_CHANGED' | 'NOTE' | 'CONTACT_ATTEMPT',
+  string
+> = {
+  CREATED: 'Lead được tạo',
+  ASSIGNED: 'Gán người phụ trách',
+  STATUS_CHANGED: 'Đổi trạng thái',
+  NOTE: 'Ghi chú',
+  CONTACT_ATTEMPT: 'Lần liên hệ',
+};
