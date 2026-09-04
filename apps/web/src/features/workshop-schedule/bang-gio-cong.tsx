@@ -127,27 +127,41 @@ export function BangGioCong({
         </p>
       )}
 
-      {/* 🔒 Hai con số cạnh nhau, kèm CÔNG DỤNG của từng cái */}
-      <div className="row" style={{ gap: 'var(--sp-5)' }}>
-        <div>
-          <div className="hint">Định mức — cơ sở tính tiền khách</div>
-          <strong className="mono" style={{ fontSize: 'var(--fs-lg)' }}>
-            {gioPhut(gio.standardHours)}
-          </strong>
-        </div>
-        <div>
-          <div className="hint">Thực tế — cơ sở đo năng suất</div>
-          <strong className="mono" style={{ fontSize: 'var(--fs-lg)' }}>
-            {gioPhut(gio.actualHours)}
-            {gio.dangLam && <span className="tag canh-bao">đang chạy</span>}
-          </strong>
-        </div>
-        <div>
-          <div className="hint">Năng suất (định mức / thực tế)</div>
-          <strong className="mono" style={{ fontSize: 'var(--fs-lg)' }}>
-            {gio.efficiency === null ? '—' : gio.efficiency.toFixed(2)}
-          </strong>
-        </div>
+      {/*
+        🔒 Ba con số cạnh nhau, CÙNG CỠ CHỮ, kèm công dụng của từng cái.
+        Cùng cỡ là có chủ ý: làm con số "thực tế" nhỏ hơn "định mức" là ngầm bảo
+        người đọc rằng nó ít quan trọng hơn — trong khi nhầm hai cái chính là
+        sai lầm nặng nhất mà BC-06 mục 6 liệt kê.
+      */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[
+          {
+            nhan: 'Định mức — cơ sở tính tiền khách',
+            gt: gioPhut(gio.standardHours),
+            chay: false,
+          },
+          {
+            nhan: 'Thực tế — cơ sở đo năng suất',
+            gt: gioPhut(gio.actualHours),
+            chay: gio.dangLam,
+          },
+          {
+            nhan: 'Năng suất (định mức / thực tế)',
+            gt: gio.efficiency === null ? '—' : gio.efficiency.toFixed(2),
+            chay: false,
+          },
+        ].map((o) => (
+          <div
+            key={o.nhan}
+            className="flex flex-col gap-1.5 rounded-md border border-line bg-ink-2 p-3.5"
+          >
+            <span className="hint">{o.nhan}</span>
+            <strong className="mono flex flex-wrap items-center gap-2 text-20 font-semibold text-text">
+              {o.gt}
+              {o.chay && <span className="tag canh-bao ml-0">đang chạy</span>}
+            </strong>
+          </div>
+        ))}
       </div>
 
       {gio.vuotDinhMucNhieu && (

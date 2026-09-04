@@ -214,7 +214,8 @@
     min-height: 74px;
     line-height: 1.6;
   }
-  input[type='checkbox'] {
+  input[type='checkbox'],
+  input[type='radio'] {
     width: 16px;
     height: 16px;
     accent-color: var(--action);
