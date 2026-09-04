@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { PublicProductSummary } from '@garageos/contracts';
-import { Gia } from '@/components/gia';
-import { homeContent } from '@/content/home';
+import { Gia } from '@/components/ui/gia';
+import { homeContent } from '@/features/trang-chu/noi-dung';
 import { powertrainLabel } from '@/lib/utils/vehicle';
 import styles from './home-hero.module.css';
 

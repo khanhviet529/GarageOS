@@ -1,4 +1,4 @@
-import { homeContent } from '@/content/home';
+import { homeContent } from '@/features/trang-chu/noi-dung';
 import styles from './trust-section.module.css';
 
 export function TrustSection(): React.ReactElement {

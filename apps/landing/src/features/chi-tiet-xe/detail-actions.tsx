@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import type { ExperienceSummary, PublicSiteView, ExperienceSelection } from '@garageos/contracts';
-import { Showroom } from '@/components/showroom';
-import { ViewerErrorBoundary } from '@/components/error-boundary';
+import { Showroom } from '@/features/chi-tiet-xe/showroom';
+import { ViewerErrorBoundary } from '@/features/chi-tiet-xe/error-boundary';
 import { LeadForm } from '@/components/lead-form';
 
 interface DetailActionsProps {

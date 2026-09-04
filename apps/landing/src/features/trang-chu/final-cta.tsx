@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { homeContent } from '@/content/home';
+import { homeContent } from '@/features/trang-chu/noi-dung';
 import styles from './final-cta.module.css';
 
 export function FinalCta(): React.ReactElement {

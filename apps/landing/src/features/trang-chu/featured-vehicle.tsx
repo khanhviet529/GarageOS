@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { PublicProductSummary } from '@garageos/contracts';
-import { Gia } from '@/components/gia';
+import { Gia } from '@/components/ui/gia';
 import { powertrainLabel } from '@/lib/utils/vehicle';
 import styles from './featured-vehicle.module.css';
 

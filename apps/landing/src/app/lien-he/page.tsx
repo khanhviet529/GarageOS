@@ -1,5 +1,5 @@
 import { loadSite } from '@/lib/site';
-import { Header, Footer } from '@/components/chrome';
+import { Header, Footer } from '@/components/layout/chrome';
 import { LeadForm } from '@/components/lead-form';
 import { noIndex } from '@/lib/api';
 

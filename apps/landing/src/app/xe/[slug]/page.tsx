@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation';
 import { requestHost, fetchPublic, noIndex, httpStatusForPublicApiError } from '@/lib/api';
 import { loadSite, formatPrice, isGone } from '@/lib/site';
-import { Gia } from '@/components/gia';
+import { Gia } from '@/components/ui/gia';
 import { buildMetadata } from '@/lib/seo';
-import { Header, Footer } from '@/components/chrome';
-import { DetailActions } from '@/components/detail-actions';
-import { BocGiaLanBanh } from '@/components/boc-gia-lan-banh';
-import { ChiPhiSoHuu } from '@/components/chi-phi-so-huu';
+import { Header, Footer } from '@/components/layout/chrome';
+import { DetailActions } from '@/features/chi-tiet-xe/detail-actions';
+import { BocGiaLanBanh } from '@/features/gia-lan-banh/boc-gia-lan-banh';
+import { ChiPhiSoHuu } from '@/features/chi-tiet-xe/chi-phi-so-huu';
 import type { PublicProductDetail, PublicSiteView } from '@garageos/contracts';
 import type { Metadata } from 'next';
 import { buildPageTitle } from '@garageos/domain';

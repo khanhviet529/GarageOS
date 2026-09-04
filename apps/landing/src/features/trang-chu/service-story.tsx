@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ChiPhiTrangChu } from '@/lib/chi-phi';
-import { homeContent } from '@/content/home';
+import { homeContent } from '@/features/trang-chu/noi-dung';
 import styles from './service-story.module.css';
 
 interface ServiceStoryProps {

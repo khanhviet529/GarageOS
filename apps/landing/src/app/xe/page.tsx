@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { requestHost, fetchPublic, noIndex } from '@/lib/api';
 import { loadSite } from '@/lib/site';
-import { Gia } from '@/components/gia';
+import { Gia } from '@/components/ui/gia';
 import { buildMetadata } from '@/lib/seo';
-import { Header, Footer } from '@/components/chrome';
+import { Header, Footer } from '@/components/layout/chrome';
 import type { PublicProductSummary } from '@garageos/contracts';
 import type { Metadata } from 'next';
 import { buildPageTitle } from '@garageos/domain';

@@ -1,7 +1,7 @@
 import type { ChiPhiTrangChu } from '@/lib/chi-phi';
-import { homeContent } from '@/content/home';
-import { PhieuChiPhi } from '@/components/phieu-chi-phi';
-import { SoSanhDongCo } from '@/components/so-sanh-dong-co';
+import { homeContent } from '@/features/trang-chu/noi-dung';
+import { PhieuChiPhi } from '@/features/trang-chu/phieu-chi-phi';
+import { SoSanhDongCo } from '@/features/trang-chu/so-sanh-dong-co';
 import styles from './ownership-system.module.css';
 
 interface OwnershipSystemProps {

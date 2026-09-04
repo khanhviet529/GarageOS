@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { LandingPageDocument, PublicProductSummary } from '@garageos/contracts';
-import { Footer, Header } from '@/components/chrome';
-import { LandingPageRenderer } from '@/components/page-renderer/landing-page-renderer';
+import { Footer, Header } from '@/components/layout/chrome';
+import { LandingPageRenderer } from '@/features/trang-cms/landing-page-renderer';
 import { fetchLandingPreview, fetchPublic, requestHost } from '@/lib/api';
 import { loadSite } from '@/lib/site';
 

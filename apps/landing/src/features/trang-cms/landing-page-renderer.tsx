@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import type { LandingPageDocument, PublicProductSummary, PublicSiteView } from '@garageos/contracts';
-import { FeaturedVehicle } from '@/components/home/featured-vehicle';
-import { FinalCta } from '@/components/home/final-cta';
-import { OwnershipJourney } from '@/components/home/ownership-journey';
-import { TrustSection } from '@/components/home/trust-section';
-import { VehicleCollection } from '@/components/home/vehicle-collection';
+import { FeaturedVehicle } from '@/features/trang-chu/featured-vehicle';
+import { FinalCta } from '@/features/trang-chu/final-cta';
+import { OwnershipJourney } from '@/features/trang-chu/ownership-journey';
+import { TrustSection } from '@/features/trang-chu/trust-section';
+import { VehicleCollection } from '@/features/trang-chu/vehicle-collection';
 import styles from './landing-page-renderer.module.css';
 
 /** One renderer for published documents and opaque-token previews. */
