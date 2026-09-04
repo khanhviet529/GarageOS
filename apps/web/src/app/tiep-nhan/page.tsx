@@ -18,10 +18,10 @@ import {
   POWERTRAIN_LABEL, POWERTRAIN_CLASS,
   type VehicleLookup,
 } from '@/lib/api';
-import { AppHeader } from '@/components/AppHeader';
-import { ErrorState } from '@/components/ErrorState';
-import { SkeletonTable } from '@/components/Skeleton';
-import { IconBo } from '@/components/Icon';
+import { AppHeader } from '@/components/layout/app-header';
+import { ErrorState } from '@/components/error-state';
+import { SkeletonTable } from '@/components/skeleton';
+import { IconBo } from '@/components/icon';
 import { normalizePlate, formatPlate } from '@garageos/domain';
 
 type Powertrain = 'ICE' | 'HYBRID' | 'BEV';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BangCuon } from '@/components/BangCuon';
+import { BangCuon } from '@/components/bang-cuon';
 import {
   api,
   ApiCallError,

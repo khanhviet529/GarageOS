@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { ToastProvider } from '@/components/Toast';
-import { QueryProvider } from '@/components/QueryProvider';
-import './globals.css';
+import { ToastProvider } from '@/components/toast';
+import { QueryProvider } from '@/components/query-provider';
+import '@/styles/globals.css';
 
 export const metadata = {
   title: 'GarageOS — Quản lý xưởng dịch vụ',

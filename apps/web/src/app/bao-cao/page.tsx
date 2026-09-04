@@ -18,9 +18,9 @@
  * là ảnh chụp hiện tại, không có khái niệm "kỳ".
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AppHeader } from '@/components/AppHeader';
-import { BangCuon } from '@/components/BangCuon';
-import { Khoi, Ky, ChuaCo, DaLoaiTru } from '@/components/bao-cao/Khoi';
+import { AppHeader } from '@/components/layout/app-header';
+import { BangCuon } from '@/components/bang-cuon';
+import { Khoi, Ky, ChuaCo, DaLoaiTru } from '@/features/reports/khoi';
 import {
   api,
   formatMoney,

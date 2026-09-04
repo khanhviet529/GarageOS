@@ -35,7 +35,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { IconBo } from './Icon';
+import { IconBo } from './icon';
 
 type ToastKieu = 'thanh-cong' | 'loi';
 

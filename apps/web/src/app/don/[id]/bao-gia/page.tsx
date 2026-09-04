@@ -24,11 +24,11 @@ import {
   type CatalogForVehicle,
   type Quotation,
 } from '@garageos/contracts';
-import { AppHeader } from '@/components/AppHeader';
-import { IconBo, IconKhoa } from '@/components/Icon';
-import { ErrorState, Loading } from '@/components/ErrorState';
+import { AppHeader } from '@/components/layout/app-header';
+import { IconBo, IconKhoa } from '@/components/icon';
+import { ErrorState, Loading } from '@/components/error-state';
 import { formatPlate } from '@garageos/domain';
-import { BangCuon } from '@/components/BangCuon';
+import { BangCuon } from '@/components/bang-cuon';
 import { useQuotationCatalog, useQuotationOrder, useQuotations } from '@/features/quotations/queries';
 import {
   useAddQuotationLine,

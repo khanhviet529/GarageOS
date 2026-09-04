@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { BangCuon } from '@/components/BangCuon';
+import { BangCuon } from '@/components/bang-cuon';
 import {
   api,
   auth,
@@ -10,8 +10,8 @@ import {
   INVOICE_STATUS_LABEL,
   type InvoiceView,
 } from '@/lib/api';
-import { HopDieuChinhHoaDon } from '@/components/HopDieuChinhHoaDon';
-import { HopThanhToan } from '@/components/HopThanhToan';
+import { HopDieuChinhHoaDon } from '@/features/invoices/hop-dieu-chinh-hoa-don';
+import { HopThanhToan } from '@/features/invoices/hop-thanh-toan';
 
 /**
  * Khối hoá đơn trên màn chi tiết đơn — BC-07.

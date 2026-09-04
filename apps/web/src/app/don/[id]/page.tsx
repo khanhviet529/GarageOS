@@ -17,15 +17,15 @@ import {
   ODOMETER_OVERRIDE_REASON_LABEL,
   REPAIR_ORDER_STATUS_LABEL,
 } from '@garageos/contracts';
-import { AppHeader } from '@/components/AppHeader';
-import { CatalogSection } from '@/components/CatalogSection';
-import { StatusActions } from '@/components/StatusActions';
-import { HopHoaDon } from '@/components/HopHoaDon';
-import { TaiAnhHienTrang } from '@/components/TaiAnhHienTrang';
-import { ErrorState } from '@/components/ErrorState';
-import { SkeletonCard } from '@/components/Skeleton';
-import { HopBaoHiem } from '@/components/HopBaoHiem';
-import { HopHuyDon } from '@/components/HopHuyDon';
+import { AppHeader } from '@/components/layout/app-header';
+import { CatalogSection } from '@/features/quotations/catalog-section';
+import { StatusActions } from '@/features/repair-orders/status-actions';
+import { HopHoaDon } from '@/features/invoices/hop-hoa-don';
+import { TaiAnhHienTrang } from '@/features/repair-orders/tai-anh-hien-trang';
+import { ErrorState } from '@/components/error-state';
+import { SkeletonCard } from '@/components/skeleton';
+import { HopBaoHiem } from '@/features/invoices/hop-bao-hiem';
+import { HopHuyDon } from '@/features/repair-orders/hop-huy-don';
 import { formatPlate } from '@garageos/domain';
 import { useRepairOrder } from '@/features/repair-orders/queries';
 import { useRefreshRepairOrder } from '@/features/repair-orders/mutations';

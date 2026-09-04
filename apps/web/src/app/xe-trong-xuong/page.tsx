@@ -14,13 +14,13 @@ import {
   POWERTRAIN_LABEL, POWERTRAIN_CLASS, ORDER_STATUS_LABEL, formatDateTime,
   type RepairOrderListItem,
 } from '@/lib/api';
-import { AppHeader } from '@/components/AppHeader';
-import { ErrorState } from '@/components/ErrorState';
-import { EmptyState } from '@/components/EmptyState';
-import { IconLamMoi } from '@/components/Icon';
+import { AppHeader } from '@/components/layout/app-header';
+import { ErrorState } from '@/components/error-state';
+import { EmptyState } from '@/components/empty-state';
+import { IconLamMoi } from '@/components/icon';
 import { formatPlate } from '@garageos/domain';
-import { BangCuon } from '@/components/BangCuon';
-import { SkeletonTable } from '@/components/Skeleton';
+import { BangCuon } from '@/components/bang-cuon';
+import { SkeletonTable } from '@/components/skeleton';
 
 export default function WorkshopPage() {
   const [orders, setOrders] = useState<RepairOrderListItem[] | null>(null);

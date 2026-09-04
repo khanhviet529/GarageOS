@@ -18,7 +18,7 @@ import {
   type ChangeOrderStatusInput,
   type RepairOrderStatus,
 } from '@garageos/contracts';
-import { ApiCallError } from '@/lib/api/client';
+import { ApiCallError } from '@/lib/api-client';
 import { useUpdateRepairOrderStatus } from '@/features/repair-orders/mutations';
 
 export function StatusActions({

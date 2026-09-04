@@ -17,7 +17,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { auth } from '@/lib/api';
-import { Loading } from '@/components/ErrorState';
+import { Loading } from '@/components/error-state';
 
 export default function Home() {
   const [daKiem, setDaKiem] = useState(false);

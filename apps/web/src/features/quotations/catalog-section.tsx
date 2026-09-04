@@ -11,7 +11,7 @@
  * bảo dưỡng"), không tìm theo tên chính xác.
  */
 import { useEffect, useState } from 'react';
-import { BangCuon } from '@/components/BangCuon';
+import { BangCuon } from '@/components/bang-cuon';
 import {
   api, ApiCallError,
   SERVICE_CATEGORY_LABEL, CERTIFICATION_LABEL, formatMoney,

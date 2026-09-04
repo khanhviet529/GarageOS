@@ -1,6 +1,6 @@
 'use client';
 
-import { repairOrdersApi } from '@/lib/api/repair-orders';
+import { repairOrdersApi } from '@/features/repair-orders/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import type { ChangeOrderStatusInput } from '@garageos/contracts';

@@ -1,16 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AppHeader } from '@/components/AppHeader';
-import { ErrorState } from '@/components/ErrorState';
-import { EmptyState } from '@/components/EmptyState';
-import { useToast } from '@/components/Toast';
-import { IconLamMoi } from '@/components/Icon';
+import { AppHeader } from '@/components/layout/app-header';
+import { ErrorState } from '@/components/error-state';
+import { EmptyState } from '@/components/empty-state';
+import { useToast } from '@/components/toast';
+import { IconLamMoi } from '@/components/icon';
 import { formatPlate } from '@garageos/domain';
-import { BangCuon } from '@/components/BangCuon';
-import { BangGioCong } from '@/components/BangGioCong';
-import { HopQc } from '@/components/HopQc';
-import { SkeletonTable } from '@/components/Skeleton';
+import { BangCuon } from '@/components/bang-cuon';
+import { BangGioCong } from '@/features/workshop-schedule/bang-gio-cong';
+import { HopQc } from '@/features/workshop-schedule/hop-qc';
+import { SkeletonTable } from '@/components/skeleton';
 import { auth } from '@/lib/api';
 import {
   api,

@@ -1,7 +1,7 @@
 'use client';
 import { useState, type FormEvent } from 'react';
 import { api, auth, ApiCallError } from '@/lib/api';
-import { ErrorState } from '@/components/ErrorState';
+import { ErrorState } from '@/components/error-state';
 
 export default function LoginPage() {
   const [phone, setPhone] = useState('');

@@ -1,4 +1,4 @@
-import { request } from './client';
+import { request } from '@/lib/api-client';
 import { AddQuotationLineInput } from '@garageos/contracts';
 import type { CatalogForVehicle, Quotation } from '@garageos/contracts';
 import type { z } from 'zod';
