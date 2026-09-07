@@ -24,6 +24,37 @@ async function login(page: Page) {
   await expect(page.getByText('Lê Văn Cố Vấn · Cố vấn dịch vụ')).toBeVisible();
 }
 
+/**
+ * 🔒 Soi ở trạng thái ĐÃ YÊN, không soi một khung hình giữa chừng.
+ *
+ * Landing dùng diễn hoạt theo cuộn (`animation-timeline: view()`): một khối nằm
+ * dưới màn hình đứng ở giữa dải diễn hoạt, tức là đang ở một mức `opacity` dở
+ * dang cho tới khi người xem cuộn tới. axe chụp cả cây DOM một lúc, nên nó đo
+ * đúng cái mức dở dang đó và báo tương phản không đạt.
+ *
+ * Một lượt CI đỏ vì chuyện này: chín dòng của khối bóc giá lăn bánh đo 1,92:1
+ * với `#b1b0ab` trên `#f3f1eb`. `#b1b0ab` không có trong bảng token — nó là
+ * `--paper-muted #5d605b` chồng lên `--paper-0 #f3f1eb` ở **alpha 0,444**:
+ *
+ *     243 + (93 − 243) × 0,444 = 176,4 ≈ 0xb1     (và khớp cả kênh G, B)
+ *
+ * Màu khi yên là `--paper-muted` trên `--paper-0` = 5,9:1, đạt. Không có lỗi
+ * bảng màu nào ở đây; chỉ có một phép đo sai thời điểm. Đỏ hay xanh phụ thuộc
+ * vào khối đó rơi vào đoạn nào của dải cuộn — nên nó đỏ ở nhánh này và xanh ở
+ * nhánh kia với cùng một đoạn CSS.
+ *
+ * `reducedMotion: 'reduce'` cho ra đúng trạng thái cuối: toàn bộ tầng chuyển
+ * động của landing nằm trong `@media (prefers-reduced-motion: no-preference)`,
+ * và các lớp `hien-*` CỐ Ý không đặt `opacity: 0` ở ngoài (xem đầu
+ * `styles/motion.css`), nên tắt chuyển động là mọi thứ ở mức cuối chứ không
+ * phải ở mức 0.
+ *
+ * 💡 Bảng màu tĩnh KHÔNG mất người canh: `infra/kiem-tuong-phan.mjs` đo từng
+ *    cặp token trên CSS thật của cả ba app (141 cặp) và chạy cùng CI. Bài này
+ *    canh cây DOM, bài kia canh bảng màu — hai việc khác nhau.
+ */
+test.use({ reducedMotion: 'reduce' });
+
 /** Chỉ soi các quy tắc WCAG A/AA — bỏ qua khuyến nghị chủ quan */
 const soi = (page: Page) =>
   new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']);
