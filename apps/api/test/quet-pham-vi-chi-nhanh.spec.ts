@@ -584,6 +584,24 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       'api/v1/sales/leads/:id': 'NỢ — chưa có lead ở chi nhánh khác trong seed để quét',
       'api/v1/public/vehicle-products': 'catalog công khai, tenant lấy từ hostname',
       'media/:key': 'media public chỉ được phát từ asset đã publish',
+
+      /* CMS marketing — nội dung của cả tenant, không phải dữ liệu vận hành của
+         một chi nhánh. Cô lập của chúng là RLS theo tenant.
+
+         🔒 Lý do này KIỂM CHỨNG ĐƯỢC, không phải khẳng định suông: năm bảng đứng
+            sau chín route — `landing_page`, `landing_page_revision`,
+            `testimonial`, `vehicle_product_category`, `media_asset` — đều chỉ có
+            `tenant_id`, không bảng nào có `branch_id`. Bảng nào mọc thêm cột đó
+            thì dòng tương ứng phải chuyển sang `duongDan` ngay. */
+      'api/v1/marketing/categories': 'danh mục showroom là dữ liệu tenant',
+      'api/v1/marketing/testimonials': 'testimonial là dữ liệu tenant',
+      'api/v1/marketing/landing-pages': 'trang landing là nội dung tenant',
+      'api/v1/marketing/landing-pages/:id': 'trang landing là nội dung tenant',
+      'api/v1/marketing/landing-pages/:id/revisions': 'lịch sử bản landing là nội dung tenant',
+      'api/v1/marketing/media': 'thư viện ảnh dùng chung cả tenant',
+      'api/v1/public/landing-page': 'landing công khai, tenant lấy từ hostname',
+      'api/v1/public/landing-page-preview': 'preview theo token, không theo chi nhánh',
+      'api/v1/public/testimonials': 'testimonial công khai, tenant lấy từ hostname',
     };
 
     /*

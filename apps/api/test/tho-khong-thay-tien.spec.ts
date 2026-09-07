@@ -128,6 +128,12 @@ before(async () => {
     `SELECT customer_id AS id FROM repair_order WHERE code = 'RO-DEMO-0001'`,
   );
 
+  // Bề mặt quản trị của CMS marketing cũng phải nằm trong bài quét này, không
+  // phải được miễn: nội dung landing có chứa giá.
+  const { rows: xe } = await pool.query<{ id: string }>(
+    `SELECT id FROM vehicle_product WHERE slug = 'aurora-e1' LIMIT 1`,
+  );
+
   duongDan = [
     '/api/v1/auth/me',
     '/api/v1/repair-orders?open=true',
@@ -168,6 +174,11 @@ before(async () => {
     '/api/v1/warehouses',
     '/api/v1/stock-takes',
     '/api/v1/vehicles/lookup?plate=30A12345',
+    '/api/v1/marketing/categories',
+    '/api/v1/marketing/testimonials',
+    ...(xe[0] === undefined
+      ? []
+      : [`/api/v1/marketing/vehicle-products/${xe[0].id}/revisions`]),
     ...(kk[0] === undefined ? [] : [`/api/v1/stock-takes/${kk[0].id}`]),
     ...(wa[0] === undefined ? [] : [`/api/v1/assignments/${wa[0].id}/time`]),
     ...(ql[0] === undefined
@@ -260,6 +271,11 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'vehicle-products', 'vehicle-products/:id', 'vehicle-products/:slug',
       'vehicle-products/:id/experiences', 'vehicle-products/:slug/experiences/:stableKey',
       'vehicle-products/:slug/chi-phi-so-huu',
+      // Trang landing đã publish và bản xem thử của nó: bề mặt CÔNG KHAI, và
+      // tiền trong đó là GIÁ NIÊM YẾT — ai mở trang cũng thấy, kể cả người
+      // không đăng nhập. Bài này canh tiền của ĐƠN SỬA CHỮA (docs/02 mục 2.3),
+      // không canh giá catalog.
+      'landing-page', 'landing-page-preview',
       'site-profile', 'branch-public-profiles', 'site', 'leads', 'leads/:id',
     ]);
 
