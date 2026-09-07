@@ -184,5 +184,64 @@ DO $$ DECLARE t text; BEGIN
   END LOOP;
 END $$;
 
-GRANT SELECT, INSERT, UPDATE, DELETE
+/*
+ * 🔒 Nội dung của revision ĐÃ PUBLISH là bất biến (INV-LS-13).
+ *
+ * `chan_sua_version_bat_bien()` bảo vệ chính DÒNG revision, nhưng ba bảng dưới
+ * đây là CON của nó — không có gì ngăn `garageos_app` thêm một ưu đãi vào một
+ * revision đã công khai, hoặc xoá một màu khỏi nó. Đó là đúng cái lỗ mà
+ * `INV-LS-13` tồn tại để bịt: "mọi thứ hiển thị cùng lúc đến từ cùng một
+ * revision" chỉ đúng nếu revision đó không đổi được sau khi publish.
+ *
+ * Cùng khuôn với `chan_sua_version_bat_bien()`, kể cả lối thoát
+ * `current_user <> 'garageos'`: migration và seed chạy bằng role chủ, ứng dụng
+ * thì không.
+ */
+CREATE OR REPLACE FUNCTION chan_sua_noi_dung_revision_da_publish() RETURNS trigger AS $$
+DECLARE
+  rev_id     uuid;
+  trang_thai revision_status;
+BEGIN
+  rev_id := COALESCE(NEW.product_revision_id, OLD.product_revision_id);
+  SELECT status INTO trang_thai FROM vehicle_product_revision WHERE id = rev_id;
+  IF trang_thai IS DISTINCT FROM 'DRAFT' AND current_user <> 'garageos' THEN
+    RAISE EXCEPTION 'Nội dung của revision đã publish là bất biến (INV-LS-13)';
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END $$ LANGUAGE plpgsql;
+
+DO $$ DECLARE t text; BEGIN
+  FOREACH t IN ARRAY ARRAY['vehicle_color','vehicle_promotion','financing_program'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%I_chi_sua_ban_nhap ON %I', t, t);
+    EXECUTE format(
+      'CREATE TRIGGER trg_%I_chi_sua_ban_nhap BEFORE INSERT OR UPDATE OR DELETE ON %I '
+      'FOR EACH ROW EXECUTE FUNCTION chan_sua_noi_dung_revision_da_publish()', t, t);
+  END LOOP;
+END $$;
+
+/*
+ * 🔒 UPDATE cấp THEO CỘT. `product_revision_id` và `tenant_id` không nằm trong
+ *    danh sách: đổi được chúng là chuyển một dòng nội dung sang revision khác —
+ *    hoặc sang doanh nghiệp khác — mà không để lại dấu vết nào.
+ *
+ * DELETE ĐƯỢC cấp cho ba bảng này, khác với phần còn lại của hệ, vì chúng là
+ * nội dung của một BẢN NHÁP: biên tập viên gỡ một màu khỏi bản nháp là thao tác
+ * nghiệp vụ thật, không phải xoá chứng từ. Cùng lập luận với `quotation_line`
+ * và `invoice_line`, và cùng điều kiện an toàn: quyền rộng ở tầng GRANT, hẹp
+ * lại bằng trigger theo trạng thái ngay phía trên.
+ */
+GRANT SELECT, INSERT, DELETE
   ON vehicle_color, vehicle_promotion, financing_program TO garageos_app;
+
+GRANT UPDATE (name, hex_code, kind, surcharge_amount, display_order, updated_at, version)
+  ON vehicle_color TO garageos_app;
+
+GRANT UPDATE (variant_id, kind, title, condition_text, value_amount, is_enabled,
+              starts_at, ends_at, display_order, updated_at, version)
+  ON vehicle_promotion TO garageos_app;
+
+GRANT UPDATE (bank_name, bank_logo_media_id, min_down_payment_bp, promo_rate_bp,
+              promo_months, standard_rate_bp, allowed_terms_months,
+              down_payment_options_bp, rate_updated_at, display_order,
+              updated_at, version)
+  ON financing_program TO garageos_app;

@@ -84,4 +84,19 @@ CREATE TRIGGER trg_touch_vehicle_availability
   BEFORE UPDATE ON vehicle_availability
   FOR EACH ROW EXECUTE FUNCTION touch_row();
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON vehicle_availability TO garageos_app;
+/*
+ * 🔒 UPDATE cấp THEO CỘT. `product_id` và `branch_id` không nằm trong danh
+ *    sách: chúng là khoá của dòng khai báo. Đổi được `branch_id` nghĩa là nhân
+ *    viên một chi nhánh sửa được khai báo của chi nhánh khác bằng một câu
+ *    UPDATE — vòng qua đúng bài kiểm phạm vi ở tầng service.
+ *
+ * KHÔNG cấp DELETE: gỡ hẳn một dòng khai báo là làm mất câu trả lời cho "chi
+ * nhánh này có nhận đặt mẫu xe đó không". Trạng thái `TAM_NGUNG` diễn đạt được
+ * việc ngừng nhận mà vẫn giữ vết ai khai, khai lúc nào.
+ */
+GRANT SELECT, INSERT ON vehicle_availability TO garageos_app;
+GRANT UPDATE (
+  status, lead_time_days_min, lead_time_days_max,
+  available_variant_ids, available_color_ids, note,
+  updated_by, updated_at, version
+) ON vehicle_availability TO garageos_app;

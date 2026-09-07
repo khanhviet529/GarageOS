@@ -99,7 +99,33 @@ CREATE TRIGGER trg_touch_onroad_fee_schedule
   BEFORE UPDATE ON onroad_fee_schedule
   FOR EACH ROW EXECUTE FUNCTION touch_row();
 
--- 🔒 GRANT tường minh theo đúng bài học đã ghi ở STATUS.md: lỗi "viết REVOKE
---    như thể GRANT đã tồn tại" đã xảy ra ba lần trên nhánh này, mỗi lần là một
---    lỗi 500 im lặng từ lúc bảng ra đời.
-GRANT SELECT, INSERT, UPDATE, DELETE ON onroad_fee_schedule TO garageos_app;
+/*
+ * 🔒 GRANT tường minh theo đúng bài học đã ghi ở STATUS.md: lỗi "viết REVOKE
+ *    như thể GRANT đã tồn tại" đã xảy ra ba lần trên nhánh này, mỗi lần là một
+ *    lỗi 500 im lặng từ lúc bảng ra đời.
+ *
+ * 🔒 UPDATE cấp THEO CỘT, không theo bảng. `GRANT UPDATE ON <bảng>` cho phép
+ *    sửa cả `tenant_id` — tức chuyển một bản ghi sang doanh nghiệp khác bằng
+ *    một câu UPDATE, mà RLS không chặn vì `WITH CHECK` chỉ đòi giá trị mới khớp
+ *    tenant hiện tại.
+ *
+ * 🔒 Ba cột KHÔNG được cấp, và đó là chủ ý: `province_code`, `powertrain`,
+ *    `effective_from` hợp thành KHOÁ của biểu phí. Sửa được chúng nghĩa là dời
+ *    một biểu phí sang tỉnh khác hoặc sang loại động cơ khác mà vẫn giữ nguyên
+ *    id — ràng buộc chống chồng lấn ở trên không thấy gì bất thường, còn lịch
+ *    sử thì mất dấu. Muốn đổi khoá thì tạo dòng mới.
+ *
+ * `updated_at` và `version` PHẢI có mặt: `touch_row()` là hàm thường, chạy với
+ * quyền người gọi, nên thiếu hai cột này thì mọi UPDATE hợp lệ vẫn bị từ chối ở
+ * bước trigger. Đo được và ghi ở migration 0063.
+ *
+ * KHÔNG cấp DELETE: biểu phí hết hiệu lực thì đặt `effective_to`, không xoá.
+ * Một dòng biểu phí là căn cứ của mọi con số lăn bánh đã hiện cho khách.
+ */
+GRANT SELECT, INSERT ON onroad_fee_schedule TO garageos_app;
+GRANT UPDATE (
+  province_name, registration_fee_rate_bp, plate_fee_amount, inspection_fee_amount,
+  road_maintenance_fee_amount, civil_insurance_fee_amount, material_insurance_rate_bp,
+  dealer_fee_amount, dealer_fee_label, effective_to,
+  updated_by, updated_at, version
+) ON onroad_fee_schedule TO garageos_app;
