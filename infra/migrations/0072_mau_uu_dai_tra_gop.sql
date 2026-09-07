@@ -233,15 +233,14 @@ END $$;
 GRANT SELECT, INSERT, DELETE
   ON vehicle_color, vehicle_promotion, financing_program TO garageos_app;
 
-GRANT UPDATE (name, hex_code, kind, surcharge_amount, display_order, updated_at, version)
+GRANT UPDATE (name, hex_code, kind, surcharge_amount, display_order)
   ON vehicle_color TO garageos_app;
 
 GRANT UPDATE (variant_id, kind, title, condition_text, value_amount, is_enabled,
-              starts_at, ends_at, display_order, updated_at, version)
+              starts_at, ends_at, display_order)
   ON vehicle_promotion TO garageos_app;
 
 GRANT UPDATE (bank_name, bank_logo_media_id, min_down_payment_bp, promo_rate_bp,
               promo_months, standard_rate_bp, allowed_terms_months,
-              down_payment_options_bp, rate_updated_at, display_order,
-              updated_at, version)
+              down_payment_options_bp, rate_updated_at, display_order)
   ON financing_program TO garageos_app;

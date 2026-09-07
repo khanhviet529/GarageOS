@@ -115,9 +115,20 @@ CREATE TRIGGER trg_touch_onroad_fee_schedule
  *    id — ràng buộc chống chồng lấn ở trên không thấy gì bất thường, còn lịch
  *    sử thì mất dấu. Muốn đổi khoá thì tạo dòng mới.
  *
- * `updated_at` và `version` PHẢI có mặt: `touch_row()` là hàm thường, chạy với
- * quyền người gọi, nên thiếu hai cột này thì mọi UPDATE hợp lệ vẫn bị từ chối ở
- * bước trigger. Đo được và ghi ở migration 0063.
+ * 🔒 `updated_at` và `version` KHÔNG được cấp — và chỗ này ngược với chú thích ở
+ *    migration 0063. 0063 viết: `touch_row()` là hàm thường, chạy bằng quyền
+ *    người gọi, nên thiếu hai cột thì mọi UPDATE hợp lệ vẫn bị từ chối ở bước
+ *    trigger. Vế đầu đúng, kết luận sai.
+ *
+ *    Postgres kiểm quyền theo cột trên DANH SÁCH `SET` CỦA CÂU LỆNH, không trên
+ *    những gì trigger gán vào `NEW`. Dựng một bảng tạm đúng hình dạng đó để đo:
+ *    cấp UPDATE đúng MỘT cột, trigger vẫn gán được `updated_at`/`version`, câu
+ *    `UPDATE` chạy trót lọt và `version` lên 1.
+ *
+ *    Cấp thừa hai cột không làm hỏng gì — trigger ghi đè ngay sau — nên lỗi này
+ *    im lặng, và đó là lý do nó sống qua 0063. Nhưng nó nới quyền mà không đổi
+ *    lại được gì. 0063 đã merge, checksum khoá lại rồi; bản đính chính nằm ở
+ *    đây và ở 0075.
  *
  * KHÔNG cấp DELETE: biểu phí hết hiệu lực thì đặt `effective_to`, không xoá.
  * Một dòng biểu phí là căn cứ của mọi con số lăn bánh đã hiện cho khách.
@@ -127,5 +138,5 @@ GRANT UPDATE (
   province_name, registration_fee_rate_bp, plate_fee_amount, inspection_fee_amount,
   road_maintenance_fee_amount, civil_insurance_fee_amount, material_insurance_rate_bp,
   dealer_fee_amount, dealer_fee_label, effective_to,
-  updated_by, updated_at, version
+  updated_by
 ) ON onroad_fee_schedule TO garageos_app;

@@ -98,5 +98,5 @@ GRANT SELECT, INSERT ON vehicle_availability TO garageos_app;
 GRANT UPDATE (
   status, lead_time_days_min, lead_time_days_max,
   available_variant_ids, available_color_ids, note,
-  updated_by, updated_at, version
+  updated_by
 ) ON vehicle_availability TO garageos_app;
