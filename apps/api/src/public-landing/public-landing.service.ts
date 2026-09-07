@@ -13,6 +13,7 @@ import {
   type ChiPhiSoHuuView,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { MOC_CON_TRO, ghepConTro } from '../common/con-tro-trang';
 import type { PublicTenantContext } from './tenant-context.service';
 
 /**
@@ -111,7 +112,7 @@ export class PublicLandingService {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT p.id, p.slug, r.name, r.make_name, r.model_name, r.summary,
-                p.created_at,
+                p.created_at, ${MOC_CON_TRO('p')},
                 v.powertrain, v.display_price_amount,
                 cover.public_storage_key AS cover_key, cover.alt_text AS cover_alt
            FROM vehicle_product p
@@ -181,7 +182,7 @@ export class PublicLandingService {
       for (const row of rows) {
         if (items.length === limit) break;
         if (conNua && items.length === limit - 1) {
-          nextCursor = `${(row.created_at as Date).toISOString()}_${row.id as string}`;
+          nextCursor = ghepConTro(row);
         }
         items.push({
           id: row.id as string,
@@ -669,13 +670,28 @@ export class PublicLandingService {
  * Cursor sai định dạng thì coi như không có — dữ liệu này đến từ URL công khai,
  * và một chuỗi hỏng không đáng để đổ lỗi 500 vào mặt khách.
  */
-function phanTichCursor(cursor?: string): { createdAt: Date; id: string } | null {
+/**
+ * 🔒 Mốc thời gian giữ nguyên CHUỖI, không dựng lại thành `Date`.
+ *
+ * Bản trước làm `new Date(...)` rồi đưa đối tượng đó xuống làm tham số. Driver
+ * `pg` tuần tự hoá `Date` bằng `toISOString()`, mà hàm đó cắt ở mili giây —
+ * nên dù chuỗi con trỏ có đủ sáu chữ số micro giây, ba chữ số cuối vẫn rụng
+ * ngay trước khi câu lệnh chạy. Chi tiết hậu quả: `common/con-tro-trang.ts`.
+ *
+ * Giữ chuỗi và để `$::timestamptz` ép kiểu ở phía Postgres thì không có chỗ nào
+ * cắt bớt. Kiểm hợp lệ bằng biểu thức thay vì bằng `Date.parse` — chuỗi ở đây
+ * do chính máy chủ sinh ra, nên đòi đúng khuôn dạng đó là hợp lý, và nó chặn
+ * luôn mọi thứ lạ đi vào một tham số kiểu ngày.
+ */
+const MAU_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
+
+function phanTichCursor(cursor?: string): { createdAt: string; id: string } | null {
   if (cursor === undefined || cursor === '') return null;
   const cat = cursor.lastIndexOf('_');
   if (cat <= 0) return null;
-  const createdAt = new Date(cursor.slice(0, cat));
+  const createdAt = cursor.slice(0, cat);
   const id = cursor.slice(cat + 1);
-  if (Number.isNaN(createdAt.getTime())) return null;
+  if (!MAU_MOC.test(createdAt)) return null;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
   return { createdAt, id };
 }
