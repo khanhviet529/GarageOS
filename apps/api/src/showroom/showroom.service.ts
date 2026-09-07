@@ -231,13 +231,59 @@ export class ShowroomService {
 
   /* ========================= Ưu đãi và trả góp ============================= */
 
+  /**
+   * 🔒 Màu được GHI ĐÈ THEO TÊN, không xoá sạch rồi chèn lại.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * ⚠️ Bản trước `DELETE` toàn bộ màu của revision rồi `INSERT` lại. Mỗi lần
+   *    biên tập viên bấm Lưu, mọi màu nhận `id` MỚI — kể cả màu không ai đụng
+   *    vào. Và `vehicle_product_media.color_id` trỏ tới `id` đó qua khoá ngoại
+   *    `ON DELETE SET NULL` (0072):
+   *
+   *        vehicle_product_media -> vehicle_color   ON DELETE SET NULL
+   *
+   *    Nên sửa một chữ trong tên màu thứ tư là **toàn bộ ảnh của cả mẫu xe rời
+   *    khỏi màu của chúng**. Không lỗi, không cảnh báo, không dòng nhật ký.
+   *    Người dùng thấy Lưu thành công; ảnh thì về "không thuộc màu nào", và
+   *    phải gán tay lại từng tấm — nếu họ kịp nhận ra.
+   *
+   * 💡 `ON DELETE SET NULL` không sai. Nó đúng cho việc XOÁ một màu thật. Cái
+   *    sai là gọi một thao tác SỬA bằng cách xoá.
+   *
+   * `UNIQUE (tenant_id, product_revision_id, name)` cho sẵn một khoá tự nhiên,
+   * nên `ON CONFLICT … DO UPDATE` giữ nguyên `id` của mọi màu còn ở lại. Chỉ
+   * màu THẬT SỰ biến mất khỏi danh sách mới bị xoá — và lúc đó `SET NULL` là
+   * đúng ý.
+   *
+   * ⚠️ ĐỔI TÊN màu vẫn cắt liên kết ảnh: theo khoá tự nhiên thì đổi tên là xoá
+   *    một màu và thêm một màu khác. Muốn giữ qua lần đổi tên thì `VehicleColorInput`
+   *    phải mang theo `id` — đó là đổi hợp đồng và đổi cả màn quản trị, nên
+   *    chưa làm ở đây. Đã ghi vào STATUS.md.
+   *
+   * Ưu đãi và trả góp vẫn xoá-rồi-chèn, và đó là chủ ý: không bảng nào trỏ tới
+   * hai bảng đó (kiểm bằng `pg_constraint`), nên `id` của chúng không mang ý
+   * nghĩa gì ra ngoài.
+   */
   async replaceColors(actor: ActorContext, revisionId: string, colors: VehicleColorInput[]): Promise<{ count: number }> {
     return this.db.withTenant(actor, async (tx) => {
-      await tx.query('DELETE FROM vehicle_color WHERE product_revision_id = $1', [revisionId]);
+      /*
+       * Xoá TRƯỚC, và chỉ xoá những tên không còn trong danh sách gửi lên.
+       * Danh sách rỗng thì `<> ALL('{}')` đúng với mọi hàng — xoá sạch, đúng ý.
+       */
+      await tx.query(
+        `DELETE FROM vehicle_color
+          WHERE product_revision_id = $1 AND name <> ALL($2::text[])`,
+        [revisionId, colors.map((c) => c.name)],
+      );
       for (const c of colors) {
         await tx.query(
           `INSERT INTO vehicle_color (tenant_id, product_revision_id, name, hex_code, kind, surcharge_amount, display_order)
-           VALUES ($1,$2,$3,$4,$5::vehicle_color_kind,$6,$7)`,
+           VALUES ($1,$2,$3,$4,$5::vehicle_color_kind,$6,$7)
+           ON CONFLICT (tenant_id, product_revision_id, name) DO UPDATE
+              SET hex_code = EXCLUDED.hex_code,
+                  kind = EXCLUDED.kind,
+                  surcharge_amount = EXCLUDED.surcharge_amount,
+                  display_order = EXCLUDED.display_order`,
           [actor.tenantId, revisionId, c.name, c.hexCode, c.kind, String(c.surchargeAmount), c.displayOrder],
         );
       }

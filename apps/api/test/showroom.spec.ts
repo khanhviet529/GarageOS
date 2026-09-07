@@ -395,3 +395,97 @@ describe('Ranh giới hiển thị ≠ giao dịch', () => {
     assert.ok('batteryRentalAmount' in r.body, 'giá thuê pin phải có mặt trong hợp đồng dữ liệu');
   });
 });
+
+describe('Màu xe — sửa danh sách màu KHÔNG được làm rụng ảnh', () => {
+  /*
+   * 🔒 `vehicle_product_media.color_id` trỏ tới `vehicle_color` bằng khoá ngoại
+   *    `ON DELETE SET NULL` (0072). Nên bất kỳ cách nào XOÁ một màu để rồi chèn
+   *    lại nó cũng cắt liên kết ảnh — im lặng, vì `SET NULL` không phải lỗi.
+   *
+   * Bài này dựng một bản NHÁP (revision đã publish là bất biến — INV-LS-13),
+   * gắn một tấm ảnh vào một màu, rồi gọi đúng thao tác mà biên tập viên làm:
+   * sửa một màu khác trong cùng danh sách. Ảnh phải còn nguyên màu của nó.
+   */
+  let revNhap = '';
+  let mauGiuId = '';
+  let anhId = '';
+
+  before(async () => {
+    const r = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+    assert.ok(r.status === 200 || r.status === 201, `không tạo được bản nháp: ${JSON.stringify(r.body)}`);
+    const { rows } = await admin.query<{ id: string }>(
+      `SELECT draft_revision_id AS id FROM vehicle_product WHERE id = $1`,
+      [productId],
+    );
+    revNhap = rows[0]!.id;
+
+    const dat = await api('PUT', `/api/v1/showroom/revisions/${revNhap}/colors`, editor, [
+      { name: 'Trắng Ngọc Trai', hexCode: '#f2f2f0', kind: 'DON', surchargeAmount: 0, displayOrder: 0 },
+      { name: 'Đỏ Bình Minh', hexCode: '#c73526', kind: 'DAC_BIET', surchargeAmount: 12000000, displayOrder: 1 },
+    ]);
+    assert.equal(dat.status, 200, `không đặt được màu: ${JSON.stringify(dat.body)}`);
+
+    const { rows: mau } = await admin.query<{ id: string }>(
+      `SELECT id FROM vehicle_color WHERE product_revision_id = $1 AND name = 'Trắng Ngọc Trai'`,
+      [revNhap],
+    );
+    mauGiuId = mau[0]!.id;
+
+    const { rows: asset } = await admin.query<{ id: string }>(
+      `SELECT id FROM media_asset WHERE tenant_id = $1 LIMIT 1`,
+      [TENANT_A],
+    );
+    const { rows: anh } = await admin.query<{ id: string }>(
+      `INSERT INTO vehicle_product_media
+         (tenant_id, product_revision_id, media_asset_id, color_id, role, sort_order, alt_text)
+       VALUES ($1,$2,$3,$4,'GALLERY',0,'Ảnh màu trắng') RETURNING id`,
+      [TENANT_A, revNhap, asset[0]!.id, mauGiuId],
+    );
+    anhId = anh[0]!.id;
+  });
+
+  test('🔒 sửa một màu KHÁC không được làm ảnh rời khỏi màu của nó', async () => {
+    const r = await api('PUT', `/api/v1/showroom/revisions/${revNhap}/colors`, editor, [
+      // giữ nguyên tên, đổi phụ thu — đây là thao tác "sửa", không phải "xoá"
+      { name: 'Trắng Ngọc Trai', hexCode: '#f2f2f0', kind: 'DON', surchargeAmount: 0, displayOrder: 0 },
+      { name: 'Đỏ Bình Minh', hexCode: '#c73526', kind: 'DAC_BIET', surchargeAmount: 15000000, displayOrder: 1 },
+    ]);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+
+    const { rows } = await admin.query<{ color_id: string | null }>(
+      `SELECT color_id FROM vehicle_product_media WHERE id = $1`,
+      [anhId],
+    );
+    assert.equal(
+      rows[0]!.color_id,
+      mauGiuId,
+      'ảnh đã rời khỏi màu — danh sách màu đang bị xoá sạch rồi chèn lại thay vì ghi đè theo tên',
+    );
+
+    const { rows: doi } = await admin.query<{ surcharge_amount: string }>(
+      `SELECT surcharge_amount FROM vehicle_color WHERE product_revision_id = $1 AND name = 'Đỏ Bình Minh'`,
+      [revNhap],
+    );
+    assert.equal(doi[0]!.surcharge_amount, '15000000', 'phụ thu mới phải được ghi đè');
+  });
+
+  test('màu bị bỏ khỏi danh sách thì phải biến mất thật', async () => {
+    const r = await api('PUT', `/api/v1/showroom/revisions/${revNhap}/colors`, editor, [
+      { name: 'Trắng Ngọc Trai', hexCode: '#f2f2f0', kind: 'DON', surchargeAmount: 0, displayOrder: 0 },
+    ]);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+
+    const { rows } = await admin.query<{ name: string }>(
+      `SELECT name FROM vehicle_color WHERE product_revision_id = $1`,
+      [revNhap],
+    );
+    assert.deepEqual(rows.map((x) => x.name), ['Trắng Ngọc Trai']);
+
+    // Và màu còn lại vẫn giữ đúng id cũ — ảnh vẫn dính
+    const { rows: anh } = await admin.query<{ color_id: string | null }>(
+      `SELECT color_id FROM vehicle_product_media WHERE id = $1`,
+      [anhId],
+    );
+    assert.equal(anh[0]!.color_id, mauGiuId);
+  });
+});
