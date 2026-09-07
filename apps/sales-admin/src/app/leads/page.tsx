@@ -1,102 +1,122 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import {
-  LEAD_STATUS_LABEL, LEAD_TRANSITIONS, LOST_REASON_LABEL,
-  type LeadStatus, type LeadView, type LostReason,
-} from '@garageos/contracts';
-import { api, errorMessage } from '@/lib/client';
+import { LEAD_STATUS_LABEL, type LeadStatus, type LeadView } from '@garageos/contracts';
+import { Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { hasAction, useMe } from '@/components/auth';
+import { PageShell } from '@/components/layout/page-shell';
+import { Alert } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { LeadTable } from '@/features/leads/lead-table';
+import { useLeads } from '@/features/leads/queries';
+import { errorMessage } from '@/lib/client';
+import { gioKeTu } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
-/**
- * Kanban lead — SRS 10.1. Drag/drop Phase 1 đơn giản hoá bằng nút chuyển trạng
- * thái (gọi transition action có version). API lỗi thì KHÔNG cập nhật optimistic
- * vĩnh viễn — card giữ nguyên (SRS 10.2).
- */
+const GIO_QUA_HAN = 48;
+const BO_LOC: { key: LeadStatus | 'ALL'; nhan: string }[] = [
+  { key: 'ALL', nhan: 'Tất cả' },
+  { key: 'NEW', nhan: LEAD_STATUS_LABEL.NEW },
+  { key: 'CONTACTED', nhan: LEAD_STATUS_LABEL.CONTACTED },
+  { key: 'QUALIFIED', nhan: LEAD_STATUS_LABEL.QUALIFIED },
+  { key: 'LOST', nhan: LEAD_STATUS_LABEL.LOST },
+];
+
 export default function LeadsPage(): React.ReactElement {
   const { me } = useMe();
-  const [items, setItems] = useState<LeadView[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const canRead = me !== null && hasAction(me.roles, 'sales:leadRead');
+  const leads = useLeads(canRead);
+  const [loc, setLoc] = useState<LeadStatus | 'ALL'>('ALL');
+  const [tim, setTim] = useState('');
 
-  const canTransition = me !== null && hasAction(me.roles, 'sales:leadTransition');
-
-  async function reload(): Promise<void> {
-    try {
-      const res = await api<{ items: LeadView[] }>('/api/v1/sales/leads?limit=100');
-      setItems(res.items);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
-
-  useEffect(() => {
-    if (me !== null && hasAction(me.roles, 'sales:leadRead')) void reload();
-  }, [me]);
-
-  const columns: LeadStatus[] = ['NEW', 'CONTACTED', 'QUALIFIED', 'LOST'];
-
-  return (
-    <main className="container">
-      <div className="page-heading"><div><p className="eyebrow">Sales pipeline</p><h1>Lead cần hành động</h1><p>Di chuyển theo trạng thái chỉ khi đã có hoạt động tương ứng.</p></div></div>
-      {error !== null && <p className="error">{error}</p>}
-      <div className="kanban">
-        {columns.map((status) => (
-          <section className="kanban-col" key={status}>
-            <h2><span>{LEAD_STATUS_LABEL[status]}</span><span>{items.filter((l) => l.status === status).length}</span></h2>
-            {items.filter((l) => l.status === status).map((lead) => (
-              <div className="kanban-item" key={lead.id}>
-                <Link href={`/leads/${lead.id}`}><strong>{lead.fullName}</strong></Link>
-                <p className="note" style={{ margin: '4px 0' }}>
-                  {lead.productName ?? '—'} · {lead.phoneNormalized}
-                </p>
-                {canTransition && LEAD_TRANSITIONS[status].length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {LEAD_TRANSITIONS[status].map((to) => (
-                      <button
-                        key={to}
-                        type="button"
-                        className="btn-secondary btn"
-                        style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-                        onClick={() => {
-                          if (to === 'LOST') {
-                            const reason = window.prompt(`Lý do mất lead (${Object.keys(LOST_REASON_LABEL).join(', ')})`, 'OTHER');
-                            if (reason === null) return;
-                            void transition(lead, to, reason);
-                          } else {
-                            void transition(lead, to);
-                          }
-                        }}
-                      >
-                        → {LEAD_STATUS_LABEL[to]}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </section>
-        ))}
-      </div>
-
-      {items.length === 0 && <p className="note">Chưa có lead nào trong phạm vi của bạn.</p>}
-    </main>
+  const items: LeadView[] = useMemo(() => leads.data?.items ?? [], [leads.data]);
+  const quaHan = useMemo(
+    () => items.filter((l) => l.status === 'NEW' && gioKeTu(l.createdAt) > GIO_QUA_HAN).length,
+    [items],
   );
 
-  async function transition(lead: LeadView, to: LeadStatus, reason?: string): Promise<void> {
-    setError(null);
-    try {
-      await api(`/api/v1/sales/leads/${lead.id}/transition`, {
-        method: 'POST',
-        body: JSON.stringify({
-          to,
-          version: lead.version,
-          ...(to === 'LOST' ? { lostReason: (reason ?? 'OTHER') as LostReason } : {}),
-        }),
-      });
-      await reload();
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
+  const hienThi = useMemo(() => {
+    const tuKhoa = tim.trim().toLowerCase();
+    return items.filter((l) => {
+      if (loc !== 'ALL' && l.status !== loc) return false;
+      if (tuKhoa === '') return true;
+      return (
+        l.fullName.toLowerCase().includes(tuKhoa) ||
+        l.phoneNormalized.includes(tuKhoa) ||
+        (l.productName ?? '').toLowerCase().includes(tuKhoa)
+      );
+    });
+  }, [items, loc, tim]);
+
+  return (
+    <PageShell
+      title="Leads"
+      subtitle={
+        leads.isLoading
+          ? 'Đang tải…'
+          : `${items.length} lead${quaHan > 0 ? ` · ${quaHan} chờ xử lý quá ${GIO_QUA_HAN} giờ` : ''}`
+      }
+    >
+      {leads.error !== null && (
+        <Alert tone="danger" className="mb-4">
+          {errorMessage(leads.error)}
+        </Alert>
+      )}
+
+      {!canRead ? (
+        <Alert>Vai trò của bạn không có quyền xem lead.</Alert>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {BO_LOC.map((b) => (
+              <button
+                key={b.key}
+                type="button"
+                onClick={() => setLoc(b.key)}
+                aria-pressed={loc === b.key}
+                className={cn(
+                  'h-[29px] rounded-md px-2.5 text-xs transition-colors',
+                  loc === b.key ? 'bg-ink-3 text-text' : 'text-text-muted hover:bg-ink-2 hover:text-text',
+                )}
+              >
+                {b.nhan}
+                {b.key !== 'ALL' && (
+                  <span className="numeric ml-1.5 text-text-muted">
+                    {items.filter((l) => l.status === b.key).length}
+                  </span>
+                )}
+              </button>
+            ))}
+
+            <span className="flex-1" />
+
+            <div className="relative w-[220px]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-text-muted" />
+              <Input
+                value={tim}
+                onChange={(e) => setTim(e.target.value)}
+                placeholder="Tìm tên, số điện thoại…"
+                aria-label="Tìm trong danh sách lead"
+                className="h-[31px] pl-8 text-xs"
+              />
+            </div>
+          </div>
+
+          {leads.isLoading ? (
+            <Skeleton className="h-[420px] w-full" />
+          ) : hienThi.length === 0 ? (
+            <div className="rounded-lg border border-line bg-ink-1 px-5 py-12 text-center">
+              <p className="text-[13px] text-text">Không có lead nào khớp bộ lọc.</p>
+              <p className="mt-1 text-xs text-text-muted">
+                {items.length === 0 ? 'Chưa có lead nào trong phạm vi của bạn.' : 'Thử bỏ bớt bộ lọc hoặc xoá từ khoá tìm.'}
+              </p>
+            </div>
+          ) : (
+            <LeadTable leads={hienThi} />
+          )}
+        </div>
+      )}
+    </PageShell>
+  );
 }

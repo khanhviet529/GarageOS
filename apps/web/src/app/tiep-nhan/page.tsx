@@ -13,15 +13,21 @@
  * tiên tốc độ gõ phím hơn là đẹp mắt.
  */
 import { useState, type FormEvent } from 'react';
+import { CircleCheck, Search, X } from 'lucide-react';
 import {
-  api, auth, ApiCallError,
-  POWERTRAIN_LABEL, POWERTRAIN_CLASS,
+  api,
+  auth,
+  ApiCallError,
+  POWERTRAIN_LABEL,
+  POWERTRAIN_CLASS,
   type VehicleLookup,
 } from '@/lib/api';
-import { AppHeader } from '@/components/AppHeader';
-import { ErrorState } from '@/components/ErrorState';
-import { SkeletonTable } from '@/components/Skeleton';
-import { IconBo } from '@/components/Icon';
+import { AppHeader } from '@/components/layout/app-header';
+import { ErrorState } from '@/components/error-state';
+import { SkeletonTable } from '@/components/skeleton';
+import { TieuDeTrang } from '@/components/tieu-de-trang';
+import { Button } from '@/components/ui/button';
+import { DongKhoaGiaTri } from '@/components/ui/card';
 import { normalizePlate, formatPlate } from '@garageos/domain';
 
 type Powertrain = 'ICE' | 'HYBRID' | 'BEV';
@@ -44,8 +50,14 @@ export default function IntakePage() {
    */
   async function runLookup(raw: string) {
     const p = normalizePlate(raw);
-    if (p.length < 5) { setError('Biển số quá ngắn'); return; }
-    setError(null); setBusy(true); setShowNew(false); setResult(null);
+    if (p.length < 5) {
+      setError('Biển số quá ngắn');
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    setShowNew(false);
+    setResult(null);
     try {
       setResult(await api.lookupPlate(p));
     } catch (err) {
@@ -66,28 +78,53 @@ export default function IntakePage() {
     <>
       <AppHeader current="tiep-nhan" />
 
-      <main id="noi-dung" className="container stack">
+      <main id="noi-dung" className="container flex flex-col gap-5">
+        {/*
+          🔒 Tiêu đề trang là chỗ DUY NHẤT mang tên "Tiếp nhận xe".
+          Thẻ bên dưới dùng tên khác ("Hiện trạng khi nhận"), vì hai tiêu đề
+          trùng tên làm `getByRole('heading', { name: 'Tiếp nhận xe' })` khớp
+          hai phần tử và Playwright dừng ở strict mode — lỗi nói về locator,
+          không nói gì về màn hình.
+        */}
+        <TieuDeTrang
+          tieuDe="Tiếp nhận xe"
+          phu="Ghi nhận hiện trạng trước khi xe vào khoang"
+        />
+
         <form className="card" onSubmit={onSubmit}>
           <h2>Tra cứu biển số</h2>
           <div className="row">
-            <div className="field">
-              <label htmlFor="plate">Biển số xe <span className="req">*</span></label>
+            <div className="field flex-1">
+              <label htmlFor="plate">
+                Biển số xe <span className="req">*</span>
+              </label>
               <input
-                id="plate" className="plate" autoFocus value={plate}
+                id="plate"
+                className="plate"
+                autoFocus
+                value={plate}
                 onChange={(e) => setPlate(e.target.value)}
                 placeholder="30A-123.45"
                 aria-describedby="plate-hint"
               />
               <span className="hint" id="plate-hint">
-                Gõ kiểu nào cũng được — dấu chấm, gạch nối đều bỏ qua. Nhấn <span className="kbd">Enter</span> để tra.
+                Gõ kiểu nào cũng được — dấu chấm, gạch nối đều bỏ qua. Nhấn{' '}
+                <kbd className="rounded-sm border border-line-strong px-1 font-mono text-10">
+                  Enter
+                </kbd>{' '}
+                để tra.
               </span>
             </div>
-            <button className="lg" type="submit" disabled={busy}>
+            <Button size="khach" type="submit" dangXuLy={busy}>
+              {/* Con quay đã thay chỗ icon kính lúp — hai dấu hiệu cùng lúc là nhiễu */}
+              {!busy && <Search className="size-4" aria-hidden />}
               {busy ? 'Đang tra…' : 'Tra cứu'}
-            </button>
+            </Button>
           </div>
           {error !== null && (
-            <ErrorState message={error} onRetry={() => void runLookup(plate)} />
+            <div className="mt-3">
+              <ErrorState message={error} onRetry={() => void runLookup(plate)} />
+            </div>
           )}
         </form>
 
@@ -98,57 +135,79 @@ export default function IntakePage() {
           thấy hình dạng kết quả trước khi dữ liệu tới.
         */}
         {busy && result === null && error === null && (
-          <SkeletonTable rows={4} cols={4} />
+          <div className="card">
+            <SkeletonTable rows={4} cols={4} />
+          </div>
         )}
 
         {result?.exact != null && (
-          <>
-            <div className="card">
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ margin: 0 }}>Đã có hồ sơ xe</h2>
-                <span className={`tag ${POWERTRAIN_CLASS[result.exact.powertrain]}`}>
-                  {POWERTRAIN_LABEL[result.exact.powertrain]}
-                </span>
-              </div>
-              <table style={{ marginTop: 12 }}>
-                <tbody>
-                  <tr><th style={{ width: 160 }}>Biển số</th>
-                      <td className="mono" style={{ fontSize: 18 }}>{formatPlate(result.exact.plateNumber)}</td></tr>
-                  <tr><th>Xe</th>
-                      <td>{[result.exact.makeName, result.exact.modelName].filter(Boolean).join(' ') || <span className="muted">chưa có thông tin</span>}</td></tr>
-                  <tr><th>Số km lần trước</th>
-                      <td className="mono">{result.exact.lastOdometer.toLocaleString('vi-VN')} km</td></tr>
-                  <tr><th>Chủ xe</th>
-                      <td>{result.exact.customer.displayName} · <span className="mono">{result.exact.customer.phone}</span></td></tr>
-                </tbody>
-              </table>
-            </div>
-
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
             <IntakeForm
               vehicleId={result.exact.id}
               lastOdometer={result.exact.lastOdometer}
               powertrain={result.exact.powertrain}
             />
-          </>
+
+            <aside className="card">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="mb-0">Đã có hồ sơ xe</h2>
+                <span className={`tag ${POWERTRAIN_CLASS[result.exact.powertrain]} ml-auto`}>
+                  {POWERTRAIN_LABEL[result.exact.powertrain]}
+                </span>
+              </div>
+
+              <p className="mono mt-3 text-20 font-medium text-text">
+                {formatPlate(result.exact.plateNumber)}
+              </p>
+
+              <div className="mt-2">
+                <DongKhoaGiaTri khoa="Xe">
+                  {[result.exact.makeName, result.exact.modelName].filter(Boolean).join(' ') || (
+                    <span className="text-text-dim">chưa có thông tin</span>
+                  )}
+                </DongKhoaGiaTri>
+                <DongKhoaGiaTri khoa="Số km lần trước">
+                  {result.exact.lastOdometer.toLocaleString('vi-VN')} km
+                </DongKhoaGiaTri>
+                <DongKhoaGiaTri khoa="Chủ xe">{result.exact.customer.displayName}</DongKhoaGiaTri>
+                <DongKhoaGiaTri khoa="Điện thoại" cuoi>
+                  {result.exact.customer.phone}
+                </DongKhoaGiaTri>
+              </div>
+            </aside>
+          </div>
         )}
 
         {notFound && result.suggestions.length > 0 && (
           <div className="card">
             <h2>Không khớp chính xác — có phải xe này không?</h2>
-            <p className="muted small" style={{ marginBottom: 10 }}>
+            <p className="hint mb-2.5">
               Chọn xe đúng thay vì tạo mới, tránh một xe có hai hồ sơ.
             </p>
             <table>
-              <thead><tr><th>Biển số</th><th>Chủ xe</th><th style={{ width: 90 }}></th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Biển số</th>
+                  <th>Chủ xe</th>
+                  <th className="w-[90px]" />
+                </tr>
+              </thead>
               <tbody>
                 {result.suggestions.map((s) => (
                   <tr key={s.id}>
-                    <td className="mono">{formatPlate(s.plateNumber)}</td>
+                    <td className="mono text-text">{formatPlate(s.plateNumber)}</td>
                     <td>{s.displayName}</td>
-                    <td>
-                      <button className="secondary" onClick={() => { setPlate(s.plateNumber); void runLookup(s.plateNumber); }}>
+                    <td className="phai">
+                      <Button
+                        variant="vien"
+                        size="sm"
+                        onClick={() => {
+                          setPlate(s.plateNumber);
+                          void runLookup(s.plateNumber);
+                        }}
+                      >
                         Chọn
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -161,11 +220,14 @@ export default function IntakePage() {
           <div className="card">
             <h2>Chưa có hồ sơ cho biển số này</h2>
             {!showNew ? (
-              <button onClick={() => setShowNew(true)}>Tạo khách hàng và xe mới</button>
+              <Button onClick={() => setShowNew(true)}>Tạo khách hàng và xe mới</Button>
             ) : (
               <NewCustomerVehicle
                 plate={plate}
-                onDone={() => { setShowNew(false); void runLookup(plate); }}
+                onDone={() => {
+                  setShowNew(false);
+                  void runLookup(plate);
+                }}
               />
             )}
           </div>
@@ -183,8 +245,14 @@ export default function IntakePage() {
  * sửa được ngay; báo lỗi sau khi bấm lưu thì họ đã quay đi làm việc khác.
  */
 function IntakeForm({
-  vehicleId, lastOdometer, powertrain,
-}: { vehicleId: string; lastOdometer: number; powertrain: Powertrain }) {
+  vehicleId,
+  lastOdometer,
+  powertrain,
+}: {
+  vehicleId: string;
+  lastOdometer: number;
+  powertrain: Powertrain;
+}) {
   const [complaint, setComplaint] = useState('');
   const [odometer, setOdometer] = useState('');
   const [odometerUnavailable, setUnavailable] = useState(false);
@@ -218,7 +286,8 @@ function IntakeForm({
       setError('Tài khoản chưa được gán chi nhánh nào');
       return;
     }
-    setError(null); setBusy(true);
+    setError(null);
+    setBusy(true);
     try {
       const r = await api.createRepairOrder({
         vehicleId,
@@ -240,123 +309,185 @@ function IntakeForm({
   }
 
   return (
-    <form className="card stack" onSubmit={submit}>
-      <h2>Tiếp nhận xe</h2>
-      {error !== null && <div className="alert error" role="alert">{error}</div>}
+    <form className="flex min-w-0 flex-col gap-4" onSubmit={submit}>
+      {error !== null && (
+        <div className="alert error" role="alert">
+          {error}
+        </div>
+      )}
 
-      <div className="field">
-        <label htmlFor="complaint">Lời khách mô tả <span className="req">*</span></label>
-        <textarea
-          id="complaint" required rows={3} value={complaint}
-          onChange={(e) => setComplaint(e.target.value)}
-          placeholder="Xe kêu lạch cạch phía trước bên trái khi qua ổ gà"
-          aria-describedby="complaint-hint"
-        />
-        <span className="hint" id="complaint-hint">
-          Ghi <strong>nguyên văn</strong> lời khách, đừng diễn giải. Diễn giải sớm
-          làm thợ chẩn đoán sai hướng.
-        </span>
-      </div>
+      <section className="card flex flex-col gap-3.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="mb-0">Hiện trạng khi nhận</h2>
+          <span className="nhan-ky-thuat ml-auto">Bước 1/2</span>
+        </div>
 
-      <div className="row top">
         <div className="field">
-          <label htmlFor="odo">
-            Số km hiện tại {!odometerUnavailable && <span className="req">*</span>}
+          <label htmlFor="complaint">
+            Lời khách mô tả <span className="req">*</span>
           </label>
-          <input
-            id="odo" type="number" min="0" className="mono"
-            value={odometer} disabled={odometerUnavailable}
-            required={!odometerUnavailable}
-            onChange={(e) => setOdometer(e.target.value)}
-            placeholder={String(lastOdometer)}
+          <textarea
+            id="complaint"
+            required
+            rows={3}
+            value={complaint}
+            onChange={(e) => setComplaint(e.target.value)}
+            placeholder="Xe kêu lạch cạch phía trước bên trái khi qua ổ gà"
+            aria-describedby="complaint-hint"
           />
-          <span className="hint">Lần trước: {lastOdometer.toLocaleString('vi-VN')} km</span>
+          <span className="hint" id="complaint-hint">
+            Ghi <strong>nguyên văn</strong> lời khách, đừng diễn giải. Diễn giải sớm làm thợ
+            chẩn đoán sai hướng.
+          </span>
+        </div>
+
+        <div className="row top">
+          <div className="field flex-1">
+            <label htmlFor="odo">
+              Số km hiện tại {!odometerUnavailable && <span className="req">*</span>}
+            </label>
+            <input
+              id="odo"
+              type="number"
+              min="0"
+              className="mono"
+              value={odometer}
+              disabled={odometerUnavailable}
+              required={!odometerUnavailable}
+              onChange={(e) => setOdometer(e.target.value)}
+              placeholder={String(lastOdometer)}
+            />
+            <span className="hint">Lần trước: {lastOdometer.toLocaleString('vi-VN')} km</span>
+          </div>
+
+          <div className="field flex-1">
+            <label htmlFor="energy">{energyLabel}</label>
+            <input
+              id="energy"
+              type="number"
+              min="0"
+              max="100"
+              className="mono"
+              value={energy}
+              onChange={(e) => setEnergy(e.target.value)}
+              placeholder="60"
+            />
+          </div>
+
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={odometerUnavailable}
+              onChange={(e) => {
+                setUnavailable(e.target.checked);
+                if (e.target.checked) setOdometer('');
+              }}
+            />
+            Đồng hồ hỏng, không đọc được
+          </label>
+        </div>
+
+        {goingBackwards && (
+          <div className="alert warn" role="alert">
+            <div>
+              <strong>Số km nhỏ hơn lần trước</strong> ({lastOdometer.toLocaleString('vi-VN')}{' '}
+              km). Bảo hành theo km dựa vào con số này, nên phải chọn lý do trước khi lưu.
+            </div>
+            <div className="field mt-3 max-w-[320px]">
+              <label htmlFor="reason">
+                Lý do <span className="req">*</span>
+              </label>
+              <select
+                id="reason"
+                required
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              >
+                <option value="">— Chọn lý do —</option>
+                <option value="ODOMETER_REPLACED">Đã thay cụm đồng hồ</option>
+                <option value="PREVIOUS_ENTRY_WRONG">Lần trước nhập sai</option>
+                <option value="OTHER">Lý do khác</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="card flex flex-col gap-3.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="mb-0">Người mang xe và tài sản</h2>
+          <span className="nhan-ky-thuat ml-auto">Bước 2/2</span>
+        </div>
+
+        <div className="row top">
+          <div className="field flex-[2]">
+            <label htmlFor="bbn">Người mang xe đến</label>
+            <input
+              id="bbn"
+              value={broughtByName}
+              onChange={(e) => setBroughtByName(e.target.value)}
+              placeholder="Để trống nếu chính chủ"
+            />
+            <span className="hint">Khách doanh nghiệp thường cử tài xế mang xe đến</span>
+          </div>
+          <div className="field flex-1">
+            <label htmlFor="bbp">Điện thoại người mang xe</label>
+            <input
+              id="bbp"
+              value={broughtByPhone}
+              onChange={(e) => setBroughtByPhone(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="field">
-          <label htmlFor="energy">{energyLabel}</label>
-          <input
-            id="energy" type="number" min="0" max="100" className="mono"
-            value={energy} onChange={(e) => setEnergy(e.target.value)} placeholder="60"
-          />
-        </div>
-
-        <label className="check">
-          <input
-            type="checkbox" checked={odometerUnavailable}
-            onChange={(e) => { setUnavailable(e.target.checked); if (e.target.checked) setOdometer(''); }}
-          />
-          Đồng hồ hỏng, không đọc được
-        </label>
-      </div>
-
-      {goingBackwards && (
-        <div className="alert warn stack" role="alert">
-          <div>
-            <strong>Số km nhỏ hơn lần trước</strong> ({lastOdometer.toLocaleString('vi-VN')} km).
-            Bảo hành theo km dựa vào con số này, nên phải chọn lý do trước khi lưu.
+          <label htmlFor="asset">Tài sản trên xe</label>
+          <div className="row">
+            <input
+              id="asset"
+              value={assetText}
+              onChange={(e) => setAssetText(e.target.value)}
+              placeholder="Túi xách da màu nâu"
+              className="min-w-0 flex-1"
+              onKeyDown={(e) => {
+                // Enter ở đây phải THÊM tài sản, không được gửi cả form
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addAsset();
+                }
+              }}
+            />
+            <Button type="button" variant="vien" onClick={addAsset}>
+              Thêm
+            </Button>
           </div>
-          <div className="field" style={{ maxWidth: 320 }}>
-            <label htmlFor="reason">Lý do <span className="req">*</span></label>
-            <select id="reason" required value={reason} onChange={(e) => setReason(e.target.value)}>
-              <option value="">— Chọn lý do —</option>
-              <option value="ODOMETER_REPLACED">Đã thay cụm đồng hồ</option>
-              <option value="PREVIOUS_ENTRY_WRONG">Lần trước nhập sai</option>
-              <option value="OTHER">Lý do khác</option>
-            </select>
-          </div>
+          <span className="hint">
+            Ghi lại đồ khách để quên trên xe. Không ghi thì lúc mất không ai chứng minh được.
+          </span>
         </div>
-      )}
 
-      <div className="row top">
-        <div className="field" style={{ flex: 2 }}>
-          <label htmlFor="bbn">Người mang xe đến</label>
-          <input id="bbn" value={broughtByName} onChange={(e) => setBroughtByName(e.target.value)}
-                 placeholder="Để trống nếu chính chủ" />
-          <span className="hint">Khách doanh nghiệp thường cử tài xế mang xe đến</span>
-        </div>
-        <div className="field">
-          <label htmlFor="bbp">Điện thoại người mang xe</label>
-          <input id="bbp" value={broughtByPhone} onChange={(e) => setBroughtByPhone(e.target.value)} />
-        </div>
-      </div>
-
-      <div className="field">
-        <label htmlFor="asset">Tài sản trên xe</label>
-        <div className="row">
-          <input
-            id="asset" value={assetText} onChange={(e) => setAssetText(e.target.value)}
-            placeholder="Túi xách da màu nâu" style={{ flex: 1 }}
-            onKeyDown={(e) => {
-              // Enter ở đây phải THÊM tài sản, không được gửi cả form
-              if (e.key === 'Enter') { e.preventDefault(); addAsset(); }
-            }}
-          />
-          <button type="button" className="secondary" onClick={addAsset}>Thêm</button>
-        </div>
-        <span className="hint">
-          Ghi lại đồ khách để quên trên xe. Không ghi thì lúc mất không ai chứng minh được.
-        </span>
-      </div>
-
-      {assets.length > 0 && (
-        <ul className="chips">
-          {assets.map((a, i) => (
-            <li key={`${a}-${i}`}>
-              {a}
-              <button type="button" aria-label={`Bỏ ${a}`}
-                      onClick={() => setAssets(assets.filter((_, j) => j !== i))}>
-                <IconBo />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+        {assets.length > 0 && (
+          <ul className="chips">
+            {assets.map((a, i) => (
+              <li key={`${a}-${i}`}>
+                {a}
+                <button
+                  type="button"
+                  aria-label={`Bỏ ${a}`}
+                  onClick={() => setAssets(assets.filter((_, j) => j !== i))}
+                >
+                  <X className="size-3.5" aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div className="row">
-        <button className="lg" type="submit" disabled={busy}>
+        <Button size="khach" type="submit" dangXuLy={busy}>
           {busy ? 'Đang lưu…' : 'Tạo đơn tiếp nhận'}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -388,13 +519,18 @@ function NewCustomerVehicle({ plate, onDone }: { plate: string; onDone: () => vo
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setError(null); setBusy(true);
+    setError(null);
+    setBusy(true);
     try {
       const id =
         customerId ??
-        (await api.createCustomer({
-          type: 'INDIVIDUAL', displayName: name.trim(), phone: phone.trim(),
-        })).id;
+        (
+          await api.createCustomer({
+            type: 'INDIVIDUAL',
+            displayName: name.trim(),
+            phone: phone.trim(),
+          })
+        ).id;
       setCustomerId(id);
 
       await api.createVehicle({
@@ -414,54 +550,105 @@ function NewCustomerVehicle({ plate, onDone }: { plate: string; onDone: () => vo
   }
 
   return (
-    <form className="stack" onSubmit={submit}>
-      {error !== null && <div className="alert error" role="alert">{error}</div>}
-
-      <h3>Khách hàng</h3>
-      <div className="row top">
-        <div className="field" style={{ flex: 2 }}>
-          <label htmlFor="name">Họ tên <span className="req">*</span></label>
-          <input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
+    <form className="mt-3.5 flex flex-col gap-4" onSubmit={submit}>
+      {error !== null && (
+        <div className="alert error" role="alert">
+          {error}
         </div>
-        <div className="field" style={{ flex: 1 }}>
-          <label htmlFor="cphone">Số điện thoại <span className="req">*</span></label>
-          <input id="cphone" required value={phone} onChange={(e) => setPhone(e.target.value)}
-                 placeholder="09xxxxxxxx" />
+      )}
+
+      {customerId !== null && (
+        <div className="alert success flex items-center gap-2.5">
+          <CircleCheck className="size-4 shrink-0" aria-hidden />
+          <span>Khách hàng đã được tạo. Lần lưu tiếp theo chỉ tạo xe, không tạo lại khách.</span>
+        </div>
+      )}
+
+      <div>
+        <h3>Khách hàng</h3>
+        <div className="row top">
+          <div className="field flex-[2]">
+            <label htmlFor="name">
+              Họ tên <span className="req">*</span>
+            </label>
+            <input id="name" required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="field flex-1">
+            <label htmlFor="cphone">
+              Số điện thoại <span className="req">*</span>
+            </label>
+            <input
+              id="cphone"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="09xxxxxxxx"
+            />
+          </div>
         </div>
       </div>
 
-      <h3>Phương tiện</h3>
-      <div className="row top">
-        <div className="field">
-          <label>Biển số</label>
-          <input className="plate" value={formatPlate(plate)} readOnly
-                 style={{ background: 'var(--c-bg)' }} />
-        </div>
-        <div className="field">
-          <label htmlFor="pt">Loại động cơ <span className="req">*</span></label>
-          <select id="pt" value={powertrain}
-                  onChange={(e) => setPowertrain(e.target.value as Powertrain)}>
-            <option value="ICE">Xăng / Dầu</option>
-            <option value="HYBRID">Hybrid</option>
-            <option value="BEV">Điện</option>
-          </select>
-          <span className="hint">Quyết định hạng mục dịch vụ nào áp dụng được</span>
-        </div>
-        <div className="field"><label htmlFor="mk">Hãng</label>
-          <input id="mk" value={make} onChange={(e) => setMake(e.target.value)} placeholder="Toyota" /></div>
-        <div className="field"><label htmlFor="md">Dòng xe</label>
-          <input id="md" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Vios" /></div>
-        {electrified && (
+      <div>
+        <h3>Phương tiện</h3>
+        <div className="row top">
           <div className="field">
-            <label htmlFor="bt">Dung lượng pin (kWh)</label>
-            <input id="bt" type="number" step="0.1" min="0" value={battery}
-                   onChange={(e) => setBattery(e.target.value)} placeholder="42" />
+            <label htmlFor="plate-ro">Biển số</label>
+            <input id="plate-ro" className="plate" value={formatPlate(plate)} readOnly />
           </div>
-        )}
+          <div className="field">
+            <label htmlFor="pt">
+              Loại động cơ <span className="req">*</span>
+            </label>
+            <select
+              id="pt"
+              value={powertrain}
+              onChange={(e) => setPowertrain(e.target.value as Powertrain)}
+            >
+              <option value="ICE">Xăng / Dầu</option>
+              <option value="HYBRID">Hybrid</option>
+              <option value="BEV">Điện</option>
+            </select>
+            <span className="hint">Quyết định hạng mục dịch vụ nào áp dụng được</span>
+          </div>
+          <div className="field">
+            <label htmlFor="mk">Hãng</label>
+            <input
+              id="mk"
+              value={make}
+              onChange={(e) => setMake(e.target.value)}
+              placeholder="Toyota"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="md">Dòng xe</label>
+            <input
+              id="md"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="Vios"
+            />
+          </div>
+          {electrified && (
+            <div className="field">
+              <label htmlFor="bt">Dung lượng pin (kWh)</label>
+              <input
+                id="bt"
+                type="number"
+                step="0.1"
+                min="0"
+                value={battery}
+                onChange={(e) => setBattery(e.target.value)}
+                placeholder="42"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="row">
-        <button type="submit" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu khách hàng và xe'}</button>
+        <Button type="submit" dangXuLy={busy}>
+          {busy ? 'Đang lưu…' : 'Lưu khách hàng và xe'}
+        </Button>
       </div>
     </form>
   );

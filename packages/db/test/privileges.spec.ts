@@ -338,10 +338,29 @@ describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn 
      *
      * Cùng lập luận với `quotation_line`, và điều kiện an toàn cũng cùng dạng:
      * quyền rộng ở tầng GRANT, hẹp lại bằng trigger theo trạng thái.
+     *
+     * `vehicle_product_category`: một danh mục không có xe nào trỏ tới là NHÃN
+     * PHÂN LOẠI, không phải dữ liệu nghiệp vụ — xoá nó không mất bằng chứng của
+     * việc gì. Khoá ngoại là `ON DELETE RESTRICT` (0067) nên danh mục còn xe thì
+     * không xoá được: cùng khuôn 'quyền rộng ở GRANT, hẹp lại bằng ràng buộc'.
+     *
+     * `vehicle_color`, `vehicle_promotion`, `financing_program`: nội dung của một
+     * BẢN NHÁP xe. Biên tập viên gỡ một màu khỏi bản nháp là thao tác nghiệp vụ
+     * thật. Điều kiện an toàn nằm ở trigger `trg_*_chi_sua_ban_nhap` (0072):
+     * revision đã publish thì mọi INSERT/UPDATE/DELETE đều bị từ chối, nên
+     * quyền này không mở đường sửa nội dung đã công khai (INV-LS-13).
      */
     assert.deepEqual(
       rows.map((r) => r.table_name),
-      ['invoice_line', 'quotation_line', 'user_branch'],
+      [
+        'financing_program',
+        'invoice_line',
+        'quotation_line',
+        'user_branch',
+        'vehicle_color',
+        'vehicle_product_category',
+        'vehicle_promotion',
+      ],
       'Có bảng được cấp DELETE ngoài dự kiến — dữ liệu nghiệp vụ chỉ xoá mềm',
     );
   });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Powertrain } from './vehicle.js';
+import { RichTextDocumentV1 } from './catalog-cms.js';
 
 /**
  * Contracts cho module marketing (landing/catalog/experience/SEO).
@@ -101,6 +102,8 @@ export const PublicSiteView = z.object({
   defaultTitleSuffix: z.string(),
   primaryOrigin: z.string(),
   publicBranches: z.array(PublicBranchCard),
+  /** Ảnh mặt tiền do showroom chọn. `null` thì landing rơi về ảnh xe nổi bật. */
+  heroUrl: z.string().nullable(),
 });
 export type PublicSiteView = z.infer<typeof PublicSiteView>;
 
@@ -170,6 +173,40 @@ export const PublicProductSummary = z.object({
 });
 export type PublicProductSummary = z.infer<typeof PublicProductSummary>;
 
+/**
+ * Chi phí bảo dưỡng theo năm — SRS "hành trình sở hữu".
+ *
+ * 🔒 Tiền là số nguyên đồng. Con số này khách sẽ CẦM TỚI XƯỞNG đối chiếu với
+ *    hoá đơn thật, nên nó không được là ước lượng làm tròn cho đẹp.
+ */
+export const ChiPhiMotNam = z.object({
+  nam: z.number().int().positive(),
+  tienCong: z.number().int().nonnegative(),
+  tienVatTu: z.number().int().nonnegative(),
+  tong: z.number().int().nonnegative(),
+  hangMuc: z.array(z.string()),
+});
+export type ChiPhiMotNam = z.infer<typeof ChiPhiMotNam>;
+
+export const ChiPhiSoHuuView = z.object({
+  kmMoiNam: z.number().int().nonnegative(),
+  soNam: z.number().int().positive(),
+  theoNam: z.array(ChiPhiMotNam),
+  tong: z.number().int().nonnegative(),
+  /**
+   * Cùng quãng đường, cùng bảng giá, nhưng theo lịch bảo dưỡng của XE XĂNG.
+   * `null` khi chính chiếc xe đang xem đã là xe xăng — so sánh khi đó vô nghĩa.
+   */
+  soSanhXeXang: z.number().int().nonnegative().nullable(),
+  soNamKhongTon: z.number().int().nonnegative(),
+  /** Giá công mỗi giờ đang áp dụng — để trang nói được con số đến từ đâu. */
+  giaCongMoiGio: z.number().int().nonnegative(),
+  /** Tên bảng giá và ngày hiệu lực — thứ làm con số kiểm chứng được. */
+  tenBangGia: z.string(),
+  ápDụngTừ: z.string(),
+});
+export type ChiPhiSoHuuView = z.infer<typeof ChiPhiSoHuuView>;
+
 export const PublicProductDetail = z.object({
   id: z.string().uuid(),
   slug: z.string(),
@@ -200,8 +237,10 @@ export const CreateVehicleProductInput = z.object({
     .min(1)
     .max(200)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug phải là kebab-case chữ thường'),
+  categoryId: z.string().uuid().nullable().optional(),
   summary: z.string().trim().max(500).optional().default(''),
   description: z.string().trim().max(20000).optional().default(''),
+  descriptionDocument: RichTextDocumentV1.optional(),
   seoTitle: z.string().trim().max(160).nullable().optional(),
   seoDescription: z.string().trim().max(300).nullable().optional(),
 });
@@ -209,9 +248,12 @@ export type CreateVehicleProductInput = z.infer<typeof CreateVehicleProductInput
 
 export const PatchProductDraftInput = z.object({
   version: z.number().int().nonnegative(),
+  /** Product identity, intentionally not part of revision content hashing. */
+  categoryId: z.string().uuid().nullable().optional(),
   name: z.string().trim().min(2).max(160).optional(),
   summary: z.string().trim().max(500).optional(),
   description: z.string().trim().max(20000).optional(),
+  descriptionDocument: RichTextDocumentV1.optional(),
   seoTitle: z.string().trim().max(160).nullable().optional(),
   seoDescription: z.string().trim().max(300).nullable().optional(),
 });

@@ -571,6 +571,7 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       'api/v1/public/site': 'bootstrap landing công khai, tenant lấy từ hostname',
       'api/v1/public/vehicle-products/:slug': 'catalog công khai, tenant lấy từ hostname',
       'api/v1/public/vehicle-products/:slug/experiences/:stableKey': 'experience công khai, tenant lấy từ hostname',
+      'api/v1/public/vehicle-products/:slug/chi-phi-so-huu': 'chi phí bảo dưỡng công khai, tenant lấy từ hostname',
       'api/v1/public/leads': 'lead public chỉ POST; GET guard là controller scan metadata',
       /*
        * ⚠️ NỢ, không phải miễn trừ thật. `requireLeadInScope()` CÓ áp
@@ -583,6 +584,38 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       'api/v1/sales/leads/:id': 'NỢ — chưa có lead ở chi nhánh khác trong seed để quét',
       'api/v1/public/vehicle-products': 'catalog công khai, tenant lấy từ hostname',
       'media/:key': 'media public chỉ được phát từ asset đã publish',
+
+      /* CMS marketing — nội dung của cả tenant, không phải dữ liệu vận hành của
+         một chi nhánh. Cô lập của chúng là RLS theo tenant. */
+      'api/v1/marketing/categories': 'danh mục showroom là dữ liệu tenant',
+      'api/v1/marketing/testimonials': 'testimonial là dữ liệu tenant',
+      'api/v1/marketing/landing-pages': 'trang landing là nội dung tenant',
+      'api/v1/marketing/landing-pages/:id': 'trang landing là nội dung tenant',
+      'api/v1/marketing/landing-pages/:id/revisions': 'lịch sử bản landing là nội dung tenant',
+      'api/v1/marketing/media': 'thư viện ảnh dùng chung cả tenant',
+      'api/v1/public/landing-page': 'landing công khai, tenant lấy từ hostname',
+      'api/v1/public/landing-page-preview': 'preview theo token, không theo chi nhánh',
+      'api/v1/public/testimonials': 'testimonial công khai, tenant lấy từ hostname',
+      'api/v1/public/vehicle-products/:slug/gia-lan-banh':
+        'bóc giá lăn bánh công khai, tenant lấy từ hostname',
+
+      /*
+       * Catalog thương mại — giá, ưu đãi và trả góp là NỘI DUNG của cả tenant:
+       * một mẫu xe có đúng một giá công bố, không phải mỗi chi nhánh một giá.
+       *
+       * ⚠️ Ngoại lệ đáng chú ý: `products/:id/availability` **GET** cố ý trả về
+       *    khai báo của MỌI chi nhánh, vì nhãn trên landing là nhãn gộp
+       *    ("Sẵn xe tại 3 chi nhánh"). Phạm vi chi nhánh áp ở chiều **PUT** và
+       *    được kiểm bằng `showroom.spec.ts` — nhân viên chi nhánh chỉ sửa được
+       *    chi nhánh mình.
+       */
+      'api/v1/showroom/fee-schedules': 'biểu phí lăn bánh khai theo tỉnh/thành cho cả tenant',
+      'api/v1/showroom/onroad-quote': 'phép cộng suy ra từ dữ liệu tenant',
+      'api/v1/showroom/financing-quote': 'phép cộng suy ra từ dữ liệu tenant',
+      'api/v1/showroom/products/:productId/price-log': 'nhật ký giá công bố là dữ liệu tenant',
+      'api/v1/showroom/revisions/:revisionId/promotions': 'ưu đãi gắn với revision nội dung, phạm vi tenant',
+      'api/v1/showroom/products/:productId/availability':
+        'đọc là nhãn gộp toàn chuỗi; phạm vi chi nhánh áp ở chiều ghi (showroom.spec.ts)',
     };
 
     /*

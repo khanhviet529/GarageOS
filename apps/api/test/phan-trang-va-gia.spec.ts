@@ -384,6 +384,81 @@ describe('🔒 Phân trang danh sách lead', () => {
     assert.equal(trung, 0, `có ${trung} lead lặp lại giữa các trang`);
   });
 
+  test('🔒 PT-T06 — bốn lead trong CÙNG một mili giây vẫn đi hết được', async () => {
+    /*
+     * 🔒 Bài này ép đúng điều kiện mà `PT-T04` chỉ trúng khi may.
+     *
+     * Con trỏ phân trang từng đi qua `Date.prototype.toISOString()`, hàm cắt ở
+     * MILI giây, trong khi `timestamptz` lưu tới MICRO giây. Bản ghi nào có
+     * `created_at` rơi vào khoảng bị cắt — tức là cùng mili giây với bản ghi
+     * cuối của trang trước — đều không lọt qua điều kiện keyset và BIẾN MẤT.
+     *
+     * `PT-T04` chèn ba lead bằng ba lần round-trip, nên chúng thường cách nhau
+     * hơn một mili giây và bài xanh. Trên CI máy nhanh hơn thì đôi khi chúng
+     * rơi cùng mili giây và bài đỏ — đúng một lượt trong ba nhánh cùng mã.
+     * Một bài kiểm chỉ đỏ khi máy đủ nhanh thì không phải bài kiểm.
+     *
+     * Ở đây ghi thẳng `created_at` để bốn lead có CÙNG mili giây, khác nhau ở
+     * micro giây. Lỗi cũ làm mất 3/4; bản sửa trả đủ bốn.
+     */
+    const res = await fetch(`${API}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Auth-Mode': 'token' },
+      body: JSON.stringify({ phone: '0901000013', password: 'demo1234' }),
+    });
+    const tokenSales = ((await res.json()) as { accessToken: string }).accessToken;
+
+    const { rows: bRows } = await pool.query<{ id: string }>(
+      `SELECT b.id FROM branch b
+         JOIN user_branch ub ON ub.branch_id = b.id
+         JOIN app_user u ON u.id = ub.user_id
+        WHERE u.phone = '0901000013' AND b.tenant_id = $1 LIMIT 1`,
+      [TENANT_A],
+    );
+    const branchId = bRows[0]!.id;
+
+    // Cùng giây, cùng mili giây, khác micro giây — .500001 … .500004
+    const goc = `2026-09-01 10:00:00.5000`;
+    const ten: string[] = [];
+    for (const i of [1, 2, 3, 4]) {
+      const t = `Khách cùng mili ${uniq}-${i}`;
+      await pool.query(
+        `INSERT INTO sales_lead
+           (tenant_id, branch_id, reference, full_name, phone_normalized,
+            intent, source, consent_version, consented_at, created_at)
+         VALUES ($1,$2,$3,$4,$5,'TEST_DRIVE','LANDING','2026-08-1', now(), $6::timestamptz)`,
+        [TENANT_A, branchId, `MS-${uniq}-${i}`, t, `08${uniq.slice(0, 6)}${i}`.slice(0, 10),
+         `${goc}0${i}+00`],
+      );
+      ten.push(t);
+    }
+
+    const daThay: string[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 200; i += 1) {
+      const q: string = cursor === null
+        ? '/api/v1/sales/leads?limit=1'
+        : `/api/v1/sales/leads?limit=1&cursor=${encodeURIComponent(cursor)}`;
+      const rr = await fetch(`${API}${q}`, {
+        headers: { Authorization: `Bearer ${tokenSales}`, 'X-Auth-Mode': 'token' },
+      });
+      const tho = await rr.text();
+      assert.equal(rr.status, 200, `trang ${i}: ${tho}`);
+      const b = JSON.parse(tho) as { items: { fullName: string }[]; nextCursor: string | null };
+      for (const it of b.items) daThay.push(it.fullName);
+      cursor = b.nextCursor;
+      if (cursor === null) break;
+    }
+    assert.equal(cursor, null, 'đi 200 vòng vẫn chưa hết — con trỏ không tiến');
+
+    const sot = ten.filter((t) => !daThay.includes(t));
+    assert.deepEqual(
+      sot,
+      [],
+      `mất ${sot.length}/4 lead cùng mili giây — con trỏ đang bị cắt bớt micro giây`,
+    );
+  });
+
   test('PT-T05 — khách KHÔNG chọn phiên bản thì lead không tự gán một phiên bản', async () => {
     const id = await dungXeDaDang('khongchon', [
       { name: 'Bản điện', powertrain: 'BEV', displayPrice: 2_000_000_000, sortOrder: 0 },

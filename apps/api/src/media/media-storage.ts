@@ -66,11 +66,25 @@ export class MediaStorage {
     await this.noiLuu.put(key, data, contentType);
   }
 
-  /** Placeholder SVG cho seed/demo — xác định theo key, không đọc đĩa. */
+  /**
+   * Placeholder SVG cho seed/demo — xác định theo key, không đọc đĩa.
+   *
+   * ⚠️ Bản trước sinh nền `hsl(hue 42% 82%)` — pastel rất sáng, kèm tên file in
+   *    giữa. Trên landing tông tối, chúng nổi lên thành những mảng hồng/xanh
+   *    chói giữa một trang đen, và mắt người xem bị kéo về đúng chỗ KHÔNG có nội
+   *    dung.
+   *
+   * 💡 Một placeholder tốt phải nói được hai điều cùng lúc: "chỗ này là ảnh" và
+   *    "ảnh chưa có". Nó không được tranh sự chú ý với ảnh thật bên cạnh. Nên
+   *    giờ nó tối, khớp `--surface-2`, và chỉ có một khung mảnh cùng tên file ở
+   *    mức tương phản vừa đủ đọc.
+   */
   private demoPlaceholder(key: string): PublicMediaFile {
+    // Sắc độ vẫn suy từ key để mỗi ảnh khác nhau một chút — nhưng ở độ sáng
+    // thấp, nên khác biệt là tinh tế chứ không loè loẹt.
     const hue = [...key].reduce((a, c) => a + c.charCodeAt(0) * 31, 0) % 360;
     const label = key.split('/').pop() ?? 'media';
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750"><rect width="1200" height="750" fill="hsl(${hue} 42% 82%)"/><rect width="1200" height="750" fill="none" stroke="hsl(${hue} 45% 55%)" stroke-width="8"/><text x="600" y="380" font-family="sans-serif" font-size="42" text-anchor="middle" fill="hsl(${hue} 50% 28%)">${label}</text></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue} 24% 16%)"/><stop offset="1" stop-color="hsl(${hue} 20% 9%)"/></linearGradient></defs><rect width="1200" height="750" fill="url(#g)"/><rect x="1" y="1" width="1198" height="748" fill="none" stroke="hsl(${hue} 22% 30%)" stroke-width="2"/><text x="600" y="392" font-family="sans-serif" font-size="34" text-anchor="middle" fill="hsl(${hue} 16% 52%)">${label}</text></svg>`;
     return {
       data: Buffer.from(svg, 'utf8'),
       contentType: 'image/svg+xml',

@@ -1,5 +1,14 @@
+<!--
+  Icon mặc định của nền tảng, hướng dark cinematic. Giữ bố cục trừu tượng của bản
+  trước; chỉ đưa màu về theme mặc định.
+
+  ⚠️ Bản gốc viết cứng #0f5bb5 và #e8792b — hai màu mà `BrandTheme` của tenant
+     không với tới được. Icon là nơi khó tránh màu cứng nhất, nên nó phải ít nhất
+     KHỚP theme mặc định để một showroom chưa tải logo riêng không thấy hai bảng
+     màu cạnh nhau.
+-->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0f5bb5"/>
-  <path d="M12 38h40v6H12z" fill="#ffffff"/>
-  <circle cx="32" cy="25" r="11" fill="#e8792b"/>
+  <rect width="64" height="64" rx="6" fill="#0a0b0c"/>
+  <path d="M12 38h40v5H12z" fill="#f5f5f3"/>
+  <circle cx="32" cy="25" r="11" fill="#e63b2e"/>
 </svg>

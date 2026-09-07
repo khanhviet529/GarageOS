@@ -18,9 +18,11 @@
  * là ảnh chụp hiện tại, không có khái niệm "kỳ".
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AppHeader } from '@/components/AppHeader';
-import { BangCuon } from '@/components/BangCuon';
-import { Khoi, Ky, ChuaCo, DaLoaiTru } from '@/components/bao-cao/Khoi';
+import { AppHeader } from '@/components/layout/app-header';
+import { BangCuon } from '@/components/bang-cuon';
+import { Khoi, Ky, ChuaCo, DaLoaiTru } from '@/features/reports/khoi';
+import { TieuDeTrang } from '@/components/tieu-de-trang';
+import { DaiMetric, Metric } from '@/components/metric';
 import {
   api,
   formatMoney,
@@ -107,48 +109,64 @@ export default function TrangBaoCao() {
   return (
     <>
       <AppHeader current="bao-cao" />
-      <main id="noi-dung" className="container">
-        <div className="bao-cao-tieu-de-trang">
-          <h2 style={{ marginBottom: 4 }}>Báo cáo</h2>
-          <p className="muted small" style={{ margin: 0 }}>
-            6 khối — 3 khối theo kỳ (chọn bên dưới), 3 khối là ảnh chụp hiện tại.
+      <main id="noi-dung" className="container flex flex-col gap-5">
+        {/*
+          Bộ chọn kỳ nằm NGAY cạnh tiêu đề, đúng chỗ bộ thiết kế đặt nó. Đây
+          không phải chi tiết trình bày: ba trong sáu khối đổi theo kỳ, nên
+          người đọc phải thấy kỳ đang chọn trong cùng một cái liếc mắt với con
+          số họ đang đọc.
+        */}
+        <TieuDeTrang
+          tieuDe="Báo cáo"
+          phu="6 khối — 3 khối theo kỳ, 3 khối là ảnh chụp hiện tại"
+        >
+          <div
+            className="flex items-center gap-0.5 rounded-md border border-line bg-ink-2 p-[3px]"
+            role="tablist"
+            aria-label="Chọn kỳ báo cáo"
+          >
+            {(Object.keys(KY_LABEL) as KyLuaChon[]).map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={k === ky}
+                className={
+                  k === ky
+                    ? 'min-h-0 rounded-sm bg-ink-3 px-3 py-1.5 text-12 font-semibold text-text hover:bg-ink-3'
+                    : 'min-h-0 rounded-sm bg-transparent px-3 py-1.5 text-12 font-medium text-text-dim hover:bg-transparent hover:text-text'
+                }
+                onClick={() => setKy(k)}
+              >
+                {KY_LABEL[k]}
+              </button>
+            ))}
+          </div>
+        </TieuDeTrang>
+
+        {loi !== null && (
+          <p className="alert error" role="alert">
+            {loi}
           </p>
-        </div>
+        )}
 
-        {loi !== null && <p className="alert error">{loi}</p>}
-
-        {/* ── Filter kỳ ─────────────────────────────────────────────────── */}
-        <div className="bao-cao-ky-tabs" role="tablist" aria-label="Chọn kỳ báo cáo">
-          {(Object.keys(KY_LABEL) as KyLuaChon[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="tab"
-              aria-selected={k === ky}
-              className={k === ky ? 'tab active' : 'tab'}
-              onClick={() => setKy(k)}
-            >
-              {KY_LABEL[k]}
-            </button>
-          ))}
-        </div>
-
-        <div className="bao-cao-grid">
-          {/* ── TOC (desktop ≥1024) ────────────────────────────────────── */}
-          <aside className="bao-cao-toc" aria-label="Mục lục báo cáo">
-            <p className="muted small" style={{ marginBottom: 8 }}>
-              Mục lục
-            </p>
-            <ul>
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+          {/* ── Mục lục (chỉ desktop) ──────────────────────────────────── */}
+          <aside
+            className="sticky top-[84px] hidden lg:block"
+            aria-label="Mục lục báo cáo"
+          >
+            <p className="nhan-ky-thuat mb-2">Mục lục</p>
+            <ul className="flex flex-col gap-0.5">
               {MUC_TOC.map((m) => (
                 <li key={m.id}>
                   <button
                     type="button"
-                    className="toc-link"
+                    className="w-full min-h-0 justify-start rounded-md bg-transparent px-2.5 py-2 text-left text-12 font-medium text-text-muted hover:bg-ink-2 hover:text-text"
                     onClick={() => cuonDen(m.id)}
                   >
                     {m.nhan}
-                    {m.coKy && <span className="toc-ky"> · kỳ</span>}
+                    {m.coKy && <span className="ml-auto font-mono text-10 text-text-dim">kỳ</span>}
                   </button>
                 </li>
               ))}
@@ -156,7 +174,7 @@ export default function TrangBaoCao() {
           </aside>
 
           {/* ── Nội dung ──────────────────────────────────────────────── */}
-          <div className="bao-cao-noi-dung">
+          <div className="flex min-w-0 flex-col gap-4">
             {lai !== null && (
               <Khoi id="lai-lo" tieuDe="Lãi/lỗ theo đơn">
                 <Ky from={lai.from} to={lai.to} />
@@ -164,21 +182,18 @@ export default function TrangBaoCao() {
                   ⚠️ Doanh thu lấy từ <strong>dòng báo giá đã duyệt</strong>, chưa phải hoá đơn
                   phát hành. Lãi là con số <strong>tính đến hôm nay</strong>.
                 </p>
-                <div className="kpi-row">
-                  <div className="kpi">
-                    <span className="kpi-label">Doanh thu</span>
-                    <strong>{formatMoney(lai.tongDoanhThu)}</strong>
-                  </div>
-                  <div className="kpi">
-                    <span className="kpi-label">Chi phí</span>
-                    <strong>{formatMoney(lai.tongChiPhi)}</strong>
-                  </div>
-                  <div className="kpi">
-                    <span className="kpi-label">Lãi</span>
-                    <strong className={lai.tongLai < 0 ? 'am' : ''}>
-                      {formatMoney(lai.tongLai)}
-                    </strong>
-                  </div>
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+                  <Metric nhan="Doanh thu" co="vua" giaTri={formatMoney(lai.tongDoanhThu)} />
+                  <Metric nhan="Chi phí" co="vua" giaTri={formatMoney(lai.tongChiPhi)} />
+                  <Metric
+                    nhan="Lãi"
+                    co="vua"
+                    giaTri={
+                      <span className={lai.tongLai < 0 ? 'text-danger' : ''}>
+                        {formatMoney(lai.tongLai)}
+                      </span>
+                    }
+                  />
                 </div>
                 <BangCuon moTa="Lãi lỗ từng đơn sửa chữa">
                   <table>
@@ -220,7 +235,7 @@ export default function TrangBaoCao() {
             {cho !== null && (
               <Khoi id="thoi-gian-cho" tieuDe="Thời gian chờ theo bộ phận">
                 <Ky from={cho.from} to={cho.to} />
-                <p className="muted">
+                <p className="hint">
                   Dùng <strong>trung vị</strong> và <strong>p90</strong>, không dùng trung bình —
                   một xe nằm lâu bất thường kéo trung bình đi rất xa.
                 </p>
@@ -296,7 +311,7 @@ export default function TrangBaoCao() {
                     </tbody>
                   </table>
                 </BangCuon>
-                <p className="muted small">
+                <p className="hint">
                   Không có "kỳ" — năng suất là ảnh chụp hiện tại của từng thợ.
                 </p>
               </Khoi>
@@ -305,39 +320,42 @@ export default function TrangBaoCao() {
             {hen !== null && (
               <Khoi id="dung-hen" tieuDe="Tỉ lệ đúng hẹn">
                 <Ky from={hen.from} to={hen.to} />
-                <div className="kpi-row">
-                  <div className="kpi">
-                    <span className="kpi-label">Đúng hẹn</span>
-                    <strong>
-                      {hen.tiLeDungHen === null ? (
+                {/*
+                  🔒 Bốn ô CÙNG cỡ chữ. 95% đúng hẹn mà mỗi đơn dời hẹn ba lần
+                  thì con số kia vô giá trị — làm ô "số lần dời hẹn" nhỏ hơn là
+                  ngầm bảo người đọc bỏ qua nó.
+                */}
+                <DaiMetric>
+                  <Metric
+                    nhan="Đúng hẹn"
+                    giaTri={
+                      hen.tiLeDungHen === null ? (
                         <ChuaCo vi="Chưa có đơn nào bàn giao trong kỳ" />
                       ) : (
                         `${Math.round(hen.tiLeDungHen * 100)}%`
-                      )}
-                    </strong>
-                  </div>
-                  <div className="kpi">
-                    <span className="kpi-label">Đơn bàn giao</span>
-                    <strong>{hen.soDonBanGiao}</strong>
-                  </div>
-                  <div className="kpi">
-                    <span className="kpi-label">Số lần dời hẹn</span>
-                    <strong className={hen.tongSoLanDoiHen > hen.soDonBanGiao ? 'am' : ''}>
-                      {hen.tongSoLanDoiHen}
-                    </strong>
-                  </div>
-                  <div className="kpi">
-                    <span className="kpi-label">Đơn có dời hẹn</span>
-                    <strong>{hen.soDonCoDoiHen}</strong>
-                  </div>
-                </div>
+                      )
+                    }
+                  />
+                  <Metric nhan="Đơn bàn giao" giaTri={hen.soDonBanGiao} />
+                  <Metric
+                    nhan="Số lần dời hẹn"
+                    giaTri={
+                      <span
+                        className={hen.tongSoLanDoiHen > hen.soDonBanGiao ? 'text-danger' : ''}
+                      >
+                        {hen.tongSoLanDoiHen}
+                      </span>
+                    }
+                  />
+                  <Metric nhan="Đơn có dời hẹn" giaTri={hen.soDonCoDoiHen} />
+                </DaiMetric>
                 <DaLoaiTru items={hen.daLoaiTru} />
               </Khoi>
             )}
 
             {no !== null && no.length > 0 && (
               <Khoi id="cong-no" tieuDe="Công nợ theo tuổi nợ">
-                <p className="muted">
+                <p className="hint">
                   Công nợ là <strong>giá trị suy ra</strong> từ hoá đơn và thanh toán, không phải
                   cột lưu sẵn.
                 </p>
@@ -387,7 +405,7 @@ export default function TrangBaoCao() {
 
             {kho !== null && kho.length > 0 && (
               <Khoi id="ton-kho" tieuDe="Tồn kho — cảnh báo và vốn chết">
-                <p className="muted">
+                <p className="hint">
                   <strong>Vốn chết</strong> là mã hàng còn tồn nhưng 365 ngày qua không xuất đồng
                   nào. Tiền đang nằm im trên kệ.
                 </p>

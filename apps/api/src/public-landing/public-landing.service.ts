@@ -1,17 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { TenantAwareDb } from '@garageos/db';
-import { parseAmountFromDb } from '@garageos/domain';
+import { parseAmountFromDb, tinhChiPhiSoHuu, type HangMucBaoDuong } from '@garageos/domain';
 import {
   ErrorCode,
   type ExperienceManifest,
   type ExperienceSummary,
   type PublicProductDetail,
   type PublicProductSummary,
+  type PublicTestimonial,
   type PublicSiteView,
+  type ChiPhiSoHuuView,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { MOC_CON_TRO, ghepConTro } from '../common/con-tro-trang';
 import type { PublicTenantContext } from './tenant-context.service';
+import { ShowroomService } from '../showroom/showroom.service';
 
 /**
  * Dữ liệu public của landing — SRS Phase 1 mục 11.1.
@@ -22,14 +26,33 @@ import type { PublicTenantContext } from './tenant-context.service';
  */
 @Injectable()
 export class PublicLandingService {
-  constructor(@Inject(TenantAwareDb) private readonly db: TenantAwareDb) {}
+  constructor(
+    @Inject(TenantAwareDb) private readonly db: TenantAwareDb,
+    @Inject(ShowroomService) private readonly showroom: ShowroomService,
+  ) {}
+
+  async testimonials(ctx: PublicTenantContext): Promise<PublicTestimonial[]> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicTestimonial>(
+      `SELECT id, display_name AS "displayName", content, rating, featured, vehicle_id AS "vehicleId"
+         FROM testimonial WHERE status = 'PUBLISHED' ORDER BY featured DESC, sort_order, created_at DESC`,
+    )).rows);
+  }
 
   async site(ctx: PublicTenantContext, scheme: string): Promise<PublicSiteView> {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
-        `SELECT brand_name, legal_name, default_title_suffix, default_description
-           FROM site_profile
-          WHERE status = 'PUBLISHED'
+        `SELECT sp.brand_name, sp.legal_name, sp.default_title_suffix,
+                sp.default_description, mp.public_storage_key AS hero_key
+           FROM site_profile sp
+           LEFT JOIN LATERAL (
+             SELECT p.public_storage_key
+               FROM media_rendition r
+               JOIN media_publication p ON p.rendition_id = r.id AND p.status = 'READY'
+              WHERE r.asset_id = sp.hero_media_id
+              ORDER BY CASE r.profile WHEN 'POSTER' THEN 0 ELSE 1 END
+              LIMIT 1
+           ) mp ON true
+          WHERE sp.status = 'PUBLISHED'
           LIMIT 1`,
       );
       const p = rows[0];
@@ -51,6 +74,10 @@ export class PublicLandingService {
         legalName: (p.legal_name ?? null) as string | null,
         defaultTitleSuffix: p.default_title_suffix as string,
         primaryOrigin: `${scheme}://${ctx.primaryHostname}`,
+        heroUrl:
+          p.hero_key === null || p.hero_key === undefined
+            ? null
+            : this.publicUrl(p.hero_key as string),
         publicBranches: branches.map((b) => ({
           id: b.id as string,
           stableKey: b.stable_key as string,
@@ -89,7 +116,7 @@ export class PublicLandingService {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT p.id, p.slug, r.name, r.make_name, r.model_name, r.summary,
-                p.created_at,
+                p.created_at, ${MOC_CON_TRO('p')},
                 v.powertrain, v.display_price_amount,
                 cover.public_storage_key AS cover_key, cover.alt_text AS cover_alt
            FROM vehicle_product p
@@ -159,7 +186,7 @@ export class PublicLandingService {
       for (const row of rows) {
         if (items.length === limit) break;
         if (conNua && items.length === limit - 1) {
-          nextCursor = `${(row.created_at as Date).toISOString()}_${row.id as string}`;
+          nextCursor = ghepConTro(row);
         }
         items.push({
           id: row.id as string,
@@ -237,6 +264,191 @@ export class PublicLandingService {
         variants,
         media,
         experiences,
+      };
+    });
+  }
+
+  /**
+   * Chi phí bảo dưỡng N năm cho một mẫu xe.
+   *
+   * ─────────────────────────────────────────────────────────────────────────
+   * 🔒 Con số đến từ BẢNG GIÁ ĐANG ÁP DỤNG của chính xưởng này — cùng bảng giá
+   *    dùng để xuất hoá đơn cho khách khác. Đó là toàn bộ giá trị của tính năng:
+   *    khách cầm bảng này tới xưởng đối chiếu được.
+   *
+   * ⚠️ Vì thế endpoint KHÔNG được nhận giá từ client, và KHÔNG được dùng một
+   *    bảng giá riêng cho quảng cáo. Nếu sau này cần tách, phải tách tường minh
+   *    và nói rõ trên giao diện — chứ không lặng lẽ đổi nguồn số.
+   *
+   * 💡 Xe điện rẻ hơn là KẾT QUẢ, không phải thông điệp được cài sẵn: lọc hạng
+   *    mục theo `applicable_powertrains` rồi để phép cộng tự nói. Không có dòng
+   *    nào trong hàm này biết "điện" hay "xăng" nghĩa là gì.
+   */
+  async chiPhiSoHuu(
+    ctx: PublicTenantContext,
+    slug: string,
+    opts: { kmMoiNam: number; soNam: number },
+  ): Promise<ChiPhiSoHuuView> {
+    /*
+     * Chặn trên để một truy vấn công khai không biến thành phép tính vô hạn —
+     * đây là endpoint không cần đăng nhập.
+     */
+    const kmMoiNam = Math.min(Math.max(Math.round(opts.kmMoiNam), 0), 200_000);
+    const soNam = Math.min(Math.max(Math.round(opts.soNam), 1), 10);
+
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows: prodRows } = await tx.query<{ id: string }>(
+        `SELECT p.id FROM vehicle_product p
+          WHERE p.slug = $1 AND p.lifecycle_status = 'ACTIVE'
+            AND p.published_revision_id IS NOT NULL`,
+        [slug],
+      );
+      const prod = prodRows[0];
+      if (prod === undefined) {
+        throw new BusinessError(ErrorCode.CONTENT_NOT_PUBLISHED, 'Không tìm thấy xe');
+      }
+
+      /*
+       * Loại động cơ lấy từ CÁC BIẾN THỂ ĐANG PUBLISH, không từ một cột trên
+       * sản phẩm — một mẫu xe có thể vừa có bản xăng vừa có bản điện, và chi phí
+       * của hai bản đó khác hẳn nhau.
+       *
+       * MVP lấy loại của biến thể RẺ NHẤT: đó cũng là biến thể mà giá "từ…" trên
+       * thẻ xe đang nói tới, nên hai con số kể cùng một câu chuyện.
+       */
+      const { rows: ptRows } = await tx.query<{ powertrain: string }>(
+        `SELECT vvr.powertrain
+           FROM vehicle_variant_revision vvr
+           JOIN vehicle_product p ON p.published_revision_id = vvr.product_revision_id
+          WHERE p.id = $1 AND vvr.inclusion_status = 'ACTIVE'
+          ORDER BY vvr.display_price_amount ASC NULLS LAST, vvr.sort_order
+          LIMIT 1`,
+        [prod.id],
+      );
+      const powertrain = ptRows[0]?.powertrain ?? 'ICE';
+
+      const { rows: giaRows } = await tx.query<{
+        id: string; name: string; labor_rate_per_hour: string; effective_from: Date;
+      }>(
+        `SELECT id, name, labor_rate_per_hour, effective_from
+           FROM price_list
+          WHERE effective_from <= now()
+            AND (effective_to IS NULL OR effective_to > now())
+          ORDER BY effective_from DESC
+          LIMIT 1`,
+      );
+      const bangGia = giaRows[0];
+      if (bangGia === undefined) {
+        throw new BusinessError(
+          ErrorCode.NOT_FOUND,
+          'Chưa có bảng giá dịch vụ đang hiệu lực',
+        );
+      }
+
+      /*
+       * Một truy vấn lấy hạng mục + chu kỳ + vật tư. Gộp vật tư bằng
+       * `json_agg` thay vì N+1: đây là endpoint công khai, và số lần gọi database
+       * cho mỗi lượt xem trang là thứ nhìn thấy được trên hoá đơn hạ tầng.
+       */
+      const { rows: hmRows } = await tx.query<{
+        ma: string; ten: string; gio: string;
+        chu_ky_km: number | null; chu_ky_thang: number | null;
+        vat_tu: { ten: string; gia: string; sl: string }[] | null;
+      }>(
+        `SELECT si.code AS ma, si.name AS ten, si.standard_hours AS gio,
+                mpi.interval_km AS chu_ky_km, mpi.interval_months AS chu_ky_thang,
+                (SELECT json_agg(json_build_object(
+                          'ten', pt.name,
+                          'gia', pli.sell_price::text,
+                          'sl',  mpp.quantity::text))
+                   FROM maintenance_plan_part mpp
+                   JOIN part pt ON pt.id = mpp.part_id
+                   LEFT JOIN price_list_item pli
+                     ON pli.part_id = pt.id AND pli.price_list_id = $2
+                  WHERE mpp.plan_item_id = mpi.id) AS vat_tu
+           FROM maintenance_plan_item mpi
+           JOIN service_item si ON si.id = mpi.service_item_id
+          WHERE si.is_active
+            AND $1::powertrain = ANY(si.applicable_powertrains)
+          ORDER BY si.code`,
+        [powertrain, bangGia.id],
+      );
+
+      const dungHangMuc = (rows: typeof hmRows): HangMucBaoDuong[] => rows.map((r) => ({
+        ma: r.ma,
+        ten: r.ten,
+        gioDinhMuc: Number(r.gio),
+        chuKyKm: r.chu_ky_km,
+        chuKyThang: r.chu_ky_thang,
+        vatTu: (r.vat_tu ?? [])
+          // Vật tư chưa có trong bảng giá thì BỎ QUA, không tính 0 đồng: một
+          // con số thiếu thà thiếu rõ ràng còn hơn sai mà trông đầy đủ.
+          .filter((v) => v.gia !== null && v.gia !== undefined)
+          .map((v) => ({ ten: v.ten, giaBan: BigInt(v.gia), soLuong: Number(v.sl) })),
+      }));
+
+      const tinh = (rows: typeof hmRows) =>
+        tinhChiPhiSoHuu({
+          hangMuc: dungHangMuc(rows),
+          giaCongMoiGio: BigInt(bangGia.labor_rate_per_hour),
+          kmMoiNam,
+          soNam,
+        });
+
+      const kq = tinh(hmRows);
+
+      /*
+       * 🔒 Mốc so sánh với xe xăng — tính bằng CHÍNH bảng giá và CHÍNH lịch bảo
+       *    dưỡng đó, chỉ đổi bộ lọc loại động cơ.
+       *
+       * 💡 Đây là điều làm cho câu "xe điện rẻ hơn" trở thành một PHÉP ĐO thay
+       *    vì một khẩu hiệu. Không có hằng số nào, không có tỉ lệ phần trăm nào
+       *    được gõ tay: cùng một xưởng, cùng một bảng giá, cùng một quãng đường
+       *    — khác nhau duy nhất ở chỗ xe xăng phải thay dầu, bugi và curoa cam.
+       *
+       * ⚠️ Chỉ trả về khi xe KHÔNG phải xe xăng. So sánh xe xăng với xe xăng là
+       *    một dòng vô nghĩa, và một con số vô nghĩa trên trang bán hàng sẽ bị
+       *    đọc thành một con số có nghĩa.
+       */
+      let soSanhXeXang: number | null = null;
+      if (powertrain !== 'ICE') {
+        const { rows: iceRows } = await tx.query<(typeof hmRows)[number]>(
+          `SELECT si.code AS ma, si.name AS ten, si.standard_hours AS gio,
+                  mpi.interval_km AS chu_ky_km, mpi.interval_months AS chu_ky_thang,
+                  (SELECT json_agg(json_build_object(
+                            'ten', pt.name,
+                            'gia', pli.sell_price::text,
+                            'sl',  mpp.quantity::text))
+                     FROM maintenance_plan_part mpp
+                     JOIN part pt ON pt.id = mpp.part_id
+                     LEFT JOIN price_list_item pli
+                       ON pli.part_id = pt.id AND pli.price_list_id = $1
+                    WHERE mpp.plan_item_id = mpi.id) AS vat_tu
+             FROM maintenance_plan_item mpi
+             JOIN service_item si ON si.id = mpi.service_item_id
+            WHERE si.is_active AND 'ICE'::powertrain = ANY(si.applicable_powertrains)
+            ORDER BY si.code`,
+          [bangGia.id],
+        );
+        soSanhXeXang = Number(tinh(iceRows).tong);
+      }
+
+      return {
+        kmMoiNam,
+        soNam,
+        theoNam: kq.theoNam.map((n) => ({
+          nam: n.nam,
+          tienCong: Number(n.tienCong),
+          tienVatTu: Number(n.tienVatTu),
+          tong: Number(n.tong),
+          hangMuc: n.hangMuc,
+        })),
+        tong: Number(kq.tong),
+        soSanhXeXang,
+        soNamKhongTon: kq.soNamKhongTon,
+        giaCongMoiGio: Number(bangGia.labor_rate_per_hour),
+        tenBangGia: bangGia.name,
+        ápDụngTừ: bangGia.effective_from.toISOString(),
       };
     });
   }
@@ -439,7 +651,167 @@ export class PublicLandingService {
       .replace(/\/+$/, '');
     return `${origin}/${storageKey}`;
   }
+
+  /* ===================================================================== */
+  /* Bóc giá lăn bánh — khoảnh khắc chữ ký của landing (DES-LS-002 §9)     */
+  /* ===================================================================== */
+
+  /**
+   * Trả về đúng những gì màn "Bóc giá lăn bánh" cần, trong MỘT lượt gọi:
+   * các khoản phí, khoản trả góp theo từng kỳ, ưu đãi đang chạy và khả năng
+   * giao xe.
+   *
+   * 🔒 Bốn thứ này phải đến từ **cùng một lượt đọc**. Gọi bốn endpoint rồi ghép
+   *    ở trình duyệt nghĩa là có lúc bảng phí đã đổi giữa lần gọi thứ nhất và
+   *    thứ tư, và khách nhìn thấy một tổng không cộng ra được từ các dòng ngay
+   *    bên trên nó.
+   *
+   * 🔒 Không nhận giá từ client. Giá đến từ `published_revision_id`, tỉnh đến từ
+   *    tham số, biểu phí đến từ bảng đang hiệu lực. Cho client truyền giá vào
+   *    là cho phép nó tự dựng một bảng giá rồi in ra mang tới showroom.
+   */
+  async bocGiaLanBanh(
+    ctx: PublicTenantContext,
+    slug: string,
+    opts: { provinceCode: string; variantKey?: string; colorId?: string; termMonths?: number; downPaymentBp?: number },
+  ): Promise<BocGiaView> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows: prodRows } = await tx.query<{ id: string; revisionId: string | null }>(
+        `SELECT p.id, p.published_revision_id AS "revisionId"
+           FROM vehicle_product p WHERE p.slug = $1 AND p.lifecycle_status <> 'ARCHIVED'`,
+        [slug],
+      );
+      const prod = prodRows[0];
+      if (prod === undefined || prod.revisionId === null) {
+        throw new BusinessError(ErrorCode.CONTENT_NOT_PUBLISHED, 'Xe chưa được giới thiệu');
+      }
+
+      const { rows: variantRows } = await tx.query<{
+        variantId: string; stableKey: string; name: string;
+        listPrice: string | null; powertrain: 'ICE' | 'HYBRID' | 'BEV'; batteryRental: string | null;
+      }>(
+        `SELECT vvr.variant_id AS "variantId", v.stable_key AS "stableKey", vvr.name,
+                vvr.display_price_amount::text AS "listPrice", vvr.powertrain,
+                vvr.battery_rental_amount::text AS "batteryRental"
+           FROM vehicle_variant_revision vvr
+           JOIN vehicle_variant v ON v.id = vvr.variant_id
+          WHERE vvr.product_revision_id = $1 AND vvr.inclusion_status = 'ACTIVE'
+          ORDER BY vvr.sort_order, vvr.name`,
+        [prod.revisionId],
+      );
+      const variant = opts.variantKey === undefined
+        ? variantRows[0]
+        : variantRows.find((v) => v.stableKey === opts.variantKey);
+      if (variant === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy phiên bản xe');
+
+      // Giá "Liên hệ" thì không có phép cộng nào để bóc. Nói thẳng, không bịa 0.
+      if (variant.listPrice === null) {
+        return { reason: 'PRICE_ON_REQUEST', variantName: variant.name } satisfies BocGiaView;
+      }
+
+      let colorSurcharge = 0n;
+      if (opts.colorId !== undefined) {
+        const { rows } = await tx.query<{ surcharge: string }>(
+          'SELECT surcharge_amount::text AS surcharge FROM vehicle_color WHERE id = $1 AND product_revision_id = $2',
+          [opts.colorId, prod.revisionId],
+        );
+        colorSurcharge = BigInt(rows[0]?.surcharge ?? '0');
+      }
+
+      const homNay = new Date().toISOString().slice(0, 10);
+      const breakdown = await this.showroom.quoteOnroad(tx, {
+        listPrice: BigInt(variant.listPrice),
+        colorSurcharge,
+        powertrain: variant.powertrain,
+        provinceCode: opts.provinceCode,
+        onDate: homNay,
+      });
+      if (breakdown === null) {
+        return { reason: 'NO_FEE_SCHEDULE', variantName: variant.name, provinceCode: opts.provinceCode } satisfies BocGiaView;
+      }
+
+      const uuDai = (await this.showroom.promotionsOfRevision(tx, prod.revisionId, new Date()))
+        .filter((u) => u.state === 'DANG_CHAY')
+        .map((u) => ({ kind: u.kind, title: u.title, conditionText: u.conditionText, valueAmount: u.valueAmount, endsAt: u.endsAt }));
+
+      const { rows: chuongTrinh } = await tx.query<{ id: string; bankName: string; allowedTermsMonths: number[]; downPaymentOptionsBp: number[]; minDownPaymentBp: number; rateUpdatedAt: Date }>(
+        `SELECT id, bank_name AS "bankName", allowed_terms_months AS "allowedTermsMonths",
+                down_payment_options_bp AS "downPaymentOptionsBp",
+                min_down_payment_bp AS "minDownPaymentBp", rate_updated_at AS "rateUpdatedAt"
+           FROM financing_program WHERE product_revision_id = $1 ORDER BY display_order, bank_name`,
+        [prod.revisionId],
+      );
+
+      const traGop = [];
+      for (const ct of chuongTrinh) {
+        const term = opts.termMonths !== undefined && ct.allowedTermsMonths.includes(opts.termMonths)
+          ? opts.termMonths
+          : ct.allowedTermsMonths[ct.allowedTermsMonths.length - 1]!;
+        const downBp = opts.downPaymentBp !== undefined && opts.downPaymentBp >= ct.minDownPaymentBp
+          ? opts.downPaymentBp
+          : ct.minDownPaymentBp;
+        const quote = await this.showroom.quoteFinancing(tx, ct.id, {
+          basePrice: breakdown.total,
+          downPaymentBp: downBp,
+          termMonths: term,
+        });
+        traGop.push({
+          programId: ct.id,
+          bankName: ct.bankName,
+          allowedTermsMonths: ct.allowedTermsMonths,
+          downPaymentOptionsBp: ct.downPaymentOptionsBp,
+          rateUpdatedAt: ct.rateUpdatedAt,
+          quote,
+        });
+      }
+
+      return {
+        reason: null,
+        variantName: variant.name,
+        batteryRentalAmount: variant.batteryRental === null ? null : BigInt(variant.batteryRental),
+        breakdown,
+        promotions: uuDai,
+        financing: traGop,
+        availability: await this.showroom.availabilityBadge(tx, prod.id),
+        deposit: await this.dieuKhoanCoc(tx, prod.revisionId),
+      } satisfies BocGiaView;
+    });
+  }
+
+  /**
+   * Điều khoản cọc — §4.11.
+   *
+   * 🔒 Đây là dữ liệu **nhập được ở admin mà landing không hiện ở đâu** trước
+   *    khi có hàm này. Cùng nhóm với giá thuê pin. Người nhập tưởng đã công bố,
+   *    khách không bao giờ thấy — loại lỗi im lặng nhất trong cả nhánh này.
+   */
+  private async dieuKhoanCoc(tx: PoolClient, revisionId: string) {
+    const { rows } = await tx.query<{ amount: string | null; holdDays: number | null; refundText: string | null }>(
+      `SELECT deposit_amount::text AS amount, deposit_hold_days AS "holdDays",
+              deposit_refund_text AS "refundText"
+         FROM vehicle_product_revision WHERE id = $1`,
+      [revisionId],
+    );
+    const row = rows[0];
+    if (row === undefined || row.amount === null) return null;
+    return { amount: BigInt(row.amount), holdDays: row.holdDays, refundText: row.refundText };
+  }
 }
+
+/** Kết quả bóc giá — ba nhánh, và hai nhánh "không có số" là trạng thái thật. */
+export type BocGiaView =
+  | { reason: 'PRICE_ON_REQUEST'; variantName: string }
+  | { reason: 'NO_FEE_SCHEDULE'; variantName: string; provinceCode: string }
+  | {
+      reason: null;
+      variantName: string;
+      batteryRentalAmount: bigint | null;
+      breakdown: NonNullable<Awaited<ReturnType<ShowroomService['quoteOnroad']>>>;
+      promotions: unknown[];
+      financing: unknown[];
+      availability: Awaited<ReturnType<ShowroomService['availabilityBadge']>>;
+      deposit: { amount: bigint; holdDays: number | null; refundText: string | null } | null;
+    };
 
 /**
  * Tách `nextCursor` thành mốc keyset, hoặc `null` nếu không dùng được.
@@ -462,13 +834,28 @@ export class PublicLandingService {
  * Cursor sai định dạng thì coi như không có — dữ liệu này đến từ URL công khai,
  * và một chuỗi hỏng không đáng để đổ lỗi 500 vào mặt khách.
  */
-function phanTichCursor(cursor?: string): { createdAt: Date; id: string } | null {
+/**
+ * 🔒 Mốc thời gian giữ nguyên CHUỖI, không dựng lại thành `Date`.
+ *
+ * Bản trước làm `new Date(...)` rồi đưa đối tượng đó xuống làm tham số. Driver
+ * `pg` tuần tự hoá `Date` bằng `toISOString()`, mà hàm đó cắt ở mili giây —
+ * nên dù chuỗi con trỏ có đủ sáu chữ số micro giây, ba chữ số cuối vẫn rụng
+ * ngay trước khi câu lệnh chạy. Chi tiết hậu quả: `common/con-tro-trang.ts`.
+ *
+ * Giữ chuỗi và để `$::timestamptz` ép kiểu ở phía Postgres thì không có chỗ nào
+ * cắt bớt. Kiểm hợp lệ bằng biểu thức thay vì bằng `Date.parse` — chuỗi ở đây
+ * do chính máy chủ sinh ra, nên đòi đúng khuôn dạng đó là hợp lý, và nó chặn
+ * luôn mọi thứ lạ đi vào một tham số kiểu ngày.
+ */
+const MAU_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
+
+function phanTichCursor(cursor?: string): { createdAt: string; id: string } | null {
   if (cursor === undefined || cursor === '') return null;
   const cat = cursor.lastIndexOf('_');
   if (cat <= 0) return null;
-  const createdAt = new Date(cursor.slice(0, cat));
+  const createdAt = cursor.slice(0, cat);
   const id = cursor.slice(cat + 1);
-  if (Number.isNaN(createdAt.getTime())) return null;
+  if (!MAU_MOC.test(createdAt)) return null;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
   return { createdAt, id };
 }

@@ -1,0 +1,39 @@
+/*
+ * Màn 5 · Chi nhánh giao xe — nền SÁNG.
+ *
+ * ⚠️ Bản dựng cho mỗi chi nhánh một trạng thái và một mốc thời gian giao riêng
+ *    ("Sẵn xe", "7 – 10 ngày"). API CÔNG KHAI không trả về khả năng giao theo
+ *    TỪNG chi nhánh — chỉ một nhãn phạm vi đã gộp (`availability.label`); bảng
+ *    theo chi nhánh nằm sau endpoint quản trị có xác thực. Nên ở đây nhãn gộp
+ *    đứng một mình phía trên danh sách. Đã ghi vào báo cáo bàn giao.
+ *
+ * 🔒 INV-LS-17: nhãn nói PHẠM VI, không bao giờ nói số lượng xe.
+ */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-9) 0;
+  background: var(--paper-0);
+  color: var(--paper-ink);
+}
+.dau { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-5); }
+.dau h2 { margin-top: var(--s-3); }
+
+.ds { display: grid; gap: var(--s-2); margin-top: var(--s-7); }
+.hang {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-5);
+  background: var(--paper-card);
+}
+.ten { flex: 1 1 240px; }
+.ten h3 { font-size: var(--fs-lead); letter-spacing: -.02em; }
+.ten p { margin-top: 3px; color: var(--paper-muted); font-size: var(--fs-xs); }
+.sdt { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.hang .nut { flex: 0 0 auto; }
+
+.ghiChu { margin-top: var(--s-5); }

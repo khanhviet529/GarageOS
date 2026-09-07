@@ -210,6 +210,16 @@ lead → giao xe → hậu mãi.
 | **L2** | Bàn giao xe sang GarageOS: `Customer` + `Vehicle` + `WarrantyCoverage`, idempotent | 2 | ⏳ chưa bắt đầu |
 | **L3** | Page builder có kiểm soát, BrandTheme, preview/rollback | 2.5 | ⏳ chưa bắt đầu |
 | **L4** | Showroom 360°/panorama, SEO Control Center | 3+ | ⏳ chưa bắt đầu |
+| **L5.1** | **Lõi tiền**: biểu phí lăn bánh theo tỉnh × động cơ, trả góp hai giai đoạn, ưu đãi có hạn, màu, tồn theo chi nhánh, nhật ký giá | 1 | ✅ migration `0071`–`0074`, hàm thuần + 40 test, API quản trị, khối bóc giá trên landing |
+| **L5.2** | Trang tĩnh, điều hướng, biểu mẫu, tin tức, câu hỏi thường gặp, cấu hình giao diện (`site_page` → `site_theme_setting`, SRS §4.8–4.10) | 2 | ⏳ chưa bắt đầu |
+
+> **L5** thêm ngày 2026-09-03 —
+> [SRS-LS-EXP-001](superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md).
+> Lý do: catalog L1 trả lời được "xe này tên gì, giá niêm yết bao nhiêu" nhưng
+> không trả lời được bốn câu người mua ô tô thực sự hỏi — lăn bánh bao nhiêu,
+> trả góp thế nào, có màu tôi muốn không, bao giờ nhận xe. L5 nằm ở phía hiển
+> thị: **không** thu tiền, **không** xét duyệt vay, **không** tồn theo VIN.
+> Kèm `INV-LS-16` → `INV-LS-22`.
 
 ### Điểm dừng đề nghị: hết L2
 

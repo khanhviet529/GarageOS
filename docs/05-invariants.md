@@ -652,6 +652,85 @@ kiện lọc tuỳ ý.
 
 ---
 
+## 9b. Bất biến catalog thương mại (`INV-LS-16` → `INV-LS-22`)
+
+Bổ sung 2026-09-03 cùng việc mở rộng Sales Admin sang catalog bán hàng. Ranh giới
+của cả nhóm này là một câu: **hệ thống được tính và hiển thị, không được cam kết
+hay thu tiền.** Đặc tả đầy đủ:
+[SRS-LS-EXP-001](superpowers/specs/2026-09-03-sales-admin-ecommerce-expansion.md).
+
+### `INV-LS-16` — Số tiền suy ra luôn mang nhãn ước tính 🔒 service 🧪
+
+Giá lăn bánh và khoản trả góp hàng tháng là **con số suy ra**, không phải giá
+bán. Payload public của chúng bắt buộc kèm nhãn ước tính và nguồn dữ liệu (tên
+bảng phí hoặc tên ngân hàng, kèm ngày hiệu lực). Thiếu nguồn thì không render.
+
+Một con số tiền hiện trên chính domain của đại lý, không nhãn, đọc như một lời
+chào giá. Ranh giới giữa "công cụ tham khảo" và "chào giá" phải nằm trong code,
+không nằm trong trí nhớ người viết nội dung.
+
+### `INV-LS-17` — Landing không hiển thị số lượng xe 🔒 DB 🧪
+
+Tồn xe biểu diễn bằng **trạng thái** (`SẴN_XE` | `SẮP_VỀ` | `ĐẶT_HÀNG`) và
+khoảng thời gian giao, không bằng con số. Enforce ở tầng thấp nhất:
+`vehicle_availability` **không có cột số lượng**.
+
+Hệ thống không nắm tồn vật lý theo VIN — đó vẫn là ngoài phạm vi. Hiển thị
+"còn 2 xe" là phát biểu một điều mình không biết.
+
+### `INV-LS-18` — Trả góp tính bằng hàm thuần, `bigint`, làm tròn từng kỳ 🔒 service 🧪
+
+Hàm nằm ở `packages/domain`, không import framework, không dùng `float`. Làm
+tròn ở **từng kỳ trả**, không ở tổng — cùng quy tắc với làm tròn từng dòng báo
+giá (nguyên tắc 3 trong [CLAUDE.md](../CLAUDE.md)).
+
+### `INV-LS-19` — Ưu đãi hết hạn biến mất bằng truy vấn, không bằng job 🔒 service 🧪
+
+```
+now() NOT BETWEEN starts_at AND ends_at  ⟹  không có trong payload public
+```
+
+Job dọn dẹp có thể chậm hoặc chết. Một ưu đãi đã hết hạn còn hiển thị là một cam
+kết sai với khách đang đứng ở showroom cầm điện thoại.
+
+### `INV-LS-20` — Thay đổi giá công bố để lại vết, chỉ `INSERT` 🔒 DB 🧪
+
+`vehicle_price_log` chỉ nhận `INSERT`; `garageos_app` không có `UPDATE`/`DELETE`.
+Cùng nguyên tắc chứng từ bất biến với `stock_movement` và `invoice`.
+
+Giá công bố là thứ khách chụp màn hình rồi mang đến showroom. Phải trả lời được
+"hôm 12/8 trang hiện bao nhiêu" mà không phải dựng lại revision.
+
+Cột `reason` là `NOT NULL`: nhật ký phải trả lời được cả *vì sao đổi*, không chỉ
+*ai đổi*. Giao diện có ô **Lý do đổi giá** bắt buộc trong hộp thoại xác nhận.
+
+### `INV-LS-21` — Quyền xuất bản tách khỏi quyền sửa 🔒 service 🧪
+
+`marketing:contentEdit` không kéo theo `marketing:contentPublish`. Người soạn
+nội dung và người đẩy nội dung ra công khai phải cấu hình được thành hai người.
+
+### `INV-LS-22` — Ảnh đã publish bắt buộc có mô tả thay thế 🔒 service 🧪
+
+```
+media dùng trong revision đã publish  ⟹  alt_text <> ''
+```
+
+Chặn ở bước **publish**, không ở bước upload: người tải ảnh và người viết nội
+dung thường không phải một người. Vừa là yêu cầu tiếp cận (WCAG 2.2 AA), vừa là
+yếu tố SEO của trang bán hàng.
+
+### Ngoại lệ có tên cho `INV-LS-13`
+
+`vehicle_availability` **không** thuộc revision và được đọc trực tiếp, không qua
+publication. Lý do: tồn và thời gian giao là **trạng thái vận hành** đổi vài lần
+mỗi tuần; nếu buộc đi qua revision thì mỗi lần một showroom đổi trạng thái sẽ
+kéo theo publish cả nội dung marketing đang soạn dở.
+
+Đây là ngoại lệ **duy nhất**. Ngoại lệ có tên thì kiểm được; ngoại lệ ngầm thì
+không.
+
+---
+
 ## 10. Bảng tổng hợp
 
 > 🔧 Cập nhật sau vòng review ([16-review.md](16-review.md)): `INV-Q-01` và

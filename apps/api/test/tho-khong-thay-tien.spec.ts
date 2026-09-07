@@ -128,6 +128,17 @@ before(async () => {
     `SELECT customer_id AS id FROM repair_order WHERE code = 'RO-DEMO-0001'`,
   );
 
+  // Catalog thương mại — mọi bề mặt quản trị của nó đều đầy tiền, nên phải nằm
+  // trong bài quét này chứ không phải được miễn.
+  const { rows: xe } = await pool.query<{ id: string; rev: string; variant: string }>(
+    `SELECT p.id, p.published_revision_id AS rev,
+            (SELECT v.id FROM vehicle_variant v WHERE v.product_id = p.id LIMIT 1) AS variant
+       FROM vehicle_product p WHERE p.slug = 'aurora-e1' LIMIT 1`,
+  );
+  const { rows: ctv } = await pool.query<{ id: string }>(
+    `SELECT id FROM financing_program ORDER BY display_order LIMIT 1`,
+  );
+
   duongDan = [
     '/api/v1/auth/me',
     '/api/v1/repair-orders?open=true',
@@ -168,6 +179,21 @@ before(async () => {
     '/api/v1/warehouses',
     '/api/v1/stock-takes',
     '/api/v1/vehicles/lookup?plate=30A12345',
+    '/api/v1/marketing/categories',
+    '/api/v1/marketing/testimonials',
+    '/api/v1/showroom/fee-schedules',
+    ...(xe[0] === undefined
+      ? []
+      : [
+          `/api/v1/marketing/vehicle-products/${xe[0].id}/revisions`,
+          `/api/v1/showroom/products/${xe[0].id}/price-log`,
+          `/api/v1/showroom/products/${xe[0].id}/availability`,
+          `/api/v1/showroom/revisions/${xe[0].rev}/promotions`,
+          `/api/v1/showroom/onroad-quote?variantId=${xe[0].variant}&provinceCode=01`,
+        ]),
+    ...(ctv[0] === undefined
+      ? []
+      : [`/api/v1/showroom/financing-quote?programId=${ctv[0].id}&basePrice=337380000&downPaymentBp=3000&termMonths=60`]),
     ...(kk[0] === undefined ? [] : [`/api/v1/stock-takes/${kk[0].id}`]),
     ...(wa[0] === undefined ? [] : [`/api/v1/assignments/${wa[0].id}/time`]),
     ...(ql[0] === undefined
@@ -259,6 +285,12 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'health', ':token', 'me',
       'vehicle-products', 'vehicle-products/:id', 'vehicle-products/:slug',
       'vehicle-products/:id/experiences', 'vehicle-products/:slug/experiences/:stableKey',
+      'vehicle-products/:slug/chi-phi-so-huu',
+      // Bóc giá lăn bánh: bề mặt CÔNG KHAI của landing. Khách mua xe được thấy
+      // tiền — đó là toàn bộ mục đích của trang. Không có JwtGuard nên token
+      // thợ cũng không liên quan.
+      'vehicle-products/:slug/gia-lan-banh',
+      'landing-page', 'landing-page-preview',
       'site-profile', 'branch-public-profiles', 'site', 'leads', 'leads/:id',
     ]);
 

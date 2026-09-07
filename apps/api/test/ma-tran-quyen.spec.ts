@@ -417,10 +417,97 @@ const KICH_BAN: KichBan[] = [
       call('POST', `/api/v1/marketing/vehicle-products/${UUID_GIA}/rollback`, undefined, v),
   },
   {
+    quyen: 'marketing:categoryRead',
+    ten: 'Xem category showroom',
+    goi: (v) => call('GET', '/api/v1/marketing/categories', undefined, v),
+  },
+  {
+    quyen: 'marketing:categoryWrite',
+    ten: 'Sửa category showroom',
+    goi: (v) => call('PATCH', `/api/v1/marketing/categories/${UUID_GIA}`, { name: 'Category test', slug: 'category-test', status: 'ACTIVE', sortOrder: 0, version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:reviewRead',
+    ten: 'Xem testimonial',
+    goi: (v) => call('GET', '/api/v1/marketing/testimonials', undefined, v),
+  },
+  {
+    quyen: 'marketing:reviewWrite',
+    ten: 'Sửa testimonial nháp',
+    goi: (v) => call('PATCH', `/api/v1/marketing/testimonials/${UUID_GIA}`, { displayName: 'Test', content: 'Nội dung testimonial hợp lệ', featured: false, sortOrder: 0, version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:reviewPublish',
+    ten: 'Publish testimonial',
+    goi: (v) => call('POST', `/api/v1/marketing/testimonials/${UUID_GIA}/publish`, undefined, v),
+  },
+  {
+    quyen: 'showroom:feeScheduleRead',
+    ten: 'Xem biểu phí lăn bánh',
+    goi: (v) => call('GET', '/api/v1/showroom/fee-schedules', undefined, v),
+  },
+  {
+    quyen: 'showroom:feeScheduleWrite',
+    ten: 'Sửa biểu phí lăn bánh',
+    goi: (v) =>
+      call('PUT', '/api/v1/showroom/fee-schedules', {
+        provinceCode: '98', provinceName: 'Tỉnh ma trận quyền', powertrain: 'ICE',
+        registrationFeeRateBp: 1000, plateFeeAmount: 1_000_000, inspectionFeeAmount: 340_000,
+        roadMaintenanceFeeAmount: 1_560_000, civilInsuranceFeeAmount: 480_000,
+        effectiveFrom: '2029-01-01',
+      }, v),
+  },
+  {
+    /*
+     * 🔒 INV-LS-21 ở dạng cụ thể nhất: đổi GIÁ tách khỏi sửa NỘI DUNG.
+     *    `MARKETING_EDITOR` sửa được mô tả và ảnh nhưng KHÔNG đổi được giá công
+     *    bố — giá là thứ khách chụp màn hình rồi mang đến showroom.
+     */
+    quyen: 'showroom:priceWrite',
+    ten: 'Đổi giá công bố',
+    goi: (v) =>
+      call('POST', `/api/v1/showroom/products/${UUID_GIA}/price`, {
+        variantId: UUID_GIA, newAmount: 999_000_000, reason: 'Kịch bản ma trận quyền',
+      }, v),
+  },
+  {
+    quyen: 'showroom:commerceWrite',
+    ten: 'Sửa ưu đãi và trả góp',
+    goi: (v) => call('PUT', `/api/v1/showroom/revisions/${UUID_GIA}/promotions`, [], v),
+  },
+  {
+    quyen: 'showroom:availabilityWrite',
+    ten: 'Cập nhật khả năng giao xe',
+    goi: (v) =>
+      call('PUT', `/api/v1/showroom/products/${UUID_GIA}/availability`, {
+        branchId: UUID_GIA, status: 'TAM_NGUNG', availableVariantIds: [], availableColorIds: [],
+      }, v),
+  },
+  {
     quyen: 'marketing:experienceRead',
     ten: 'Xem trải nghiệm xe',
     goi: (v) =>
       call('GET', `/api/v1/marketing/vehicle-products/${UUID_GIA}/experiences`, undefined, v),
+  },
+  {
+    quyen: 'marketing:landingRead',
+    ten: 'Xem trang landing',
+    goi: (v) => call('GET', '/api/v1/marketing/landing-pages', undefined, v),
+  },
+  {
+    quyen: 'marketing:landingWrite',
+    ten: 'Tạo bản nháp landing',
+    goi: (v) => call('POST', `/api/v1/marketing/landing-pages/${UUID_GIA}/draft`, undefined, v),
+  },
+  {
+    quyen: 'marketing:landingPublish',
+    ten: 'Publish landing',
+    goi: (v) => call('POST', `/api/v1/marketing/landing-pages/${UUID_GIA}/publish`, { version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:mediaRead',
+    ten: 'Xem thư viện media',
+    goi: (v) => call('GET', '/api/v1/marketing/media', undefined, v),
   },
   {
     quyen: 'marketing:experienceWrite',

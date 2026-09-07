@@ -114,7 +114,7 @@ async function giaHanPhien(): Promise<boolean> {
   return dangGiaHan;
 }
 
-async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res = await goiThuc(method, path, body);
 
   /*

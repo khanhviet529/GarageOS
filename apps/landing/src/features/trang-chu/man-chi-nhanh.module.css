@@ -1,0 +1,76 @@
+/*
+ * Màn 6 · Chi nhánh & niềm tin — nền SÁNG.
+ *
+ * 🔒 Đây là màn nhiều con số thứ hai của trang (địa chỉ, số điện thoại, đánh
+ *    giá), nên nó sáng. Cùng lý do với màn bóc giá.
+ */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-8) 0;
+  background: var(--paper-0);
+  color: var(--paper-ink);
+}
+
+.dau { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-6); }
+.dau h2 { max-width: 18ch; margin-top: var(--s-3); font-size: var(--fs-title-xl); }
+
+.soLieu { display: flex; flex-wrap: wrap; gap: var(--s-7); }
+.soLieu > div { display: grid; gap: 4px; }
+.soLieu dt {
+  font-family: var(--font-mono);
+  font-size: clamp(1.5rem, 2.4vw, 2.125rem);
+  font-weight: 500;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+.soLieu dd { max-width: 22ch; color: var(--paper-muted); font-size: var(--fs-xs); }
+
+.than {
+  display: grid;
+  gap: var(--s-5);
+  margin-top: var(--s-7);
+  grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr);
+}
+
+/*
+ * Giếng bản đồ. Bản đồ nhúng CHỈ tải khi khách chạm — một iframe bên thứ ba tải
+ * sẵn trên trang công khai là một yêu cầu mạng thay khách, tới một máy chủ
+ * khách không chọn.
+ */
+.banDo {
+  display: grid;
+  min-height: 380px;
+  align-content: center;
+  justify-items: center;
+  gap: var(--s-3);
+  padding: var(--s-6);
+  background: var(--paper-1);
+  color: var(--paper-muted);
+  text-align: center;
+}
+.banDoGhiChu { font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: .16em; text-transform: uppercase; }
+
+.ds { display: grid; align-content: start; gap: var(--s-2); }
+.the {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid transparent;
+  background: var(--paper-card);
+  color: var(--paper-ink);
+  transition: border-color var(--nhanh) var(--ease-out);
+}
+.the:hover { border-color: var(--paper-ink); }
+.the svg { flex: 0 0 auto; margin-top: 2px; color: var(--signal-light); }
+.the h3 { font-size: var(--fs-lead); letter-spacing: -.02em; }
+.the p { color: var(--paper-muted); font-size: var(--fs-xs); }
+.the .sdt { margin-top: 4px; color: var(--paper-ink); font-family: var(--font-mono); font-size: var(--fs-xs); }
+
+@media (max-width: 960px) {
+  .than { grid-template-columns: minmax(0, 1fr); }
+  .banDo { min-height: 220px; }
+}

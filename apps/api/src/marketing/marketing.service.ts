@@ -6,6 +6,9 @@ import { normalizeSlug } from '@garageos/domain';
 import { contentHashOf } from '../common/content-hash';
 import {
   ErrorCode,
+  canonicalizeRichTextDocument,
+  richTextFromPlainText,
+  richTextToPlainText,
   type ActorContext,
   type CreateVariantInput,
   type CreateVehicleProductInput,
@@ -104,7 +107,7 @@ export class MarketingService {
       }
       const { rows: revs } = await tx.query<Record<string, unknown>>(
         `SELECT id, revision_number, status, schema_version, name, make_name, model_name,
-                summary, description, seo_title, seo_description, content_hash,
+                summary, description, description_document, seo_title, seo_description, content_hash,
                 published_at, published_by, version
            FROM vehicle_product_revision
           WHERE product_id = $1
@@ -141,9 +144,9 @@ export class MarketingService {
       const id = randomUUID();
       try {
         await tx.query(
-          `INSERT INTO vehicle_product (id, tenant_id, slug, stable_key, created_by, updated_by)
-           VALUES ($1, $2, $3, $4, $5, $5)`,
-          [id, actor.tenantId, slug, `product-${id.slice(0, 8)}`, actor.userId],
+          `INSERT INTO vehicle_product (id, tenant_id, slug, stable_key, category_id, created_by, updated_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+          [id, actor.tenantId, slug, `product-${id.slice(0, 8)}`, input.categoryId ?? null, actor.userId],
         );
       } catch (err) {
         if (isUniqueViolation(err)) {
@@ -153,6 +156,8 @@ export class MarketingService {
       }
 
       const revisionId = randomUUID();
+      const descriptionDocument = input.descriptionDocument ?? richTextFromPlainText(input.description);
+      const description = richTextToPlainText(descriptionDocument);
       const contentHash = contentHashOf(
         JSON.stringify({
           schemaVersion: 1,
@@ -160,7 +165,7 @@ export class MarketingService {
           makeName: input.makeName,
           modelName: input.modelName,
           summary: input.summary,
-          description: input.description,
+          descriptionDocument: canonicalizeRichTextDocument(descriptionDocument),
           seoTitle: input.seoTitle ?? null,
           seoDescription: input.seoDescription ?? null,
         }),
@@ -168,12 +173,12 @@ export class MarketingService {
       await tx.query(
         `INSERT INTO vehicle_product_revision
            (id, tenant_id, product_id, revision_number, name, make_name, model_name,
-            summary, description, seo_title, seo_description, content_hash,
+            summary, description, description_document, seo_title, seo_description, content_hash,
             created_by, updated_by)
-         VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)`,
+         VALUES ($1,$2,$3,1,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$13)`,
         [
           revisionId, actor.tenantId, id, input.name, input.makeName, input.modelName,
-          input.summary, input.description, input.seoTitle ?? null,
+          input.summary, description, canonicalizeRichTextDocument(descriptionDocument), input.seoTitle ?? null,
           input.seoDescription ?? null, contentHash, actor.userId,
         ],
       );
@@ -200,9 +205,19 @@ export class MarketingService {
       };
       if (input.name !== undefined) push('name', input.name);
       if (input.summary !== undefined) push('summary', input.summary);
-      if (input.description !== undefined) push('description', input.description);
+      if (input.descriptionDocument !== undefined) {
+        push('description_document', canonicalizeRichTextDocument(input.descriptionDocument));
+        push('description', richTextToPlainText(input.descriptionDocument));
+      } else if (input.description !== undefined) {
+        const document = richTextFromPlainText(input.description);
+        push('description_document', canonicalizeRichTextDocument(document));
+        push('description', richTextToPlainText(document));
+      }
       if (input.seoTitle !== undefined) push('seo_title', input.seoTitle ?? null);
       if (input.seoDescription !== undefined) push('seo_description', input.seoDescription ?? null);
+      if (input.categoryId !== undefined) {
+        await tx.query('UPDATE vehicle_product SET category_id=$2, updated_by=$3 WHERE id=$1', [id, input.categoryId, actor.userId]);
+      }
       if (sets.length > 0) {
         params.push(actor.userId);
         sets.push(`updated_by = $${params.length}`);
@@ -219,6 +234,11 @@ export class MarketingService {
             'Bản nháp đã thay đổi ở nơi khác, hãy tải lại',
           );
         }
+        const contentHash = await this.rehashProductDraft(tx, draftId);
+        await tx.query(
+          'UPDATE vehicle_product_revision SET content_hash = $2 WHERE id = $1',
+          [draftId, contentHash],
+        );
       }
       await this.audit(tx, actor, AUDIT.PRODUCT_UPDATED, 'vehicle_product', id);
       const { rows } = await tx.query<{ version: string }>(
@@ -1032,7 +1052,7 @@ export class MarketingService {
   /** Hash canonical projection của draft gồm revision + variant + media. */
   private async rehashProductDraft(tx: PoolClient, draftId: string): Promise<string> {
     const { rows: revRows } = await tx.query<Record<string, unknown>>(
-      `SELECT schema_version, name, make_name, model_name, summary, description,
+      `SELECT schema_version, name, make_name, model_name, summary, description_document,
               seo_title, seo_description
          FROM vehicle_product_revision WHERE id = $1`,
       [draftId],
@@ -1063,7 +1083,7 @@ export class MarketingService {
         makeName: rev.make_name,
         modelName: rev.model_name,
         summary: rev.summary,
-        description: rev.description,
+        descriptionDocument: canonicalizeRichTextDocument(rev.description_document as Parameters<typeof canonicalizeRichTextDocument>[0]),
         seoTitle: rev.seo_title ?? null,
         seoDescription: rev.seo_description ?? null,
         variants: varRows.map((v) => ({
@@ -1150,9 +1170,9 @@ export class MarketingService {
     await tx.query(
       `INSERT INTO vehicle_product_revision
          (id, tenant_id, product_id, revision_number, name, make_name, model_name,
-          summary, description, seo_title, seo_description, content_hash, created_by, updated_by)
+          summary, description, description_document, seo_title, seo_description, content_hash, created_by, updated_by)
        SELECT $1, tenant_id, product_id, $2, name, make_name, model_name,
-              summary, description, seo_title, seo_description, content_hash, $3, $3
+              summary, description, description_document, seo_title, seo_description, content_hash, $3, $3
          FROM vehicle_product_revision WHERE id = $4`,
       [newId, soMoi, actor.userId, sourceRevisionId],
     );
@@ -1389,6 +1409,7 @@ export class MarketingService {
       modelName: r.model_name,
       summary: r.summary,
       description: r.description,
+      descriptionDocument: r.description_document,
       seoTitle: r.seo_title ?? null,
       seoDescription: r.seo_description ?? null,
       contentHash: r.content_hash,

@@ -7,6 +7,7 @@ import {
   type LeadCreateResult,
   type PublicProductDetail,
   type PublicProductSummary,
+  type PublicTestimonial,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { LeadRateLimitGuard } from '../common/lead-rate-limit.guard';
@@ -14,6 +15,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { SalesService } from '../sales/sales.service';
 import { TenantContextService, type TenantResolution } from './tenant-context.service';
 import { PublicLandingService } from './public-landing.service';
+import { LandingPageService } from '../landing-page/landing-page.service';
 
 /**
  * Public API cho landing — SRS Phase 1 mục 11.1.
@@ -27,6 +29,7 @@ export class PublicLandingController {
     @Inject(PublicLandingService) private readonly svc: PublicLandingService,
     @Inject(SalesService) private readonly sales: SalesService,
     @Inject(TenantContextService) private readonly tenantCtx: TenantContextService,
+    @Inject(LandingPageService) private readonly landingPages: LandingPageService,
   ) {}
 
   @Get('site')
@@ -35,6 +38,31 @@ export class PublicLandingController {
     if (!this.applyAliasRedirect(r, req, res)) return;
     const ctx = this.requireContext(r);
     res.json(await this.svc.site(ctx, this.tenantCtx.scheme()));
+  }
+
+  @Get('landing-page')
+  async landingPage(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const resolution = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(resolution, req, res)) return;
+    const ctx = this.requireContext(resolution);
+    const document = await this.landingPages.publicPublished(ctx.tenantId);
+    if (document === null) throw new BusinessError(ErrorCode.CONTENT_NOT_PUBLISHED, 'Chưa có landing page được publish');
+    res.json(document);
+  }
+
+  @Get('landing-page-preview')
+  async landingPagePreview(@Query('token') token: string | undefined, @Res() res: Response): Promise<void> {
+    if (token === undefined || token.length > 256) throw new BusinessError(ErrorCode.PREVIEW_NOT_FOUND, 'Preview không tồn tại');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.json(await this.landingPages.publicPreview(token));
+  }
+
+  @Get('testimonials')
+  async testimonials(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const resolution = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(resolution, req, res)) return;
+    res.json({ items: await this.svc.testimonials(this.requireContext(resolution)) } as { items: PublicTestimonial[] });
   }
 
   @Get('vehicle-products')
@@ -65,6 +93,73 @@ export class PublicLandingController {
     const ctx = this.requireContext(r);
     const detail: PublicProductDetail = await this.svc.productDetail(ctx, slug);
     res.json(detail);
+  }
+
+  /**
+   * Chi phí bảo dưỡng N năm — thứ mà chỉ hệ thống vừa bán xe vừa vận hành xưởng
+   * mới trả lời được.
+   */
+  @Get('vehicle-products/:slug/chi-phi-so-huu')
+  async chiPhiSoHuu(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('slug') slug: string,
+    @Query('kmMoiNam') kmMoiNam?: string,
+    @Query('soNam') soNam?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+
+    /*
+     * Tham số từ URL công khai: `Number('abc')` cho `NaN`, và `NaN` lọt qua mọi
+     * phép so sánh mà không ném lỗi. Chốt về mặc định thay vì tin đầu vào.
+     */
+    const km = Number(kmMoiNam);
+    const nam = Number(soNam);
+    const kq = await this.svc.chiPhiSoHuu(ctx, slug, {
+      kmMoiNam: Number.isFinite(km) ? km : 15_000,
+      soNam: Number.isFinite(nam) ? nam : 5,
+    });
+    res.json(kq);
+  }
+
+  /**
+   * Bóc giá lăn bánh — phép cộng, khoản trả góp, ưu đãi và khả năng giao xe
+   * trong MỘT lượt gọi. Xem `PublicLandingService.bocGiaLanBanh`.
+   */
+  @Get('vehicle-products/:slug/gia-lan-banh')
+  async bocGia(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('slug') slug: string,
+    @Query('provinceCode') provinceCode?: string,
+    @Query('variantKey') variantKey?: string,
+    @Query('colorId') colorId?: string,
+    @Query('termMonths') termMonths?: string,
+    @Query('downPaymentBp') downPaymentBp?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const ctx = this.requireContext(r);
+
+    // Tham số từ URL công khai: chốt về mặc định thay vì tin đầu vào.
+    if (provinceCode === undefined || !/^[0-9]{2,3}$/.test(provinceCode)) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Thiếu mã tỉnh/thành hợp lệ.');
+    }
+    const term = Number(termMonths);
+    const down = Number(downPaymentBp);
+    const kq = await this.svc.bocGiaLanBanh(ctx, slug, {
+      provinceCode,
+      variantKey,
+      colorId: /^[0-9a-f-]{36}$/i.test(colorId ?? '') ? colorId : undefined,
+      termMonths: Number.isInteger(term) && term > 0 ? term : undefined,
+      downPaymentBp: Number.isInteger(down) && down >= 0 ? down : undefined,
+    });
+    // `bigint` không đi qua JSON.stringify mặc định — đổi sang chuỗi, không sang
+    // `number`: một con số tiền tám chữ số vẫn an toàn, nhưng quy tắc phải đồng
+    // nhất ở mọi bề mặt, nếu không có ngày nó lọt qua chỗ không an toàn.
+    res.json(JSON.parse(JSON.stringify(kq, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))));
   }
 
   @Get('vehicle-products/:slug/experiences/:stableKey')

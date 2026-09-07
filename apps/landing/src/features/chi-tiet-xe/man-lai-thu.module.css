@@ -1,0 +1,19 @@
+/* Màn 6 · Đăng ký lái thử — chữ trái, biểu mẫu phải. */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-9) 0;
+  background: var(--photo);
+}
+.luoi { display: grid; align-items: start; gap: var(--s-8); grid-template-columns: minmax(0, 1fr) minmax(340px, 520px); }
+.chu h2 { max-width: 16ch; margin-top: var(--s-4); font-size: var(--fs-title-xl); }
+.dan { max-width: 44ch; margin-top: var(--s-5); color: var(--text-muted); }
+.diem { display: grid; gap: var(--s-3); margin-top: var(--s-6); }
+.diem li { display: flex; align-items: flex-start; gap: var(--s-3); color: var(--text-muted); font-size: var(--fs-sm); }
+.diem svg { flex: 0 0 auto; margin-top: 3px; color: var(--signal-dark); }
+
+.hop { padding: var(--s-6); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--ink-1); }
+
+@media (max-width: 960px) { .luoi { gap: var(--s-6); grid-template-columns: minmax(0, 1fr); } }

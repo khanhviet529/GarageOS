@@ -47,10 +47,33 @@ test.describe('Trang bán xe công khai', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
+  test('LD-E07 — trang danh sách xe LIỆT KÊ được xe, không phải trạng thái rỗng', async ({ page }) => {
+    /*
+     * ⚠️ Bài này sinh ra từ một lỗi đã sống suốt cả nhánh: `/xe` ghép chuỗi truy
+     *    vấn bằng tay, và khi KHÔNG có bộ lọc thì URL thành
+     *    `/vehicle-products&limit=50` — dấu `&` đứng đầu, không có `?`. API trả
+     *
+     *        Cannot GET /api/v1/public/vehicle-products&limit=50
+     *
+     *    rồi một `catch` nuốt nó thành mảng rỗng. Trang hiện "Chưa có xe nào
+     *    được giới thiệu" — câu hoàn toàn hợp lý cho một showroom mới mở.
+     *
+     * 💡 Trạng thái rỗng luôn trông vô hại, nên nó là chỗ trú tốt nhất cho lỗi.
+     *    Một bài kiểm chỉ hỏi "trang có mở được không" sẽ không bao giờ thấy;
+     *    phải hỏi "trang có NỘI DUNG không".
+     */
+    await page.goto(`${LANDING}/xe`);
+
+    const theXe = page.locator('a[href^="/xe/"]');
+    await expect(theXe.first()).toBeVisible();
+    expect(await theXe.count()).toBeGreaterThan(0);
+    await expect(page.getByText(/chưa có xe nào/i)).toHaveCount(0);
+  });
+
   test('LD-E02 — trang chi tiết xe nói giá, và giá đó khớp một phiên bản có thật', async ({
     page,
   }) => {
-    await page.goto(`${LANDING}/xe/vinfast-vf-3`);
+    await page.goto(`${LANDING}/xe/aurora-e1`);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     /*
@@ -109,7 +132,7 @@ test.describe('Trang bán xe công khai', () => {
     expect(tenA).not.toEqual(tenB);
 
     // Xe của tenant A không được xuất hiện trên site của tenant B.
-    await expect(page.locator('a[href="/xe/vinfast-vf-3"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/xe/aurora-e1"]')).toHaveCount(0);
   });
 
   test('LD-E06 — ẢNH trên trang xe tải được thật, không phải ô trắng', async ({ page }) => {
@@ -127,7 +150,7 @@ test.describe('Trang bán xe công khai', () => {
      *    LD-E01..E05 đều xanh vì chúng kiểm chữ, không kiểm ảnh. Một trang bán
      *    xe không có ảnh xe thì không bán được gì.
      */
-    await page.goto(`${LANDING}/xe/vinfast-vf-3`);
+    await page.goto(`${LANDING}/xe/aurora-e1`);
 
     const anh = page.locator('img[src*="/media/"]').first();
     await expect(anh).toBeVisible();
@@ -144,5 +167,68 @@ test.describe('Trang bán xe công khai', () => {
   test('LD-E05 — trang xe không tồn tại trả 404, không phải lỗi 500', async ({ page }) => {
     const res = await page.goto(`${LANDING}/xe/khong-co-chiec-xe-nao-ten-nay`);
     expect(res?.status()).toBe(404);
+  });
+
+  /*
+   * 🔒 LD-E08 — Con số chi phí phải ở trong HTML ĐẦU TIÊN, không chờ JS.
+   *
+   * Khối chi phí bản trước là client-side và nằm ở trang chi tiết, nên nó không
+   * được crawl và không hiện khi JS chưa chạy. Bài này khoá lại hành vi mới:
+   * trang chủ render sẵn con số VÀ tên bảng giá.
+   *
+   * ⚠️ Kiểm bằng `page.content()` sau `waitUntil: 'domcontentloaded'` thay vì
+   *    `getByText`, vì `getByText` cũng xanh khi chữ do JS chèn vào sau — tức là
+   *    nó không phân biệt được đúng thứ bài này muốn phân biệt.
+   */
+  test('LD-E08 — trang chủ nói chi phí bảo dưỡng kèm tên bảng giá, ngay trong HTML server', async ({
+    page,
+  }) => {
+    await page.goto(LANDING, { waitUntil: 'domcontentloaded' });
+    const html = await page.content();
+
+    expect(html).toContain('Bảng giá');
+    // Một số tiền có phân cách nghìn kiểu vi-VN, ví dụ "15.585.000".
+    expect(html).toMatch(/\d{1,3}(\.\d{3}){2,}/);
+  });
+
+  /*
+   * 🔒 LD-E09 — Nút trên phiếu phải dẫn tới đúng neo có thật.
+   *
+   * Một CTA trỏ tới `#chi-phi` mà trang đích không có `id` đó thì vẫn "hoạt
+   * động": trình duyệt mở trang và đứng ở đầu. Không có lỗi nào, và khách chỉ
+   * thấy nút không làm gì. Bài này kiểm rằng neo TỒN TẠI.
+   */
+  test('LD-E09 — CTA của phiếu chi phí dẫn tới neo có thật trên trang chi tiết', async ({
+    page,
+  }) => {
+    await page.goto(LANDING);
+    const cta = page.getByRole('link', { name: 'Xem chi tiết từng năm' });
+    await expect(cta).toBeVisible();
+
+    const href = await cta.getAttribute('href');
+    expect(href).not.toBeNull();
+    expect(href as string).toContain('#chi-phi');
+
+    await cta.click();
+    await expect(page.locator('#chi-phi')).toBeAttached();
+  });
+
+  /*
+   * 🔒 LD-E10 — Ngày hiệu lực phải là ngày người Việt đọc được, không phải ISO.
+   *
+   * ⚠️ API trả `ápDụngTừ` dạng `2025-12-31T17:00:00.000Z`. In thẳng thì khách
+   *    thấy một timestamp máy VÀ nó lệch ngày: 17:00Z là 01/01/2026 ở Việt Nam.
+   *    Cả khối phiếu tồn tại để con số kiểm chứng được, nên một ngày sai làm hỏng
+   *    đúng điều nó khẳng định.
+   */
+  test('LD-E10 — ngày hiệu lực bảng giá hiện dạng dd/mm/yyyy, không phải ISO', async ({
+    page,
+  }) => {
+    await page.goto(LANDING, { waitUntil: 'domcontentloaded' });
+    const html = await page.content();
+
+    expect(html).toMatch(/hiệu lực từ[^<]*(<!-- -->)?\d{2}\/\d{2}\/\d{4}/);
+    // Không được lọt timestamp ISO ra trang.
+    expect(html).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
   });
 });

@@ -18,6 +18,7 @@ import {
   type LeadView,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
+import { MOC_CON_TRO, ghepConTro } from '../common/con-tro-trang';
 import type { PublicTenantContext } from '../public-landing/tenant-context.service';
 
 /**
@@ -127,7 +128,7 @@ export class SalesService {
       let nextCursor: string | null = null;
       if (rows.length > limit) {
         const cuoi = rows[limit - 1]!;
-        nextCursor = `${(cuoi.created_at as Date).toISOString()}_${cuoi.id as string}`;
+        nextCursor = ghepConTro(cuoi);
       }
       return { items: rows.slice(0, limit).map((r) => this.toLeadView(r)), nextCursor };
     });
@@ -449,6 +450,7 @@ export class SalesService {
       ${alias}.utm_source, ${alias}.utm_medium, ${alias}.utm_campaign,
       ${alias}.next_action_at, ${alias}.duplicate_of_id, ${alias}.redacted_at,
       ${alias}.version, ${alias}.created_at, ${alias}.updated_at,
+      ${MOC_CON_TRO(alias)},
       au.full_name AS assignee_name,
       vpr.name AS product_name, vvr.name AS variant_name`;
   }

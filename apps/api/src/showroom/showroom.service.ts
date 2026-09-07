@@ -1,0 +1,449 @@
+import { Inject, Injectable } from '@nestjs/common';
+import type { PoolClient } from 'pg';
+import { TenantAwareDb } from '@garageos/db';
+import {
+  ErrorCode,
+  type ActorContext,
+  type FinancingProgramInput,
+  type OnroadFeeScheduleInput,
+  type OnroadPriceBreakdown,
+  type Powertrain,
+  type PriceChangeInput,
+  type VehicleAvailabilityInput,
+  type VehicleColorInput,
+  type VehiclePromotionInput,
+} from '@garageos/contracts';
+import {
+  bieuPhiHieuLuc,
+  nhanKhaNangGiao,
+  tinhGiaLanBanh,
+  tinhTraGop,
+  trangThaiUuDai,
+  type BieuPhiLanBanh,
+  type KetQuaTraGop,
+} from '@garageos/domain';
+import { BusinessError } from '../common/errors';
+
+/**
+ * Catalog thương mại — SRS-LS-EXP-001 §4.
+ *
+ * 🔒 Service này **không tính toán gì cả**. Mọi phép tính nằm ở
+ *    `packages/domain` dưới dạng hàm thuần, có test riêng, không import
+ *    framework (`CLAUDE.md` nguyên tắc 5). Ở đây chỉ có: đọc dữ liệu, gọi hàm,
+ *    ghi vết. Nếu một công thức xuất hiện trong file này thì đó là bản sao thứ
+ *    hai, và hai công thức thì sớm muộn cũng lệch nhau.
+ */
+
+const AUDIT = {
+  FEE_SCHEDULE_WRITTEN: 'SHOWROOM_FEE_SCHEDULE_WRITTEN',
+  PRICE_CHANGED: 'SHOWROOM_PRICE_CHANGED',
+  PROMOTION_TOGGLED: 'SHOWROOM_PROMOTION_TOGGLED',
+  AVAILABILITY_UPDATED: 'SHOWROOM_AVAILABILITY_UPDATED',
+} as const;
+
+export interface FeeScheduleRow {
+  id: string;
+  provinceCode: string;
+  provinceName: string;
+  powertrain: Powertrain;
+  registrationFeeRateBp: number;
+  plateFeeAmount: string;
+  inspectionFeeAmount: string;
+  roadMaintenanceFeeAmount: string;
+  civilInsuranceFeeAmount: string;
+  materialInsuranceRateBp: number;
+  dealerFeeAmount: string;
+  dealerFeeLabel: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+@Injectable()
+export class ShowroomService {
+  constructor(@Inject(TenantAwareDb) private readonly db: TenantAwareDb) {}
+
+  /* ======================== Biểu phí lăn bánh (§4.1) ======================= */
+
+  async listFeeSchedules(actor: ActorContext, provinceCode?: string): Promise<FeeScheduleRow[]> {
+    return this.db.withTenant(actor, async (tx) => this.readFeeSchedules(tx, provinceCode));
+  }
+
+  private async readFeeSchedules(tx: PoolClient, provinceCode?: string): Promise<FeeScheduleRow[]> {
+    const { rows } = await tx.query<FeeScheduleRow>(
+      `SELECT id, province_code AS "provinceCode", province_name AS "provinceName", powertrain,
+              registration_fee_rate_bp AS "registrationFeeRateBp",
+              plate_fee_amount::text AS "plateFeeAmount",
+              inspection_fee_amount::text AS "inspectionFeeAmount",
+              road_maintenance_fee_amount::text AS "roadMaintenanceFeeAmount",
+              civil_insurance_fee_amount::text AS "civilInsuranceFeeAmount",
+              material_insurance_rate_bp AS "materialInsuranceRateBp",
+              dealer_fee_amount::text AS "dealerFeeAmount",
+              dealer_fee_label AS "dealerFeeLabel",
+              to_char(effective_from,'YYYY-MM-DD') AS "effectiveFrom",
+              to_char(effective_to,'YYYY-MM-DD') AS "effectiveTo"
+         FROM onroad_fee_schedule
+        WHERE ($1::text IS NULL OR province_code = $1)
+        ORDER BY province_name, powertrain, effective_from DESC`,
+      [provinceCode ?? null],
+    );
+    return rows;
+  }
+
+  async upsertFeeSchedule(actor: ActorContext, input: OnroadFeeScheduleInput): Promise<{ id: string }> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO onroad_fee_schedule
+           (tenant_id, province_code, province_name, powertrain, registration_fee_rate_bp,
+            plate_fee_amount, inspection_fee_amount, road_maintenance_fee_amount,
+            civil_insurance_fee_amount, material_insurance_rate_bp,
+            dealer_fee_amount, dealer_fee_label, effective_from, effective_to,
+            created_by, updated_by)
+         VALUES ($1,$2,$3,$4::powertrain,$5,$6,$7,$8,$9,$10,$11,$12,$13::date,$14::date,$15,$15)
+         ON CONFLICT (tenant_id, province_code, powertrain, effective_from) DO UPDATE SET
+           province_name = EXCLUDED.province_name,
+           registration_fee_rate_bp = EXCLUDED.registration_fee_rate_bp,
+           plate_fee_amount = EXCLUDED.plate_fee_amount,
+           inspection_fee_amount = EXCLUDED.inspection_fee_amount,
+           road_maintenance_fee_amount = EXCLUDED.road_maintenance_fee_amount,
+           civil_insurance_fee_amount = EXCLUDED.civil_insurance_fee_amount,
+           material_insurance_rate_bp = EXCLUDED.material_insurance_rate_bp,
+           dealer_fee_amount = EXCLUDED.dealer_fee_amount,
+           dealer_fee_label = EXCLUDED.dealer_fee_label,
+           effective_to = EXCLUDED.effective_to,
+           updated_by = EXCLUDED.updated_by
+         RETURNING id`,
+        [
+          actor.tenantId, input.provinceCode, input.provinceName, input.powertrain,
+          input.registrationFeeRateBp, String(input.plateFeeAmount), String(input.inspectionFeeAmount),
+          String(input.roadMaintenanceFeeAmount), String(input.civilInsuranceFeeAmount),
+          input.materialInsuranceRateBp, String(input.dealerFeeAmount), input.dealerFeeLabel ?? null,
+          input.effectiveFrom, input.effectiveTo ?? null, actor.userId,
+        ],
+      );
+      const id = rows[0]!.id;
+      await ghiNhatKy(tx, actor, AUDIT.FEE_SCHEDULE_WRITTEN, 'onroad_fee_schedule', id, null);
+      return { id };
+    });
+  }
+
+  /* ===================== Giá lăn bánh cho một phiên bản ==================== */
+
+  /**
+   * 🔒 Không có biểu phí cho tỉnh khách chọn thì trả `null`, **không** rơi về
+   *    một tỉnh khác và không đoán. Bề mặt phải đổi sang trạng thái "Chưa có
+   *    biểu phí cho tỉnh này" và chỉ hiện giá niêm yết. Thà thiếu một con số
+   *    còn hơn hiện con số của tỉnh khác — khách mang nó đi nộp thuế thật.
+   */
+  async quoteOnroad(
+    tx: PoolClient,
+    input: { listPrice: bigint; colorSurcharge?: bigint; powertrain: Powertrain; provinceCode: string; onDate: string },
+  ): Promise<OnroadPriceBreakdown | null> {
+    const rows = await this.readFeeSchedules(tx, input.provinceCode);
+    const cungLoaiDongCo = rows.filter((r) => r.powertrain === input.powertrain);
+    const hieuLuc = bieuPhiHieuLuc(cungLoaiDongCo, input.onDate);
+    if (hieuLuc === null) return null;
+
+    const bieuPhi: BieuPhiLanBanh = {
+      provinceName: hieuLuc.provinceName,
+      powertrain: hieuLuc.powertrain,
+      registrationFeeRateBp: hieuLuc.registrationFeeRateBp,
+      plateFeeAmount: BigInt(hieuLuc.plateFeeAmount),
+      inspectionFeeAmount: BigInt(hieuLuc.inspectionFeeAmount),
+      roadMaintenanceFeeAmount: BigInt(hieuLuc.roadMaintenanceFeeAmount),
+      civilInsuranceFeeAmount: BigInt(hieuLuc.civilInsuranceFeeAmount),
+      materialInsuranceRateBp: hieuLuc.materialInsuranceRateBp,
+      dealerFeeAmount: BigInt(hieuLuc.dealerFeeAmount),
+      dealerFeeLabel: hieuLuc.dealerFeeLabel,
+      effectiveFrom: hieuLuc.effectiveFrom,
+    };
+    return tinhGiaLanBanh({ listPrice: input.listPrice, colorSurcharge: input.colorSurcharge }, bieuPhi);
+  }
+
+  /* ============================ Đổi giá (§4.6) ============================= */
+
+  /**
+   * 🔒 `INV-LS-20`: đổi giá công bố và ghi vết là **một transaction**.
+   *
+   * Tách ra hai lệnh nghĩa là có một trạng thái trung gian trong đó giá đã đổi
+   * mà nhật ký chưa có dòng — và đó chính là trạng thái sẽ tồn tại vĩnh viễn
+   * nếu lệnh thứ hai lỗi. Nhật ký có lỗ hổng còn tệ hơn không có nhật ký, vì
+   * người ta tin nó.
+   */
+  async changePrice(actor: ActorContext, productId: string, input: PriceChangeInput): Promise<{ logged: boolean }> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ revisionId: string; oldAmount: string | null; status: string }>(
+        `SELECT vvr.id AS "revisionId", vvr.display_price_amount::text AS "oldAmount", r.status
+           FROM vehicle_variant_revision vvr
+           JOIN vehicle_product_revision r ON r.id = vvr.product_revision_id
+           JOIN vehicle_product p ON p.draft_revision_id = r.id
+          WHERE vvr.variant_id = $1 AND p.id = $2`,
+        [input.variantId, productId],
+      );
+      const draft = rows[0];
+      if (draft === undefined) {
+        throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy bản nháp của phiên bản này để đổi giá.');
+      }
+
+      const oldAmount = draft.oldAmount === null ? null : BigInt(draft.oldAmount);
+      if (oldAmount === input.newAmount) {
+        // Không đổi gì thì không ghi vết. Một dòng nhật ký không nói lên thay
+        // đổi nào chỉ làm loãng những dòng có ý nghĩa.
+        return { logged: false };
+      }
+
+      await tx.query(
+        `UPDATE vehicle_variant_revision SET display_price_amount = $2 WHERE id = $1`,
+        [draft.revisionId, input.newAmount === null ? null : String(input.newAmount)],
+      );
+      await tx.query(
+        `INSERT INTO vehicle_price_log
+           (tenant_id, product_id, variant_id, old_amount, new_amount, reason, changed_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          actor.tenantId, productId, input.variantId,
+          oldAmount === null ? null : String(oldAmount),
+          input.newAmount === null ? null : String(input.newAmount),
+          input.reason, actor.userId,
+        ],
+      );
+      await ghiNhatKy(tx, actor, AUDIT.PRICE_CHANGED, 'vehicle_variant', input.variantId, input.reason);
+      return { logged: true };
+    });
+  }
+
+  async priceLog(actor: ActorContext, productId: string): Promise<Record<string, unknown>[]> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT l.id, l.variant_id AS "variantId", v.stable_key AS "variantKey",
+                l.old_amount::text AS "oldAmount", l.new_amount::text AS "newAmount",
+                l.reason, l.changed_at AS "changedAt", u.full_name AS "changedBy"
+           FROM vehicle_price_log l
+           JOIN vehicle_variant v ON v.id = l.variant_id
+           LEFT JOIN app_user u ON u.id = l.changed_by
+          WHERE l.product_id = $1
+          ORDER BY l.changed_at DESC, l.id DESC
+          LIMIT 200`,
+        [productId],
+      );
+      return rows;
+    });
+  }
+
+  /* ========================= Ưu đãi và trả góp ============================= */
+
+  async replaceColors(actor: ActorContext, revisionId: string, colors: VehicleColorInput[]): Promise<{ count: number }> {
+    return this.db.withTenant(actor, async (tx) => {
+      await tx.query('DELETE FROM vehicle_color WHERE product_revision_id = $1', [revisionId]);
+      for (const c of colors) {
+        await tx.query(
+          `INSERT INTO vehicle_color (tenant_id, product_revision_id, name, hex_code, kind, surcharge_amount, display_order)
+           VALUES ($1,$2,$3,$4,$5::vehicle_color_kind,$6,$7)`,
+          [actor.tenantId, revisionId, c.name, c.hexCode, c.kind, String(c.surchargeAmount), c.displayOrder],
+        );
+      }
+      return { count: colors.length };
+    });
+  }
+
+  async replacePromotions(actor: ActorContext, revisionId: string, promos: VehiclePromotionInput[]): Promise<{ count: number }> {
+    return this.db.withTenant(actor, async (tx) => {
+      await tx.query('DELETE FROM vehicle_promotion WHERE product_revision_id = $1', [revisionId]);
+      for (const p of promos) {
+        await tx.query(
+          `INSERT INTO vehicle_promotion
+             (tenant_id, product_revision_id, variant_id, kind, title, condition_text,
+              value_amount, is_enabled, starts_at, ends_at, display_order)
+           VALUES ($1,$2,$3,$4::vehicle_promotion_kind,$5,$6,$7,$8,$9::timestamptz,$10::timestamptz,$11)`,
+          [
+            actor.tenantId, revisionId, p.variantId ?? null, p.kind, p.title, p.conditionText ?? null,
+            p.valueAmount === null || p.valueAmount === undefined ? null : String(p.valueAmount),
+            p.isEnabled, p.startsAt, p.endsAt ?? null, p.displayOrder,
+          ],
+        );
+      }
+      return { count: promos.length };
+    });
+  }
+
+  async replaceFinancing(actor: ActorContext, revisionId: string, programs: FinancingProgramInput[]): Promise<{ count: number }> {
+    return this.db.withTenant(actor, async (tx) => {
+      await tx.query('DELETE FROM financing_program WHERE product_revision_id = $1', [revisionId]);
+      for (const f of programs) {
+        await tx.query(
+          `INSERT INTO financing_program
+             (tenant_id, product_revision_id, bank_name, bank_logo_media_id, min_down_payment_bp,
+              promo_rate_bp, promo_months, standard_rate_bp, allowed_terms_months,
+              down_payment_options_bp, rate_updated_at, display_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::int[],$10::int[],$11::date,$12)`,
+          [
+            actor.tenantId, revisionId, f.bankName, f.bankLogoMediaId ?? null, f.minDownPaymentBp,
+            f.promoRateBp, f.promoMonths, f.standardRateBp, f.allowedTermsMonths,
+            f.downPaymentOptionsBp, f.rateUpdatedAt, f.displayOrder,
+          ],
+        );
+      }
+      return { count: programs.length };
+    });
+  }
+
+  /**
+   * Bảng trả góp cho MỘT chương trình và MỘT kỳ hạn.
+   *
+   * 🔒 Kỳ hạn phải nằm trong `allowed_terms_months` đã khai. Nhận kỳ hạn tuỳ ý
+   *    từ client là để client tự bịa ra một sản phẩm tài chính không tồn tại,
+   *    rồi khách in ra mang tới ngân hàng.
+   */
+  async quoteFinancing(
+    tx: PoolClient,
+    programId: string,
+    input: { basePrice: bigint; downPaymentBp: number; termMonths: number },
+  ): Promise<KetQuaTraGop> {
+    const { rows } = await tx.query<{
+      minDownPaymentBp: number; promoRateBp: number; promoMonths: number;
+      standardRateBp: number; allowedTermsMonths: number[]; downPaymentOptionsBp: number[];
+    }>(
+      `SELECT min_down_payment_bp AS "minDownPaymentBp", promo_rate_bp AS "promoRateBp",
+              promo_months AS "promoMonths", standard_rate_bp AS "standardRateBp",
+              allowed_terms_months AS "allowedTermsMonths",
+              down_payment_options_bp AS "downPaymentOptionsBp"
+         FROM financing_program WHERE id = $1`,
+      [programId],
+    );
+    const ct = rows[0];
+    if (ct === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy chương trình trả góp.');
+    if (!ct.allowedTermsMonths.includes(input.termMonths)) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        `Kỳ hạn ${input.termMonths} tháng không nằm trong các kỳ hạn ngân hàng đã khai.`,
+      );
+    }
+    if (input.downPaymentBp < ct.minDownPaymentBp) {
+      throw new BusinessError(
+        ErrorCode.VALIDATION_FAILED,
+        `Trả trước tối thiểu là ${ct.minDownPaymentBp / 100} %.`,
+      );
+    }
+    return tinhTraGop({
+      giaXe: input.basePrice,
+      tyLeTraTruocBp: input.downPaymentBp,
+      soKy: input.termMonths,
+      laiSuatUuDaiBp: ct.promoRateBp,
+      soThangUuDai: ct.promoMonths,
+      laiSuatSauUuDaiBp: ct.standardRateBp,
+    });
+  }
+
+  /* ======================= Tồn và giao xe (§4.5) =========================== */
+
+  async availabilityOfProduct(actor: ActorContext, productId: string): Promise<Record<string, unknown>[]> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT a.id, a.branch_id AS "branchId", b.name AS "branchName", a.status,
+                a.lead_time_days_min AS "leadTimeDaysMin", a.lead_time_days_max AS "leadTimeDaysMax",
+                a.available_variant_ids AS "availableVariantIds",
+                a.available_color_ids AS "availableColorIds",
+                a.note, a.updated_at AS "updatedAt", u.full_name AS "updatedBy", a.version
+           FROM vehicle_availability a
+           JOIN branch b ON b.id = a.branch_id
+           LEFT JOIN app_user u ON u.id = a.updated_by
+          WHERE a.product_id = $1
+          ORDER BY b.name`,
+        [productId],
+      );
+      return rows;
+    });
+  }
+
+  /**
+   * 🔒 Nhân viên chi nhánh chỉ sửa được chi nhánh của mình.
+   *
+   * Kiểm ở đây chứ không ở giao diện: một `SALES_ADVISOR` gọi thẳng API là
+   * chuyện đã xảy ra trong dự án này (xem `permissions.ts` — một cửa khoá, năm
+   * cửa mở). `OWNER` và `SALES_MANAGER` có phạm vi rộng hơn nên đi qua.
+   */
+  async updateAvailability(
+    actor: ActorContext,
+    productId: string,
+    input: VehicleAvailabilityInput,
+  ): Promise<{ id: string }> {
+    const toanChuoi = actor.roles.includes('OWNER') || actor.roles.includes('SALES_MANAGER');
+    if (!toanChuoi && !actor.branchIds.includes(input.branchId)) {
+      throw new BusinessError(
+        ErrorCode.BRANCH_OUT_OF_SCOPE,
+        'Bạn chỉ cập nhật được khả năng giao xe của chi nhánh mình.',
+      );
+    }
+
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO vehicle_availability
+           (tenant_id, product_id, branch_id, status, lead_time_days_min, lead_time_days_max,
+            available_variant_ids, available_color_ids, note, updated_by)
+         VALUES ($1,$2,$3,$4::vehicle_availability_status,$5,$6,$7::uuid[],$8::uuid[],$9,$10)
+         ON CONFLICT (tenant_id, product_id, branch_id) DO UPDATE SET
+           status = EXCLUDED.status,
+           lead_time_days_min = EXCLUDED.lead_time_days_min,
+           lead_time_days_max = EXCLUDED.lead_time_days_max,
+           available_variant_ids = EXCLUDED.available_variant_ids,
+           available_color_ids = EXCLUDED.available_color_ids,
+           note = EXCLUDED.note,
+           updated_by = EXCLUDED.updated_by
+         RETURNING id`,
+        [
+          actor.tenantId, productId, input.branchId, input.status,
+          input.leadTimeDaysMin ?? null, input.leadTimeDaysMax ?? null,
+          input.availableVariantIds, input.availableColorIds, input.note ?? null, actor.userId,
+        ],
+      );
+      const id = rows[0]!.id;
+      // Lịch sử sửa tồn xe dùng `audit_log` chung — §4.5, không thêm bảng thứ hai.
+      await ghiNhatKy(tx, actor, AUDIT.AVAILABILITY_UPDATED, 'vehicle_availability', id, input.note ?? null);
+      return { id };
+    });
+  }
+
+  /** Nhãn gộp cho thẻ xe — luôn nêu phạm vi (`INV-LS-17`). */
+  async availabilityBadge(tx: PoolClient, productId: string): Promise<ReturnType<typeof nhanKhaNangGiao>> {
+    const { rows } = await tx.query<{
+      branchId: string; branchName: string; status: 'SAN_XE' | 'SAP_VE' | 'DAT_HANG' | 'TAM_NGUNG';
+      leadTimeDaysMin: number | null; leadTimeDaysMax: number | null;
+    }>(
+      `SELECT a.branch_id AS "branchId", b.name AS "branchName", a.status,
+              a.lead_time_days_min AS "leadTimeDaysMin", a.lead_time_days_max AS "leadTimeDaysMax"
+         FROM vehicle_availability a JOIN branch b ON b.id = a.branch_id
+        WHERE a.product_id = $1 AND b.is_active`,
+      [productId],
+    );
+    return nhanKhaNangGiao(rows);
+  }
+
+  /** Ưu đãi kèm trạng thái suy ra — admin thấy đủ bốn, landing chỉ thấy `DANG_CHAY`. */
+  async promotionsOfRevision(tx: PoolClient, revisionId: string, bayGio: Date) {
+    const { rows } = await tx.query<{
+      id: string; kind: string; title: string; conditionText: string | null;
+      valueAmount: string | null; isEnabled: boolean; startsAt: Date; endsAt: Date | null; displayOrder: number;
+    }>(
+      `SELECT id, kind, title, condition_text AS "conditionText", value_amount::text AS "valueAmount",
+              is_enabled AS "isEnabled", starts_at AS "startsAt", ends_at AS "endsAt",
+              display_order AS "displayOrder"
+         FROM vehicle_promotion WHERE product_revision_id = $1 ORDER BY display_order, title`,
+      [revisionId],
+    );
+    return rows.map((r) => ({ ...r, state: trangThaiUuDai(r, bayGio) }));
+  }
+}
+
+async function ghiNhatKy(
+  tx: PoolClient,
+  actor: ActorContext,
+  action: string,
+  entityType: string,
+  entityId: string,
+  reason: string | null,
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO audit_log (tenant_id, actor_user_id, action, entity_type, entity_id, reason)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [actor.tenantId, actor.userId, action, entityType, entityId, reason],
+  );
+}

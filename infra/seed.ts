@@ -9,6 +9,46 @@
  */
 import { Client } from 'pg';
 import { scryptSync, randomBytes, createHash, randomUUID } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+
+/**
+ * Gốc kho và thư mục media — neo vào GỐC MONOREPO, không vào `process.cwd()`.
+ *
+ * ⚠️ `cwd` là thuộc tính của LỜI GỌI chứ không phải của dự án: seed chạy ở gốc,
+ *    API chạy ở `apps/api`. Suy đường dẫn lưu trữ từ `cwd` nghĩa là hai bên ghi
+ *    và đọc ở hai chỗ khác nhau — ảnh "nhập thành công" vẫn trả 404.
+ *    Cùng lập luận với `thuMucMediaMacDinh()` ở `apps/api/src/media/storage-provider.ts`.
+ */
+function timGocKho(): string {
+  let thu = process.cwd();
+  for (let i = 0; i < 8; i += 1) {
+    if (existsSync(join(thu, 'pnpm-workspace.yaml'))) return thu;
+    const cha = resolve(thu, '..');
+    if (cha === thu) break;
+    thu = cha;
+  }
+  return process.cwd();
+}
+const GOC_KHO = timGocKho();
+/*
+ * ⚠️ Kiểm CHUỖI RỖNG, không chỉ `undefined`.
+ *
+ * `.env` khai `MEDIA_ROOT=` (để trống, nghĩa là "dùng mặc định"), nhưng dotenv
+ * nạp nó thành chuỗi rỗng — một giá trị ĐÃ ĐƯỢC ĐẶT. Toán tử `??` chỉ rơi về
+ * mặc định khi `null`/`undefined`, nên chuỗi rỗng đi thẳng qua và
+ * `join('', key)` cho ra đường dẫn TƯƠNG ĐỐI.
+ *
+ * Đo được: ảnh seed rơi vào `<gốc kho>/<tenant-uuid>/<sha>.jpg` thay vì
+ * `media/public/`, và `/media/:key` trả 404 dù DB ghi "READY".
+ *
+ * 💡 Với biến môi trường, "để trống" và "chưa đặt" là cùng một ý định của người
+ *    viết `.env`. Code phải hiểu như nhau.
+ */
+const MEDIA_ROOT =
+  (process.env.MEDIA_ROOT ?? '') === ''
+    ? join(GOC_KHO, 'media', 'public')
+    : process.env.MEDIA_ROOT!;
 
 const ADMIN_URL =
   process.env.DATABASE_ADMIN_URL ??
@@ -209,6 +249,7 @@ async function main(): Promise<void> {
     insurance_claim,
     llm_call_log,
     storage_fee, customer_contact_attempt,
+    maintenance_plan_part, maintenance_plan_item,
     stock_take_line, stock_take,
     cancellation_settlement_line, cancellation_settlement,
     warranty_cost_attribution, warranty_coverage,
@@ -220,11 +261,14 @@ async function main(): Promise<void> {
     price_list_item, price_list, part, service_item,
     vehicle_ownership, vehicle, customer,
     lead_activity, sales_lead,
+    landing_preview_session, landing_page_revision, landing_page,
     media_import_item, media_import_job,
     vehicle_product_media, vehicle_experience_version_media,
     vehicle_experience_version, vehicle_experience,
-    vehicle_variant_revision, vehicle_variant,
-    vehicle_product_revision, vehicle_product,
+    vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
+    vehicle_color, onroad_fee_schedule,
+    testimonial, vehicle_variant_revision, vehicle_variant,
+    vehicle_product_revision, vehicle_product, vehicle_product_category,
     media_publication, media_rendition, media_asset,
     branch_public_profile, site_profile, site_domain,
     user_branch, refresh_token, audit_log, app_user, branch, tenant
@@ -303,6 +347,74 @@ async function main(): Promise<void> {
          p.warrantyMonths, p.warrantyKm, 5],
       );
       partIds.set(p.sku, rows[0]!.id);
+    }
+
+    /*
+     * Lịch bảo dưỡng định kỳ — dữ liệu cho tính năng "chi phí sở hữu 5 năm".
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * ⚠️ CÁC MỐC DƯỚI ĐÂY LÀ GIÁ TRỊ THÔNG DỤNG Ở THỊ TRƯỜNG VIỆT NAM, CHƯA
+     *    ĐƯỢC MỘT XƯỞNG THẬT XÁC NHẬN.
+     *
+     *    Chúng xuất hiện CÔNG KHAI trên trang bán xe, và khách sẽ cầm con số đó
+     *    tới xưởng đối chiếu. Trước khi dùng cho quảng cáo thật, xưởng phải rà
+     *    lại theo khuyến cáo của từng hãng xe mà họ phục vụ.
+     *
+     * 💡 Ghi thành DỮ LIỆU của tenant chứ không phải hằng số trong mã: mỗi xưởng
+     *    có khuyến cáo riêng, và sửa một con số không nên cần một lần deploy.
+     *
+     * Mốc "hoặc N tháng" quan trọng ngang mốc km: người chạy 3.000 km/năm vẫn
+     * phải thay dầu theo tuổi dù xe gần như đứng yên.
+     */
+    const LICH_BAO_DUONG: {
+      sv: string; km: number | null; thang: number | null;
+      vatTu: { sku: string; sl: number }[];
+    }[] = [
+      // --- Mọi loại động cơ ---
+      { sv: 'SV-TIRE-ROT',    km: 10_000, thang: 12, vatTu: [] },
+      { sv: 'SV-BRAKE-PAD',   km: 40_000, thang: null,
+        vatTu: [{ sku: 'PT-BRAKE-PAD-F', sl: 1 }] },
+      { sv: 'SV-AC-CLEAN',    km: null,   thang: 12,
+        vatTu: [{ sku: 'PT-CABIN-FILTER', sl: 1 }] },
+      { sv: 'SV-SUSPENSION',  km: 20_000, thang: 24, vatTu: [] },
+
+      // --- Chỉ xe có động cơ đốt trong ---
+      { sv: 'SV-OIL-ENGINE',  km: 10_000, thang: 12,
+        vatTu: [{ sku: 'PT-OIL-5W30', sl: 4 }, { sku: 'PT-FILTER-OIL', sl: 1 }] },
+      { sv: 'SV-SPARK-PLUG',  km: 40_000, thang: null,
+        vatTu: [{ sku: 'PT-SPARK-PLUG', sl: 4 }] },
+      { sv: 'SV-TIMING-BELT', km: 100_000, thang: null, vatTu: [] },
+      { sv: 'SV-EXHAUST',     km: 20_000, thang: 24, vatTu: [] },
+
+      // --- Chỉ xe điện hoá ---
+      { sv: 'SV-HV-SOH',      km: null,   thang: 12, vatTu: [] },
+      { sv: 'SV-HV-COOLANT',  km: 60_000, thang: 48,
+        vatTu: [{ sku: 'PT-HV-COOLANT', sl: 3 }] },
+      { sv: 'SV-HV-INSUL',    km: null,   thang: 24, vatTu: [] },
+      { sv: 'SV-CHARGE-PORT', km: null,   thang: 12, vatTu: [] },
+      { sv: 'SV-FIRMWARE',    km: null,   thang: 12, vatTu: [] },
+    ];
+
+    for (const lich of LICH_BAO_DUONG) {
+      const { rows: pi } = await db.query<{ id: string }>(
+        `INSERT INTO maintenance_plan_item
+           (tenant_id, service_item_id, interval_km, interval_months)
+         SELECT $1, id, $3, $4 FROM service_item
+          WHERE tenant_id = $1 AND code = $2
+         RETURNING id`,
+        [t, lich.sv, lich.km, lich.thang],
+      );
+      const planId = pi[0]?.id;
+      if (planId === undefined) continue;
+      for (const v of lich.vatTu) {
+        const partId = partIds.get(v.sku);
+        if (partId === undefined) continue;
+        await db.query(
+          `INSERT INTO maintenance_plan_part (tenant_id, plan_item_id, part_id, quantity)
+           VALUES ($1,$2,$3,$4)`,
+          [t, planId, partId, v.sl],
+        );
+      }
     }
 
     // Bảng giá toàn chuỗi, hiệu lực từ đầu năm, chưa đóng kỳ
@@ -1261,6 +1373,119 @@ async function main(): Promise<void> {
     return assetId;
   };
 
+  /**
+   * Ảnh THẬT từ `infra/seed-assets/` — không phải placeholder sinh trong bộ nhớ.
+   *
+   * 🔒 Ghi ra đúng chỗ `MediaStorage` sẽ đọc, bằng đúng quy ước key
+   * content-addressed `<tenant>/<sha256>.<ext>`. Nhờ vậy `Cache-Control:
+   * immutable` và ETag ở `MediaController` là đúng sự thật: nội dung đổi thì key
+   * đổi theo.
+   *
+   * 💡 Giấy phép ghi vào đúng hai cột `license`/`license_owner` đã có sẵn, thay
+   *    vì nằm trong một file README không ai đọc. Nguồn đầy đủ và tiêu chí chọn
+   *    ảnh: `infra/seed-assets/LICENSE.md`.
+   */
+  /**
+   * Nhập hình vẽ SVG (`infra/seed-assets/*.svg`) làm ảnh bìa xe.
+   *
+   * 🔒 Hình VẼ chứ không phải ảnh chụp, và đó là lựa chọn có lý do:
+   *
+   *   · Dữ liệu mẫu dùng tên tự đặt (`Aurora E1`), nên mọi ảnh chụp đều là MỘT
+   *     CHIẾC XE KHÁC đặt dưới cái tên không phải của nó. Hình vẽ hiển nhiên là
+   *     minh hoạ nên không có gì để lệch.
+   *   · Mọi xe cùng một phong cách, cùng góc, cùng ánh sáng — điều mà ảnh gom
+   *     từ nhiều nguồn không có.
+   *   · Và nó MỞ KHOÁ được tính năng chọn màu: đổi màu sơn của một hình vector
+   *     là đổi một biến, còn nhuộm ảnh chụp thì ra màu sai — đúng thứ
+   *     `docs/…/automotive-landing-experience-design.md` mục 3 cấm.
+   *
+   * Xem `infra/seed-assets/ve-xe.mjs` để biết cách sinh.
+   */
+  const themHinhVe = async (
+    tenantId: string,
+    stableKey: string,
+    profile: string,
+    tenFile: string,
+  ): Promise<string> => {
+    const dulieu = readFileSync(join(GOC_KHO, 'infra', 'seed-assets', tenFile));
+    const sha = createHash('sha256').update(dulieu).digest('hex');
+    const key = `${tenantId}/${sha}.svg`;
+    const dich = join(MEDIA_ROOT, key);
+    mkdirSync(dirname(dich), { recursive: true });
+    writeFileSync(dich, dulieu);
+
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO media_asset (tenant_id, stable_key, kind, status, source_storage_key,
+                                source_sha256, source_mime, byte_size, provenance,
+                                license, license_owner, created_by)
+       VALUES ($1,$2,'IMAGE','READY',$3,$4,'image/svg+xml',$5,$6::jsonb,
+               'Nội bộ — hình minh hoạ','GarageOS',$7)
+       RETURNING id`,
+      [tenantId, stableKey, key, sha, dulieu.length,
+       JSON.stringify({ nguon: 'infra/seed-assets/ve-xe.mjs', loai: 'minh hoạ vector' }),
+       publisherId],
+    );
+    const assetId = rows[0]!.id;
+    await db.query(
+      `INSERT INTO media_rendition (tenant_id, asset_id, profile, format, mime,
+                                    storage_key, content_sha256, byte_size, visibility)
+       VALUES ($1,$2,$3,'svg','image/svg+xml',$4,$5,$6,'PUBLIC')`,
+      [tenantId, assetId, profile, key, sha, dulieu.length],
+    );
+    await db.query(
+      `INSERT INTO media_publication (tenant_id, rendition_id, public_storage_key,
+                                      public_content_sha256, status, verified_at)
+       SELECT $1, id, $2, $3, 'READY', now() FROM media_rendition
+        WHERE asset_id = $4 AND profile = $5`,
+      [tenantId, key, sha, assetId, profile],
+    );
+    return assetId;
+  };
+
+  const themAnhThat = async (
+    tenantId: string,
+    stableKey: string,
+    profile: string,
+    tenFile: string,
+    tacGia: string,
+  ): Promise<string> => {
+    const dulieu = readFileSync(join(GOC_KHO, 'infra', 'seed-assets', tenFile));
+    const sha = createHash('sha256').update(dulieu).digest('hex');
+    const key = `${tenantId}/${sha}.jpg`;
+
+    const dich = join(MEDIA_ROOT, key);
+    mkdirSync(dirname(dich), { recursive: true });
+    writeFileSync(dich, dulieu);
+
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO media_asset (tenant_id, stable_key, kind, status, source_storage_key,
+                                source_sha256, source_mime, byte_size, provenance,
+                                license, license_owner, created_by)
+       VALUES ($1,$2,'IMAGE','READY',$3,$4,'image/jpeg',$5,$6::jsonb,'Unsplash License',$7,$8)
+       RETURNING id`,
+      [
+        tenantId, stableKey, key, sha, dulieu.length,
+        JSON.stringify({ nguon: 'unsplash.com', tacGia, xem: 'infra/seed-assets/LICENSE.md' }),
+        tacGia, publisherId,
+      ],
+    );
+    const assetId = rows[0]!.id;
+    await db.query(
+      `INSERT INTO media_rendition (tenant_id, asset_id, profile, format, mime,
+                                    storage_key, content_sha256, byte_size, visibility)
+       VALUES ($1,$2,$3,'jpg','image/jpeg',$4,$5,$6,'PUBLIC')`,
+      [tenantId, assetId, profile, key, sha, dulieu.length],
+    );
+    await db.query(
+      `INSERT INTO media_publication (tenant_id, rendition_id, public_storage_key,
+                                      public_content_sha256, status, verified_at)
+       SELECT $1, id, $2, $3, 'READY', now() FROM media_rendition
+        WHERE asset_id = $4 AND profile = $5`,
+      [tenantId, key, sha, assetId, profile],
+    );
+    return assetId;
+  };
+
   await db.query(
     `INSERT INTO site_domain (tenant_id, hostname, status, is_primary)
      VALUES ($1,'localhost','ACTIVE',true),
@@ -1294,6 +1519,21 @@ async function main(): Promise<void> {
     [TENANT_B, ownerBId],
   );
 
+  /*
+   * Ảnh mặt tiền — ẢNH CHỤP, khác hẳn hình vẽ dùng cho thẻ xe.
+   *
+   * 💡 Hai chỗ này có yêu cầu ngược nhau. Hero cần một tấm gây ấn tượng, xem
+   *    một lần; thẻ xe cần nhất quán giữa nhiều xe và đổi màu được. Ép chúng
+   *    dùng chung một trường ảnh là bắt cả hai cùng thoả hiệp.
+   */
+  const heroId = await themAnhThat(
+    TENANT_A, 'hero-trang-chu', 'POSTER', 'xe-den-pha.jpg', 'Graham Pengelly',
+  );
+  await db.query(
+    `UPDATE site_profile SET hero_media_id = $2 WHERE tenant_id = $1`,
+    [TENANT_A, heroId],
+  );
+
   for (const b of branchesA) {
     await db.query(
       `INSERT INTO branch_public_profile (tenant_id, branch_id, version_number, status,
@@ -1306,18 +1546,18 @@ async function main(): Promise<void> {
   }
 
   // --- Flagship product: có spin 360° + panorama + hotspot ------------------
-  const coverId = await createMedia(TENANT_A, 'vf3-cover', 'POSTER', 'demo/vf3-cover.svg');
-  const gal1Id = await createMedia(TENANT_A, 'vf3-gallery-1', 'GALLERY', 'demo/vf3-gallery-1.svg');
-  const gal2Id = await createMedia(TENANT_A, 'vf3-gallery-2', 'GALLERY', 'demo/vf3-gallery-2.svg');
+  const coverId = await themHinhVe(TENANT_A, 'e1-cover', 'POSTER', 'xe-ve-sedan.svg');
+  const gal1Id = await createMedia(TENANT_A, 'e1-gallery-1', 'GALLERY', 'demo/e1-gallery-1.svg');
+  const gal2Id = await createMedia(TENANT_A, 'e1-gallery-2', 'GALLERY', 'demo/e1-gallery-2.svg');
 
   const spinAssetIds: string[] = [];
   for (let i = 0; i < 8; i += 1) {
     spinAssetIds.push(
-      await createMedia(TENANT_A, `vf3-spin-${i}`, 'GALLERY', `demo/vf3-spin-${i}.svg`),
+      await createMedia(TENANT_A, `e1-spin-${i}`, 'GALLERY', `demo/e1-spin-${i}.svg`),
     );
   }
-  const driverId = await createMedia(TENANT_A, 'vf3-int-driver', 'PANORAMA', 'demo/vf3-int-driver.svg');
-  const rearId = await createMedia(TENANT_A, 'vf3-int-rear', 'PANORAMA', 'demo/vf3-int-rear.svg');
+  const driverId = await createMedia(TENANT_A, 'e1-int-driver', 'PANORAMA', 'demo/e1-int-driver.svg');
+  const rearId = await createMedia(TENANT_A, 'e1-int-rear', 'PANORAMA', 'demo/e1-int-rear.svg');
 
   const hashOf = (s: string): string => createHash('sha256').update(s).digest('hex');
 
@@ -1325,20 +1565,21 @@ async function main(): Promise<void> {
   const revisionId = randomUUID();
   await db.query(
     `INSERT INTO vehicle_product (id, tenant_id, stable_key, slug, created_by, updated_by)
-     VALUES ($1,$2,'product-vf3','vinfast-vf-3',$3,$3)`,
+     VALUES ($1,$2,'product-aurora-e1','aurora-e1',$3,$3)`,
     [productId, TENANT_A, publisherId],
   );
   await db.query(
     `INSERT INTO vehicle_product_revision (id, tenant_id, product_id, revision_number, status,
-                                           name, make_name, model_name, summary, description,
+                                           name, make_name, model_name, summary, description, description_document,
                                            seo_title, seo_description, content_hash,
                                            published_by, published_at, created_by, updated_by)
-     VALUES ($1,$2,$3,1,'PUBLISHED','VinFast VF 3','VinFast','VF 3',
+     VALUES ($1,$2,$3,1,'PUBLISHED','Aurora E1','Aurora','E1',
              'Xe điện đô thị nhỏ gọn, phù hợp gia đình trẻ.',
-             'VinFast VF 3 là mẫu SUV điện đô thị nhỏ gọn, linh hoạt trong phố và tiết kiệm chi phí vận hành.',
-             'VinFast VF 3 — giá niêm yết', 'Mua VinFast VF 3 chính hãng, đăng ký lái thử miễn phí.',
+             'Aurora E1 là mẫu SUV điện đô thị nhỏ gọn, linh hoạt trong phố và tiết kiệm chi phí vận hành.',
+             jsonb_build_object('type','doc','schemaVersion',1,'content',jsonb_build_array(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text','Aurora E1 là mẫu SUV điện đô thị nhỏ gọn, linh hoạt trong phố và tiết kiệm chi phí vận hành.'))))),
+             'Aurora E1 — giá niêm yết', 'Mua Aurora E1 chính hãng, đăng ký lái thử miễn phí.',
              $4, $5, now(), $5, $5)`,
-    [revisionId, TENANT_A, productId, hashOf('vf3-rev-1'), publisherId],
+    [revisionId, TENANT_A, productId, hashOf('e1-rev-1'), publisherId],
   );
   await db.query(
     `UPDATE vehicle_product SET published_revision_id = $1, first_published_at = now()
@@ -1347,8 +1588,8 @@ async function main(): Promise<void> {
   );
 
   for (const [i, v] of [
-    { name: 'VF 3 Eco', price: 315_000_000, key: 'vf3-eco' },
-    { name: 'VF 3 Plus', price: 349_000_000, key: 'vf3-plus' },
+    { name: 'E1 Eco', price: 315_000_000, key: 'e1-eco' },
+    { name: 'E1 Plus', price: 349_000_000, key: 'e1-plus' },
   ].entries()) {
     const variantId = randomUUID();
     await db.query(
@@ -1366,9 +1607,9 @@ async function main(): Promise<void> {
   }
 
   for (const [i, m] of [
-    { asset: coverId, role: 'POSTER', alt: 'VinFast VF 3 màu vàng', cover: true },
-    { asset: gal1Id, role: 'GALLERY', alt: 'VinFast VF 3 nhìn nghiêng', cover: false },
-    { asset: gal2Id, role: 'GALLERY', alt: 'VinFast VF 3 nội thất', cover: false },
+    { asset: coverId, role: 'POSTER', alt: 'Aurora E1 nhìn nghiêng, viền sáng trên nền tối', cover: true },
+    { asset: gal1Id, role: 'GALLERY', alt: 'Aurora E1 nhìn nghiêng, viền sáng trên nền tối', cover: false },
+    { asset: gal2Id, role: 'GALLERY', alt: 'Khoang lái Aurora E1', cover: false },
   ].entries()) {
     await db.query(
       `INSERT INTO vehicle_product_media (tenant_id, product_revision_id, media_asset_id, role,
@@ -1393,7 +1634,7 @@ async function main(): Promise<void> {
      VALUES ($1,$2,$3,1,'PUBLISHED','Ngoại thất 360°',
              '{"kind":"EXTERIOR_SPIN","startYawDegrees":0,"hotspots":[{"id":"h1","yawDegrees":0,"title":"Đèn LED định vị ban ngày","description":"Thiết kế trẻ trung, nhận diện tốt ban ngày."},{"id":"h2","yawDegrees":90,"title":"Mâm hợp kim 16 inch","description":"Mâm 5 chấu kép thể thao."},{"id":"h3","yawDegrees":180,"title":"Cụm đèn hậu LED","description":"Dải LED hiện đại, dễ nhận diện ban đêm."},{"id":"h4","yawDegrees":270,"title":"Tay nắm cửa ẩn","description":"Mặt ngoài liền mạch, giảm nhiễu khí động."},{"id":"h5","yawDegrees":45,"title":"Cổng sạc nhanh","description":"Sạc 10-70% trong khoảng 36 phút."}]}'::jsonb,
              $4, $5, now(), $5, $5)`,
-    [spinVerId, TENANT_A, spinExpId, hashOf('vf3-spin-1'), publisherId],
+    [spinVerId, TENANT_A, spinExpId, hashOf('e1-spin-1'), publisherId],
   );
   await db.query(
     `UPDATE vehicle_experience SET published_version_id = $1 WHERE id = $2`,
@@ -1423,7 +1664,7 @@ async function main(): Promise<void> {
      VALUES ($1,$2,$3,1,'PUBLISHED','Tham quan nội thất',
              '{"kind":"INTERIOR_PANORAMA","initialViewpointKey":"driver","viewpoints":[{"key":"driver","name":"Ghế lái","description":"Khoang lái tối giản với màn hình trung tâm cảm ứng.","initialYaw":0,"initialPitch":0,"hotspots":[{"id":"d1","title":"Màn hình 10 inch","description":"Điều khiển giải trí và điều hoà."}]},{"key":"rear","name":"Hàng ghế sau","description":"Không gian đủ cho 4 người lớn, gập phẳng tăng khoang hành lý.","initialYaw":180,"initialPitch":0,"hotspots":[]}]}'::jsonb,
              $4, $5, now(), $5, $5)`,
-    [intVerId, TENANT_A, intExpId, hashOf('vf3-int-1'), publisherId],
+    [intVerId, TENANT_A, intExpId, hashOf('e1-int-1'), publisherId],
   );
   await db.query(
     `UPDATE vehicle_experience SET published_version_id = $1 WHERE id = $2`,
@@ -1438,49 +1679,169 @@ async function main(): Promise<void> {
   );
 
   // --- Product thứ hai: chỉ gallery, KHÔNG có experience (fallback) ----------
-  const cover6Id = await createMedia(TENANT_A, 'vf6-cover', 'POSTER', 'demo/vf6-cover.svg');
-  const product6Id = randomUUID();
-  const revision6Id = randomUUID();
+  /*
+   * ⚠️ Xe này lên HERO của trang chủ, nên nó nhận tấm có đèn pha.
+   *
+   * `PublicLandingService.listProducts` xếp `ORDER BY created_at DESC`, nên
+   * `products[0]` là xe được tạo SAU CÙNG — tức Meridian X5, không phải Aurora
+   * E1 như thứ tự đọc trong file này gợi ý.
+   *
+   * 💡 Đã đổi nhầm chiều một lần vì tưởng xe khai báo trước thì đứng trước. Thứ
+   *    tự trong seed KHÔNG phải thứ tự hiển thị — cái sau do câu ORDER BY quyết
+   *    định, và nó nằm ở một file khác.
+   */
+  const coverX5Id = await themHinhVe(TENANT_A, 'x5-cover', 'POSTER', 'xe-ve-suv.svg');
+  const productX5Id = randomUUID();
+  const revisionX5Id = randomUUID();
   await db.query(
     `INSERT INTO vehicle_product (id, tenant_id, stable_key, slug, created_by, updated_by)
-     VALUES ($1,$2,'product-vf6','vinfast-vf-6',$3,$3)`,
-    [product6Id, TENANT_A, publisherId],
+     VALUES ($1,$2,'product-meridian-x5','meridian-x5',$3,$3)`,
+    [productX5Id, TENANT_A, publisherId],
   );
   await db.query(
     `INSERT INTO vehicle_product_revision (id, tenant_id, product_id, revision_number, status,
-                                           name, make_name, model_name, summary, description,
+                                           name, make_name, model_name, summary, description, description_document,
                                            seo_title, seo_description, content_hash,
                                            published_by, published_at, created_by, updated_by)
-     VALUES ($1,$2,$3,1,'PUBLISHED','VinFast VF 6','VinFast','VF 6',
+     VALUES ($1,$2,$3,1,'PUBLISHED','Meridian X5','Meridian','X5',
              'SUV điện hạng B cho gia đình.',
-             'VinFast VF 6 là mẫu SUV điện hạng B, không gian rộng và vận hành êm ái.',
-             'VinFast VF 6 — giá niêm yết', 'Mua VinFast VF 6 chính hãng, nhận tư vấn miễn phí.',
+             'Meridian X5 là mẫu SUV điện hạng B, không gian rộng và vận hành êm ái.',
+             jsonb_build_object('type','doc','schemaVersion',1,'content',jsonb_build_array(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text','Meridian X5 là mẫu SUV điện hạng B, không gian rộng và vận hành êm ái.'))))),
+             'Meridian X5 — giá niêm yết', 'Mua Meridian X5 chính hãng, nhận tư vấn miễn phí.',
              $4, $5, now(), $5, $5)`,
-    [revision6Id, TENANT_A, product6Id, hashOf('vf6-rev-1'), publisherId],
+    [revisionX5Id, TENANT_A, productX5Id, hashOf('x5-rev-1'), publisherId],
   );
   await db.query(
     `UPDATE vehicle_product SET published_revision_id = $1, first_published_at = now() WHERE id = $2`,
-    [revision6Id, product6Id],
+    [revisionX5Id, productX5Id],
   );
-  const variant6Id = randomUUID();
+  const variantX5Id = randomUUID();
   await db.query(
     `INSERT INTO vehicle_variant (id, tenant_id, product_id, stable_key, created_by, updated_by)
-     VALUES ($1,$2,$3,'vf6-base',$4,$4)`,
-    [variant6Id, TENANT_A, product6Id, publisherId],
+     VALUES ($1,$2,$3,'x5-base',$4,$4)`,
+    [variantX5Id, TENANT_A, productX5Id, publisherId],
   );
   await db.query(
     `INSERT INTO vehicle_variant_revision (id, tenant_id, product_revision_id, variant_id, name,
                                            powertrain, model_year, display_price_amount, specifications,
                                            is_featured, sort_order)
-     VALUES ($1,$2,$3,$4,'VF 6 Base','BEV',2026,$5,'{"rangeKm":399,"seats":5}'::jsonb,false,0)`,
-    [randomUUID(), TENANT_A, revision6Id, variant6Id, 675_000_000],
+     VALUES ($1,$2,$3,$4,'X5 Base','BEV',2026,$5,'{"rangeKm":399,"seats":5}'::jsonb,false,0)`,
+    [randomUUID(), TENANT_A, revisionX5Id, variantX5Id, 675_000_000],
   );
   await db.query(
     `INSERT INTO vehicle_product_media (tenant_id, product_revision_id, media_asset_id, role,
                                         alt_text, sort_order, is_cover)
-     VALUES ($1,$2,$3,'POSTER','VinFast VF 6',0,true)`,
-    [TENANT_A, revision6Id, cover6Id],
+     VALUES ($1,$2,$3,'POSTER','Meridian X5 nhìn từ phía trước trong bóng tối, đèn pha bật sáng',0,true)`,
+    [TENANT_A, revisionX5Id, coverX5Id],
   );
+
+  /*
+   * ───────────────────────────────────────────────────────────────────────────
+   * Catalog thương mại — SRS-LS-EXP-001 §4.
+   *
+   * 🔒 Bộ số ở đây là bộ ĐỐI CHIẾU TAY: mọi con số landing hiện ra phải cộng
+   *    được từ biểu phí này bằng một cái máy tính bỏ túi. Đổi một dòng ở đây là
+   *    đổi kết quả của `apps/api/test/showroom.spec.ts`, và đó là chủ ý.
+   *
+   *    Lăn bánh = giá xe + trước bạ theo powertrain + 22.380.000
+   *               (biển 20tr + đăng kiểm 340k + đường bộ 1,56tr + BHTNDS 480k)
+   */
+  const PHI_CO_DINH = {
+    plate: 20_000_000, inspection: 340_000, road: 1_560_000, civil: 480_000,
+  };
+  const TINH = [
+    { code: '01', name: 'Hà Nội', ice: 1200, plate: PHI_CO_DINH.plate },
+    { code: '79', name: 'TP. Hồ Chí Minh', ice: 1000, plate: 20_000_000 },
+    { code: '31', name: 'Hải Phòng', ice: 1000, plate: 1_000_000 },
+    { code: '48', name: 'Đà Nẵng', ice: 1000, plate: 1_000_000 },
+  ];
+  for (const t of TINH) {
+    for (const pt of ['ICE', 'HYBRID', 'BEV'] as const) {
+      await db.query(
+        `INSERT INTO onroad_fee_schedule
+           (tenant_id, province_code, province_name, powertrain, registration_fee_rate_bp,
+            plate_fee_amount, inspection_fee_amount, road_maintenance_fee_amount,
+            civil_insurance_fee_amount, material_insurance_rate_bp, effective_from,
+            created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,120,'2026-07-01',$10,$10)`,
+        [
+          TENANT_A, t.code, t.name, pt,
+          // Xe điện hiện được miễn lệ phí trước bạ — biểu diễn bằng 0 bp, và đó
+          // là lý do `powertrain` phải là một chiều của khoá chứ không phải một
+          // cột giá trị.
+          pt === 'BEV' ? 0 : t.ice,
+          t.plate, PHI_CO_DINH.inspection, PHI_CO_DINH.road, PHI_CO_DINH.civil,
+          publisherId,
+        ],
+      );
+    }
+  }
+
+  // Màu, ưu đãi, trả góp và điều khoản cọc cho Aurora E1.
+  await db.query(
+    `UPDATE vehicle_product_revision
+        SET deposit_amount = 20000000, deposit_hold_days = 14,
+            deposit_refund_text = 'Hoàn 100 % nếu huỷ trước 7 ngày'
+      WHERE id = $1`,
+    [revisionId],
+  );
+  for (const [i, c] of [
+    { name: 'Xanh đại dương', hex: '#1f4d7a', kind: 'DON', surcharge: 0 },
+    { name: 'Trắng ngọc trai', hex: '#e8e6e1', kind: 'KIM_LOAI', surcharge: 12_000_000 },
+    { name: 'Đen huyền', hex: '#141414', kind: 'DON', surcharge: 0 },
+  ].entries()) {
+    await db.query(
+      `INSERT INTO vehicle_color (tenant_id, product_revision_id, name, hex_code, kind, surcharge_amount, display_order)
+       VALUES ($1,$2,$3,$4,$5::vehicle_color_kind,$6,$7)`,
+      [TENANT_A, revisionId, c.name, c.hex, c.kind, c.surcharge, i],
+    );
+  }
+  await db.query(
+    `INSERT INTO vehicle_promotion
+       (tenant_id, product_revision_id, kind, title, condition_text, value_amount,
+        is_enabled, starts_at, ends_at, display_order)
+     VALUES
+       ($1,$2,'HO_TRO_PHI','Hỗ trợ 100 % phí đăng ký biển số','Áp dụng khi nhận xe trong tháng',20000000,true,now() - interval '10 days', now() + interval '26 days',0),
+       ($1,$2,'QUA_TANG','Tặng 1 năm sạc miễn phí','Mọi trạm trong hệ thống',NULL,true,now() - interval '3 days', now() + interval '5 days',1),
+       -- 🔒 "Đã hẹn": ngày bắt đầu còn ở tương lai. Không hiện trên landing
+       --    nhưng PHẢI nhìn thấy trong admin, nếu không biên tập viên hẹn ưu đãi
+       --    tháng sau sẽ tưởng hệ thống nuốt mất.
+       ($1,$2,'GIAM_TIEN','Giảm 30 triệu cho khách đổi xe cũ','Áp dụng khi thu đổi tại showroom',30000000,true,now() + interval '20 days', now() + interval '50 days',2),
+       ($1,$2,'QUA_TANG','Tặng gói bảo dưỡng 3 năm','Chương trình đã kết thúc',NULL,false,now() - interval '90 days', now() - interval '30 days',3)`,
+    [TENANT_A, revisionId],
+  );
+  await db.query(
+    `INSERT INTO financing_program
+       (tenant_id, product_revision_id, bank_name, min_down_payment_bp, promo_rate_bp,
+        promo_months, standard_rate_bp, allowed_terms_months, down_payment_options_bp,
+        rate_updated_at, display_order)
+     VALUES
+       ($1,$2,'Techcombank',2000,750,12,1050,'{36,48,60,84}','{2000,3000,4000,5000}','2026-08-28',0),
+       ($1,$2,'VPBank',2000,790,12,1080,'{36,48,60}','{2000,3000,4000}','2026-08-28',1),
+       ($1,$2,'VIB',3000,820,6,1120,'{36,48,60}','{3000,4000,5000}','2026-08-20',2)`,
+    [TENANT_A, revisionId],
+  );
+
+  /*
+   * Khả năng giao xe theo chi nhánh — KHÔNG đi qua revision (§3).
+   *
+   * Ba trạng thái khác nhau trên ba chi nhánh để nhãn gộp có gì để gộp: nếu mọi
+   * chi nhánh cùng một trạng thái thì `nhanKhaNangGiao` không bao giờ bị thử.
+   */
+  const trangThaiChiNhanh: { status: string; min: number | null; max: number | null }[] = [
+    { status: 'SAN_XE', min: null, max: null },
+    { status: 'SAP_VE', min: 7, max: 10 },
+    { status: 'DAT_HANG', min: 30, max: 45 },
+  ];
+  for (const [i, b] of branchesA.entries()) {
+    const tt = trangThaiChiNhanh[i % trangThaiChiNhanh.length]!;
+    await db.query(
+      `INSERT INTO vehicle_availability
+         (tenant_id, product_id, branch_id, status, lead_time_days_min, lead_time_days_max, updated_by)
+       VALUES ($1,$2,$3,$4::vehicle_availability_status,$5,$6,$7)`,
+      [TENANT_A, productId, b.id, tt.status, tt.min, tt.max, publisherId],
+    );
+  }
 
   await db.query('COMMIT');
 
