@@ -5,6 +5,7 @@ import { TenantAwareDb } from '@garageos/db';
 import { normalizeSlug } from '@garageos/domain';
 import { contentHashOf } from '../common/content-hash';
 import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
+import { urlMediaCongKhai } from '../common/media-url';
 import {
   ErrorCode,
   canonicalizeRichTextDocument,
@@ -53,6 +54,12 @@ export interface AdminProductRow {
   name: string | null;
   revisionNumber: number | null;
   status: string | null;
+  /** Ảnh bìa của bản đang hiển thị. Null = mẫu xe chưa có ảnh bìa nào. */
+  coverUrl: string | null;
+  /** Giá của phiên bản RẺ NHẤT, dạng chuỗi. Null = chưa phiên bản nào có giá. */
+  priceFrom: string | null;
+  /** Số phiên bản đang bán của bản đang hiển thị. */
+  variantCount: number;
   version: number;
   createdAt: Date;
 }
@@ -71,14 +78,48 @@ export class MarketingService {
     const moc = tachConTro(opts.cursor);
     return this.db.withTenant(actor, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
+        /*
+         * 🔒 Bản HIỂN THỊ là bản nháp nếu có, không thì bản đã publish.
+         *
+         * ⚠️ Bản trước viết `r.id IN (draft, published) AND r.id = draft`, tức
+         *    là chỉ lấy bản nháp — cách viết vòng vo của `r.id = draft`. Hệ quả
+         *    đo được: mọi mẫu xe đã publish mà không ai đang sửa đều trả
+         *    `name: null`. Danh sách catalog trong admin là một bảng KHÔNG CÓ
+         *    TÊN XE — trạng thái bình thường của mọi mẫu xe sau khi phát hành.
+         *
+         *    Đó là lý do màn quản trị catalog trông như chưa có dữ liệu.
+         *
+         * `COALESCE(draft, published)`: đang sửa thì thấy cái mình đang sửa,
+         * không sửa thì thấy cái khách đang thấy. Ba trường `name`,
+         * `revision_number`, `status` cùng đi theo một bản, không trộn.
+         */
         `SELECT p.id, p.slug, p.lifecycle_status, p.draft_revision_id,
                 p.published_revision_id, p.version, p.created_at,
                 ${MOC_CON_TRO('p')},
-                r.name, r.revision_number, r.status
+                r.name, r.revision_number, r.status,
+                v.gia_thap_nhat, v.so_phien_ban,
+                cover.public_storage_key AS cover_key
            FROM vehicle_product p
            LEFT JOIN vehicle_product_revision r
-             ON r.id IN (p.draft_revision_id, p.published_revision_id)
-                AND r.id = p.draft_revision_id
+             ON r.id = COALESCE(p.draft_revision_id, p.published_revision_id)
+           LEFT JOIN LATERAL (
+             SELECT min(vvr.display_price_amount) AS gia_thap_nhat,
+                    count(*)                      AS so_phien_ban
+               FROM vehicle_variant_revision vvr
+              WHERE vvr.product_revision_id = r.id
+                AND vvr.inclusion_status = 'ACTIVE'
+           ) v ON true
+           -- Chỉ ảnh bìa, và chỉ bản dựng đã publish xong (status = 'READY').
+           -- Ảnh đang xử lý mà hiện ra là một ô vỡ — thà không có ảnh.
+           LEFT JOIN LATERAL (
+             SELECT mp.public_storage_key
+               FROM vehicle_product_media vpm
+               JOIN media_rendition rn ON rn.asset_id = vpm.media_asset_id
+               JOIN media_publication mp ON mp.rendition_id = rn.id AND mp.status = 'READY'
+              WHERE vpm.product_revision_id = r.id AND vpm.is_cover
+              ORDER BY CASE rn.profile WHEN 'POSTER' THEN 0 WHEN 'GALLERY' THEN 1 ELSE 2 END
+              LIMIT 1
+           ) cover ON true
           WHERE ($2::timestamptz IS NULL OR (
                   p.created_at < $2::timestamptz
                   OR (p.created_at = $2::timestamptz AND p.id > $3::uuid)
@@ -932,6 +973,31 @@ export class MarketingService {
     });
   }
 
+  /**
+   * Danh bạ chi nhánh của tenant.
+   *
+   * 🔒 Khác `listBranchProfiles`, và khác ở chỗ quan trọng: hàm kia liệt kê
+   *    HỒ SƠ CÔNG KHAI đã dựng cho landing, nên chi nhánh chưa có hồ sơ thì
+   *    không xuất hiện. Hàm này liệt kê CHI NHÁNH.
+   *
+   *    Lấy danh bạ từ danh sách hồ sơ là đúng loại lỗi im lặng: màn khai khả
+   *    năng giao xe sẽ không cho chọn đúng những chi nhánh chưa được khai —
+   *    tức là đúng những chi nhánh cần khai.
+   *
+   * Trả cả chi nhánh đã ngừng hoạt động, kèm `isActive`: dữ liệu cũ vẫn trỏ tới
+   * chúng, và một cái tên biến mất thì bảng hiện uuid.
+   */
+  async listBranches(
+    actor: ActorContext,
+  ): Promise<{ id: string; code: string; name: string; isActive: boolean }[]> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ id: string; code: string; name: string; is_active: boolean }>(
+        `SELECT id, code, name, is_active FROM branch ORDER BY is_active DESC, name`,
+      );
+      return rows.map((r) => ({ id: r.id, code: r.code, name: r.name, isActive: r.is_active }));
+    });
+  }
+
   async patchBranchProfileDraft(
     actor: ActorContext,
     branchId: string,
@@ -1465,6 +1531,22 @@ export class MarketingService {
       name: (row.name ?? null) as string | null,
       revisionNumber: row.revision_number === null ? null : Number(row.revision_number),
       status: (row.status ?? null) as string | null,
+      coverUrl:
+        row.cover_key === null || row.cover_key === undefined
+          ? null
+          : urlMediaCongKhai(row.cover_key as string),
+      /*
+       * 🔒 Giá giữ nguyên CHUỖI. `min(bigint)` về đây là chuỗi, và `Number()`
+       *    một số tiền hàng tỉ đồng là bước đầu tiên của mọi lỗi làm tròn
+       *    (CLAUDE.md nguyên tắc 3). Bề mặt nào cần định dạng thì định dạng từ
+       *    chuỗi.
+       */
+      priceFrom: row.gia_thap_nhat === null || row.gia_thap_nhat === undefined
+        ? null
+        : String(row.gia_thap_nhat),
+      variantCount: row.so_phien_ban === null || row.so_phien_ban === undefined
+        ? 0
+        : Number(row.so_phien_ban),
       version: Number(row.version),
       createdAt: row.created_at as Date,
     };

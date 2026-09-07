@@ -322,6 +322,25 @@ export const ACTION_ROLES = {
    * liệu vận hành và nội dung marketing có hai vòng đời, hai nhóm người.
    */
   'showroom:availabilityWrite': ['SALES_ADVISOR', 'SALES_MANAGER', 'BRANCH_MANAGER', 'OWNER'],
+
+  /**
+   * Danh sách chi nhánh của tenant — tên, mã, còn hoạt động hay không.
+   *
+   * 🔒 Rộng hơn hầu hết quyền khác, và có lý do: đây là DANH BẠ, không phải dữ
+   *    liệu vận hành. Không số tiền, không đơn hàng, không khách hàng — đúng
+   *    những gì đã in trên biển hiệu ngoài đường.
+   *
+   * Cần rộng vì nó là bảng tra cứu của nhiều màn: khai khả năng giao xe phải
+   * chọn được chi nhánh CHƯA có khai báo nào (nên không lấy từ danh sách đã
+   * khai được), lọc lead theo chi nhánh, và mọi chỗ hiện tên thay cho uuid.
+   *
+   * ⚠️ Quyền này KHÔNG mở phạm vi dữ liệu. Thấy tên một chi nhánh không phải là
+   *    đọc được đơn hàng của nó — `branchScope()` vẫn chặn như cũ.
+   */
+  'org:branchRead': [
+    'SERVICE_ADVISOR', 'BRANCH_MANAGER', 'STORE_KEEPER', 'CASHIER',
+    'MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_ADVISOR', 'SALES_MANAGER', 'OWNER',
+  ],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -393,4 +412,5 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'showroom:priceWrite': 'đổi giá công bố của xe',
   'showroom:commerceWrite': 'sửa ưu đãi, trả góp và màu xe',
   'showroom:availabilityWrite': 'cập nhật khả năng giao xe của chi nhánh',
+  'org:branchRead': 'xem danh sách chi nhánh',
 };

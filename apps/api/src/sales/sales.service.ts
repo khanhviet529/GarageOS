@@ -449,12 +449,14 @@ export class SalesService {
       ${alias}.next_action_at, ${alias}.duplicate_of_id, ${alias}.redacted_at,
       ${alias}.version, ${alias}.created_at, ${alias}.updated_at,
       ${MOC_CON_TRO(alias)},
+      b.name AS branch_name,
       au.full_name AS assignee_name,
       vpr.name AS product_name, vvr.name AS variant_name`;
   }
 
   private leadJoins(): string {
     return `
+      JOIN branch b ON b.id = sl.branch_id
       LEFT JOIN app_user au ON au.id = sl.assigned_to
       LEFT JOIN vehicle_product_revision vpr ON vpr.id = sl.catalog_revision_id
       LEFT JOIN vehicle_variant_revision vvr
@@ -467,6 +469,7 @@ export class SalesService {
       id: row.id as string,
       reference: row.reference as string,
       branchId: row.branch_id as string,
+      branchName: row.branch_name as string,
       fullName: row.full_name as string,
       phoneNormalized: row.phone_normalized as string,
       email: (row.email ?? null) as string | null,

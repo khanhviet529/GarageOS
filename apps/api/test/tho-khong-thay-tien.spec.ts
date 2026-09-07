@@ -291,7 +291,7 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       // thợ cũng không liên quan.
       'vehicle-products/:slug/gia-lan-banh',
       'landing-page', 'landing-page-preview',
-      'site-profile', 'branch-public-profiles', 'site', 'leads', 'leads/:id',
+      'site-profile', 'branch-public-profiles', 'branches', 'site', 'leads', 'leads/:id',
     ]);
 
     const thieu: string[] = [];

@@ -14,6 +14,7 @@ import {
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
+import { urlMediaCongKhai } from '../common/media-url';
 import type { PublicTenantContext } from './tenant-context.service';
 import { ShowroomService } from '../showroom/showroom.service';
 
@@ -647,9 +648,7 @@ export class PublicLandingService {
   }
 
   private publicUrl(storageKey: string): string {
-    const origin = (process.env['PUBLIC_MEDIA_ORIGIN'] ?? 'http://localhost:3001/media')
-      .replace(/\/+$/, '');
-    return `${origin}/${storageKey}`;
+    return urlMediaCongKhai(storageKey);
   }
 
   /* ===================================================================== */
