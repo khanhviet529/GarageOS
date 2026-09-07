@@ -1,19 +1,31 @@
-import { notFound } from 'next/navigation';
-import { requestHost, fetchPublic, noIndex, httpStatusForPublicApiError } from '@/lib/api';
-import { loadSite, formatPrice, isGone } from '@/lib/site';
-import { Gia } from '@/components/gia';
-import { buildMetadata } from '@/lib/seo';
-import { Header, Footer } from '@/components/chrome';
-import { DetailActions } from '@/components/detail-actions';
-import { ChiPhiSoHuu } from '@/components/chi-phi-so-huu';
-import type { PublicProductDetail, PublicSiteView } from '@garageos/contracts';
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import type { PublicProductDetail, PublicSiteView } from '@garageos/contracts';
 import { buildPageTitle } from '@garageos/domain';
+import { SiteFooter } from '@/components/layout/site-footer';
+import { SiteHeader } from '@/components/layout/site-header';
+import { TrongTrangXe } from '@/features/chi-tiet-xe/boi-canh-trai-nghiem';
+import { ManGiaoXe } from '@/features/chi-tiet-xe/man-giao-xe';
+import { ManHeroXe } from '@/features/chi-tiet-xe/man-hero-xe';
+import { ManLaiThu } from '@/features/chi-tiet-xe/man-lai-thu';
+import { ManNoiThat } from '@/features/chi-tiet-xe/man-noi-that';
+import { ManThongSo } from '@/features/chi-tiet-xe/man-thong-so';
+import { BangGiaChiTiet } from '@/features/gia-lan-banh/bang-gia-chi-tiet';
+import { layBocGia } from '@/features/gia-lan-banh/api';
+import { fetchPublic, httpStatusForPublicApiError, noIndex, requestHost } from '@/lib/api';
+import { buildMetadata } from '@/lib/seo';
+import { isGone, loadSite } from '@/lib/site';
+import { docThongSo } from '@/lib/thong-so';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+}
+
+function giaTu(variants: PublicProductDetail['variants']): number | null {
+  const gia = variants.map((v) => v.displayPrice).filter((p): p is number => p !== null);
+  return gia.length === 0 ? null : Math.min(...gia);
 }
 
 export default async function ProductDetailPage({ params }: PageProps): Promise<React.ReactElement> {
@@ -28,9 +40,7 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
       detail = await fetchPublic<PublicProductDetail>(host, `/vehicle-products/${encodeURIComponent(slug)}`);
     } catch (err) {
       gone = isGone(err);
-      if (httpStatusForPublicApiError(err) !== 410) {
-        notFound();
-      }
+      if (httpStatusForPublicApiError(err) !== 410) notFound();
     }
   }
 
@@ -38,35 +48,38 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
     if (gone) {
       return (
         <>
-          <Header site={site} />
-          <main className="container section" id="main" tabIndex={-1}>
+          <SiteHeader site={site} trang="xe" />
+          <main id="main" tabIndex={-1} className="container section">
             <h1>Xe đã ngừng giới thiệu</h1>
-            <p className="note">
-              Mẫu xe này không còn được giới thiệu. Vui lòng xem các mẫu xe khác.
-            </p>
-            <p><a className="btn" href="/xe">Xem danh sách xe</a></p>
+            <p className="note">Mẫu xe này không còn được giới thiệu.</p>
+            <p style={{ marginTop: 24 }}><a className="nut" href="/xe">Xem xe đang bán</a></p>
           </main>
-          <Footer site={site} />
+          <SiteFooter site={site} />
         </>
       );
     }
     notFound();
   }
 
-  const displayPrice = minPrice(detail.variants);
+  const anh = detail.media.filter((m) => m.url !== '');
+  const banDau = detail.variants[0] ?? null;
+  const bocGia = await layBocGia(slug);
+  const nhanGiao = bocGia !== null && bocGia.reason === null ? bocGia.availability?.label ?? null : null;
+  const gia = giaTu(detail.variants);
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Product',
     name: detail.name,
     description: detail.summary,
     brand: { '@type': 'Brand', name: detail.makeName },
-    image: detail.media.filter((m) => m.url !== '').map((m) => m.url),
-    ...(displayPrice !== null
+    image: anh.map((m) => m.url),
+    ...(gia !== null
       ? {
           offers: {
             '@type': 'Offer',
             priceCurrency: 'VND',
-            price: displayPrice,
+            price: gia,
             itemCondition: 'https://schema.org/NewCondition',
             availability: 'https://schema.org/InStock',
           },
@@ -78,100 +91,69 @@ export default async function ProductDetailPage({ params }: PageProps): Promise<
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Trang chủ', item: `${site?.primaryOrigin ?? ''}/` },
-      { '@type': 'ListItem', position: 2, name: 'Danh sách xe', item: `${site?.primaryOrigin ?? ''}/xe` },
+      { '@type': 'ListItem', position: 2, name: 'Xe đang bán', item: `${site?.primaryOrigin ?? ''}/xe` },
       { '@type': 'ListItem', position: 3, name: detail.name },
     ],
   };
 
   return (
     <>
-      <Header site={site} />
+      <SiteHeader site={site} tren trang="xe" />
       {noIndex() && <meta name="robots" content="noindex,nofollow" />}
       <main id="main" tabIndex={-1}>
-        <div className="container"><nav className="breadcrumb" aria-label="Breadcrumb">
-          <p className="note">
-            <a href="/">Trang chủ</a> / <a href="/xe">Danh sách xe</a> / {detail.name}
-          </p>
-        </nav></div>
+        <TrongTrangXe>
+          <ManHeroXe
+            ten={detail.name}
+            makeName={detail.makeName}
+            modelName={detail.modelName}
+            giaTu={gia}
+            anh={anh}
+            ghiChuAnh={`Ảnh ngoại thất ${detail.name} · 2400 × 1350`}
+          />
 
-        <section className="detail-hero"><div className="container">
-          <p className="eyebrow">{detail.makeName} · {detail.modelName}</p>
-          <h1>{detail.name}</h1>
-          <Gia amount={displayPrice} />
-          <p className="detail-summary">{detail.summary}</p>
-        </div></section>
-        <div className="container detail-grid">
-          <div>
-            {detail.description !== '' && (
-              <div className="detail-description">{detail.description}</div>
-            )}
-          </div>
+          {/*
+            Thanh cấu hình dính và màn giá là MỘT component: chọn phiên bản ở
+            thanh thì con số ở bảng phí phải đổi theo trong cùng một lần render.
+          */}
+          <BangGiaChiTiet
+            slug={slug}
+            tenXe={detail.name}
+            phienBan={detail.variants.map((v) => ({ stableKey: v.stableKey, name: v.name }))}
+          />
 
-          <div>
-            {detail.media.filter((m) => m.url !== '').length > 0 && (
-              <section aria-label="Thư viện ảnh">
-                <div className="gallery">
-                  {detail.media.filter((m) => m.url !== '').map((m, i) => (
-                    <img
-                      key={m.id}
-                      src={m.url}
-                      alt={m.alt}
-                      loading={i === 0 ? 'eager' : 'lazy'}
-                      width={800}
-                      height={500}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
+          <ManThongSo
+            slug={slug}
+            tenPhienBan={banDau?.name ?? null}
+            thongSo={docThongSo(banDau?.specifications ?? {})}
+          />
 
-            <section className="variant-panel"><h2>Phiên bản</h2><table className="variant-table">
-              <thead>
-                <tr><th>Phiên bản</th><th>Động cơ</th><th>Năm</th><th>Giá</th></tr>
-              </thead>
-              <tbody>
-                {detail.variants.map((v) => (
-                  <tr key={v.id}>
-                    <td>{v.name}</td>
-                    <td>{v.powertrain}</td>
-                    <td>{v.modelYear}</td>
-                    <td>{formatPrice(v.displayPrice)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></section>
-          </div>
-        </div>
+          <ManNoiThat
+            slug={slug}
+            ten={detail.name}
+            anh={anh}
+            trainghiem={detail.experiences}
+          />
 
-        {/*
-          Chi phí sở hữu đặt NGAY SAU bảng phiên bản và TRƯỚC form đăng ký.
-          Khách vừa xem giá xong sẽ hỏi "rồi nuôi nó tốn bao nhiêu" — trả lời
-          đúng lúc đó, trước khi họ phải quyết định để lại số điện thoại.
-        */}
-        {/* `id` la dich cua nut "Xem chi tiet tung nam" tren phieu o trang chu. */}
-        <div className="container" id="chi-phi"><ChiPhiSoHuu slug={slug} /></div>
+          {site !== null && site.publicBranches.length > 0 && (
+            <ManGiaoXe chiNhanh={site.publicBranches} nhanKhaNangGiao={nhanGiao} />
+          )}
 
-        <div className="container"><DetailActions
-          site={site}
-          slug={slug}
-          productId={detail.id}
-          productLabel={detail.name}
-          experiences={detail.experiences}
-          variants={detail.variants.map((v) => ({
-            id: v.id,
-            name: v.name,
-            displayPrice: v.displayPrice,
-          }))}
-        /></div>
+          <ManLaiThu
+            site={site}
+            productId={detail.id}
+            productLabel={detail.name}
+            variants={detail.variants.map((v) => ({ id: v.id, name: v.name, displayPrice: v.displayPrice }))}
+          />
+        </TrongTrangXe>
       </main>
-      <Footer site={site} />
+      <SiteFooter site={site} />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\u003c') }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd).replace(/</g, '\\u003c') }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd).replace(/</g, '\u003c') }}
       />
     </>
   );
@@ -190,21 +172,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const suffix = site?.brandName ?? 'Showroom ô tô';
     /*
      * 🔒 Cùng một hàm với mọi trang khác — SEO-META-002 chỉ có MỘT quy tắc.
-     *
-     * Bản trước dùng `if (!title.includes(suffix))`, và nó KHÁC hai trang còn
-     * lại ở một chỗ đo được: tên hãng nằm giữa tiêu đề SEO do biên tập viên
-     * đặt (vd "Ưu đãi Toyota Vios tháng 8") thì trang này bỏ hậu tố, còn trang
-     * chủ vẫn thêm. Tiêu đề của cùng một site trông khác nhau tuỳ trang — đúng
-     * thứ mà một template dùng chung sinh ra để tránh.
-     *
-     * 💡 Và `includes('')` luôn đúng, nên khi tên hãng rỗng thì nhánh kia
-     *    không bao giờ chạy — bản cũ "đúng" ở tình huống đó vì tình cờ, không
-     *    phải vì có ai nghĩ tới.
+     *    Bản trước dùng `if (!title.includes(suffix))`, và `includes('')` luôn
+     *    đúng, nên khi tên hãng rỗng thì nhánh kia không bao giờ chạy.
      */
-    title = buildPageTitle(detail.seoTitle ?? `${detail.name} — giá niêm yết`, suffix);
-    description =
-      detail.seoDescription ??
-      `${detail.name} — ${detail.summary}`.slice(0, 300);
+    title = buildPageTitle(detail.seoTitle ?? `${detail.name} — giá lăn bánh`, suffix);
+    description = detail.seoDescription ?? `${detail.name} — ${detail.summary}`.slice(0, 300);
     image = detail.media.find((m) => m.isCover && m.url !== '')?.url
       ?? detail.media.find((m) => m.url !== '')?.url
       ?? null;
@@ -212,17 +184,5 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // 404/410: metadata mặc định, trang render đúng trạng thái
   }
 
-  return buildMetadata({
-    site,
-    title,
-    description,
-    path: `/xe/${slug}`,
-    image,
-  });
-}
-
-function minPrice(variants: PublicProductDetail['variants']): number | null {
-  const prices = variants.map((v) => v.displayPrice).filter((p): p is number => p !== null);
-  if (prices.length === 0) return null;
-  return Math.min(...prices);
+  return buildMetadata({ site, title, description, path: `/xe/${slug}`, image });
 }

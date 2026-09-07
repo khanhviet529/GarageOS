@@ -1,6 +1,6 @@
 'use client';
 
-import { repairOrdersApi } from '@/lib/api/repair-orders';
+import { repairOrdersApi } from '@/features/repair-orders/api';
 import { useQuery } from '@tanstack/react-query';
 
 export const repairOrderKeys = {

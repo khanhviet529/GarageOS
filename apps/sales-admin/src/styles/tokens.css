@@ -1,13 +1,153 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Sales Admin — bảng token
+ *
+ * 🔒 NGUỒN DUY NHẤT CỦA MÀU. Không thêm màu ngoài bảng này. "Cần tối hơn một
+ *    chút" là cách một thang bốn bậc biến thành bảy bậc không ai phân biệt nổi.
+ *
+ * 🔒 MỘT BIẾN shadcn = ĐÚNG MỘT TOKEN CỦA DỰ ÁN. Bảng màu mặc định của shadcn
+ *    (slate/zinc/neutral) đã bị xoá sạch. Nếu một component shadcn cần một vai
+ *    trò màu chưa có ở đây, vai trò đó phải được chốt vào bảng token trước —
+ *    không được tự đặt tại chỗ dùng.
+ *
+ * Khác landing: sales-admin CÓ hai theme thật (27 khung nền tối + 27 khung nền
+ * sáng trong bộ thiết kế), người dùng bật bằng công tắc trên thanh ứng dụng.
+ * Nên `:root` là NỀN TỐI (mặc định của app) và `.light` ghi đè sang nền sáng.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
 :root {
-  --admin-canvas: #f6f7f9;
-  --admin-surface: #ffffff;
-  --admin-sidebar: #101a2b;
-  --admin-ink: #182235;
-  --admin-muted: #667085;
-  --admin-border: #e2e6ec;
-  --admin-accent: #1769d3;
-  --admin-danger: #b42318;
-  --admin-radius-sm: .4rem;
-  --admin-radius-md: .65rem;
-  --admin-shadow-sm: 0 1px 2px rgb(16 24 40 / 5%);
+  /* ── Bốn tầng nền: một thang bốn bậc, mỗi bậc một việc ─────────────────── */
+  --ink-0: #08090a;   /* nền trang */
+  --ink-1: #15181b;   /* thẻ nổi trên nền trang */
+  --ink-2: #1d2125;   /* ô nhập, khối lõm trong thẻ */
+  --ink-3: #2a2f34;   /* chip, thanh tiến trình */
+
+  /* ── Chữ ───────────────────────────────────────────────────────────────── */
+  --text: #f5f5f3;
+  --text-muted: #b5b7b4;
+  --text-dim: #8b908c;
+  --text-on-action: #ffffff;
+
+  /* ── Đường kẻ ──────────────────────────────────────────────────────────── */
+  /*
+   * 🔒 `--line-strong` là RANH GIỚI ĐIỀU KHIỂN, không phải đường trang trí.
+   *
+   * Ô nhập ở đây chỉ khác nền thẻ 1,10:1, nên viền là dấu hiệu DUY NHẤT nhận ra
+   * ô — tức SC 1.4.11 áp và cần 3:1. Ở 25% nó đo 2,27:1 (tối) và 1,70:1 (sáng):
+   * trượt ở cả hai theme, và trượt theo kiểu mắt thường không thấy.
+   *
+   * Nâng độ đục, giữ nguyên sắc độ — vẫn là mực của bảng token. Cùng giá trị
+   * `apps/web` đã dùng và đã đo đạt.
+   */
+  --line: rgb(255 255 255 / 12%);
+  --line-strong: rgb(255 255 255 / 36%);
+
+  /* ── Thương hiệu và hành động ──────────────────────────────────────────── */
+  --brand: #ff705c;
+  --action: #c73526;
+  --action-hover: #ae2e21;
+
+  /* ── Trạng thái ────────────────────────────────────────────────────────── */
+  --ok: #62d19b;
+  --warn: #e6b877;
+  --danger: #ff8f84;
+
+  /*
+   * 🔒 `signal` chia theo BỀ MẶT, không theo theme. Một khối SÁNG nằm trong
+   *    trang TỐI vẫn dùng `--signal-light`. Vì thế cả hai luôn có mặt ở cả hai
+   *    theme, và chỗ dùng tự nói ra nó nằm trên bề mặt nào.
+   */
+  --signal-dark: #c9a227;
+  --signal-light: #7a5c00;
+
+  /* ── Bo góc ────────────────────────────────────────────────────────────── */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+}
+
+.light {
+  --ink-0: #f3f1eb;
+  --ink-1: #ffffff;
+  --ink-2: #f7f6f2;
+  --ink-3: #e6e3da;
+
+  --text: #161817;
+  --text-muted: #55584f;
+  --text-dim: #6b6e66;
+  --text-on-action: #ffffff;
+
+  --line: rgb(22 24 23 / 12%);
+  --line-strong: rgb(22 24 23 / 55%);   /* ranh giới điều khiển — xem chú thích ở khối tối */
+
+  --brand: #b32e20;
+  --action: #b32e20;
+  --action-hover: #96261a;
+
+  --ok: #177a4e;
+  --warn: #8a5f12;
+  --danger: #b3271a;
+}
+
+/*
+ * ── Ánh xạ sang vai trò của shadcn ──────────────────────────────────────────
+ *
+ * Bên trái là tên shadcn dùng trong component; bên phải là token của dự án.
+ * Không có màu nào được sinh ra ở đây — đây thuần tuý là một lớp đổi tên, để
+ * `bg-card` trong một component shadcn và `--ink-1` trong bảng token luôn là
+ * cùng một màu, kể cả khi ta nâng cấp shadcn.
+ */
+@theme inline {
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+  --color-text-on-action: var(--text-on-action);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+
+  --color-signal-dark: var(--signal-dark);
+  --color-signal-light: var(--signal-light);
+
+  /* Vai trò shadcn — mỗi dòng trỏ thẳng vào một token ở trên. */
+  --color-background: var(--ink-0);
+  --color-foreground: var(--text);
+  --color-card: var(--ink-1);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--ink-1);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--action);
+  --color-primary-foreground: var(--text-on-action);
+  --color-secondary: var(--ink-2);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--ink-2);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--ink-3);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--text-on-action);
+  --color-border: var(--line);
+  --color-input: var(--ink-2);
+  --color-ring: var(--brand);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+
+  --font-sans: var(--font-be-vietnam-pro), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
 }

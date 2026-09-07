@@ -15,6 +15,7 @@ import {
 import { BusinessError } from '../common/errors';
 import { MOC_CON_TRO, ghepConTro } from '../common/con-tro-trang';
 import type { PublicTenantContext } from './tenant-context.service';
+import { ShowroomService } from '../showroom/showroom.service';
 
 /**
  * Dữ liệu public của landing — SRS Phase 1 mục 11.1.
@@ -25,7 +26,10 @@ import type { PublicTenantContext } from './tenant-context.service';
  */
 @Injectable()
 export class PublicLandingService {
-  constructor(@Inject(TenantAwareDb) private readonly db: TenantAwareDb) {}
+  constructor(
+    @Inject(TenantAwareDb) private readonly db: TenantAwareDb,
+    @Inject(ShowroomService) private readonly showroom: ShowroomService,
+  ) {}
 
   async testimonials(ctx: PublicTenantContext): Promise<PublicTestimonial[]> {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicTestimonial>(
@@ -647,7 +651,167 @@ export class PublicLandingService {
       .replace(/\/+$/, '');
     return `${origin}/${storageKey}`;
   }
+
+  /* ===================================================================== */
+  /* Bóc giá lăn bánh — khoảnh khắc chữ ký của landing (DES-LS-002 §9)     */
+  /* ===================================================================== */
+
+  /**
+   * Trả về đúng những gì màn "Bóc giá lăn bánh" cần, trong MỘT lượt gọi:
+   * các khoản phí, khoản trả góp theo từng kỳ, ưu đãi đang chạy và khả năng
+   * giao xe.
+   *
+   * 🔒 Bốn thứ này phải đến từ **cùng một lượt đọc**. Gọi bốn endpoint rồi ghép
+   *    ở trình duyệt nghĩa là có lúc bảng phí đã đổi giữa lần gọi thứ nhất và
+   *    thứ tư, và khách nhìn thấy một tổng không cộng ra được từ các dòng ngay
+   *    bên trên nó.
+   *
+   * 🔒 Không nhận giá từ client. Giá đến từ `published_revision_id`, tỉnh đến từ
+   *    tham số, biểu phí đến từ bảng đang hiệu lực. Cho client truyền giá vào
+   *    là cho phép nó tự dựng một bảng giá rồi in ra mang tới showroom.
+   */
+  async bocGiaLanBanh(
+    ctx: PublicTenantContext,
+    slug: string,
+    opts: { provinceCode: string; variantKey?: string; colorId?: string; termMonths?: number; downPaymentBp?: number },
+  ): Promise<BocGiaView> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows: prodRows } = await tx.query<{ id: string; revisionId: string | null }>(
+        `SELECT p.id, p.published_revision_id AS "revisionId"
+           FROM vehicle_product p WHERE p.slug = $1 AND p.lifecycle_status <> 'ARCHIVED'`,
+        [slug],
+      );
+      const prod = prodRows[0];
+      if (prod === undefined || prod.revisionId === null) {
+        throw new BusinessError(ErrorCode.CONTENT_NOT_PUBLISHED, 'Xe chưa được giới thiệu');
+      }
+
+      const { rows: variantRows } = await tx.query<{
+        variantId: string; stableKey: string; name: string;
+        listPrice: string | null; powertrain: 'ICE' | 'HYBRID' | 'BEV'; batteryRental: string | null;
+      }>(
+        `SELECT vvr.variant_id AS "variantId", v.stable_key AS "stableKey", vvr.name,
+                vvr.display_price_amount::text AS "listPrice", vvr.powertrain,
+                vvr.battery_rental_amount::text AS "batteryRental"
+           FROM vehicle_variant_revision vvr
+           JOIN vehicle_variant v ON v.id = vvr.variant_id
+          WHERE vvr.product_revision_id = $1 AND vvr.inclusion_status = 'ACTIVE'
+          ORDER BY vvr.sort_order, vvr.name`,
+        [prod.revisionId],
+      );
+      const variant = opts.variantKey === undefined
+        ? variantRows[0]
+        : variantRows.find((v) => v.stableKey === opts.variantKey);
+      if (variant === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy phiên bản xe');
+
+      // Giá "Liên hệ" thì không có phép cộng nào để bóc. Nói thẳng, không bịa 0.
+      if (variant.listPrice === null) {
+        return { reason: 'PRICE_ON_REQUEST', variantName: variant.name } satisfies BocGiaView;
+      }
+
+      let colorSurcharge = 0n;
+      if (opts.colorId !== undefined) {
+        const { rows } = await tx.query<{ surcharge: string }>(
+          'SELECT surcharge_amount::text AS surcharge FROM vehicle_color WHERE id = $1 AND product_revision_id = $2',
+          [opts.colorId, prod.revisionId],
+        );
+        colorSurcharge = BigInt(rows[0]?.surcharge ?? '0');
+      }
+
+      const homNay = new Date().toISOString().slice(0, 10);
+      const breakdown = await this.showroom.quoteOnroad(tx, {
+        listPrice: BigInt(variant.listPrice),
+        colorSurcharge,
+        powertrain: variant.powertrain,
+        provinceCode: opts.provinceCode,
+        onDate: homNay,
+      });
+      if (breakdown === null) {
+        return { reason: 'NO_FEE_SCHEDULE', variantName: variant.name, provinceCode: opts.provinceCode } satisfies BocGiaView;
+      }
+
+      const uuDai = (await this.showroom.promotionsOfRevision(tx, prod.revisionId, new Date()))
+        .filter((u) => u.state === 'DANG_CHAY')
+        .map((u) => ({ kind: u.kind, title: u.title, conditionText: u.conditionText, valueAmount: u.valueAmount, endsAt: u.endsAt }));
+
+      const { rows: chuongTrinh } = await tx.query<{ id: string; bankName: string; allowedTermsMonths: number[]; downPaymentOptionsBp: number[]; minDownPaymentBp: number; rateUpdatedAt: Date }>(
+        `SELECT id, bank_name AS "bankName", allowed_terms_months AS "allowedTermsMonths",
+                down_payment_options_bp AS "downPaymentOptionsBp",
+                min_down_payment_bp AS "minDownPaymentBp", rate_updated_at AS "rateUpdatedAt"
+           FROM financing_program WHERE product_revision_id = $1 ORDER BY display_order, bank_name`,
+        [prod.revisionId],
+      );
+
+      const traGop = [];
+      for (const ct of chuongTrinh) {
+        const term = opts.termMonths !== undefined && ct.allowedTermsMonths.includes(opts.termMonths)
+          ? opts.termMonths
+          : ct.allowedTermsMonths[ct.allowedTermsMonths.length - 1]!;
+        const downBp = opts.downPaymentBp !== undefined && opts.downPaymentBp >= ct.minDownPaymentBp
+          ? opts.downPaymentBp
+          : ct.minDownPaymentBp;
+        const quote = await this.showroom.quoteFinancing(tx, ct.id, {
+          basePrice: breakdown.total,
+          downPaymentBp: downBp,
+          termMonths: term,
+        });
+        traGop.push({
+          programId: ct.id,
+          bankName: ct.bankName,
+          allowedTermsMonths: ct.allowedTermsMonths,
+          downPaymentOptionsBp: ct.downPaymentOptionsBp,
+          rateUpdatedAt: ct.rateUpdatedAt,
+          quote,
+        });
+      }
+
+      return {
+        reason: null,
+        variantName: variant.name,
+        batteryRentalAmount: variant.batteryRental === null ? null : BigInt(variant.batteryRental),
+        breakdown,
+        promotions: uuDai,
+        financing: traGop,
+        availability: await this.showroom.availabilityBadge(tx, prod.id),
+        deposit: await this.dieuKhoanCoc(tx, prod.revisionId),
+      } satisfies BocGiaView;
+    });
+  }
+
+  /**
+   * Điều khoản cọc — §4.11.
+   *
+   * 🔒 Đây là dữ liệu **nhập được ở admin mà landing không hiện ở đâu** trước
+   *    khi có hàm này. Cùng nhóm với giá thuê pin. Người nhập tưởng đã công bố,
+   *    khách không bao giờ thấy — loại lỗi im lặng nhất trong cả nhánh này.
+   */
+  private async dieuKhoanCoc(tx: PoolClient, revisionId: string) {
+    const { rows } = await tx.query<{ amount: string | null; holdDays: number | null; refundText: string | null }>(
+      `SELECT deposit_amount::text AS amount, deposit_hold_days AS "holdDays",
+              deposit_refund_text AS "refundText"
+         FROM vehicle_product_revision WHERE id = $1`,
+      [revisionId],
+    );
+    const row = rows[0];
+    if (row === undefined || row.amount === null) return null;
+    return { amount: BigInt(row.amount), holdDays: row.holdDays, refundText: row.refundText };
+  }
 }
+
+/** Kết quả bóc giá — ba nhánh, và hai nhánh "không có số" là trạng thái thật. */
+export type BocGiaView =
+  | { reason: 'PRICE_ON_REQUEST'; variantName: string }
+  | { reason: 'NO_FEE_SCHEDULE'; variantName: string; provinceCode: string }
+  | {
+      reason: null;
+      variantName: string;
+      batteryRentalAmount: bigint | null;
+      breakdown: NonNullable<Awaited<ReturnType<ShowroomService['quoteOnroad']>>>;
+      promotions: unknown[];
+      financing: unknown[];
+      availability: Awaited<ReturnType<ShowroomService['availabilityBadge']>>;
+      deposit: { amount: bigint; holdDays: number | null; refundText: string | null } | null;
+    };
 
 /**
  * Tách `nextCursor` thành mốc keyset, hoặc `null` nếu không dùng được.

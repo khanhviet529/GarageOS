@@ -1,0 +1,37 @@
+/*
+ * Màn 3 · Thông số kỹ thuật & chi phí sở hữu — nền SÁNG.
+ *
+ * ⚠️ Bản dựng Pencil để màn này nền TỐI. DES-LS-002 §2 "Ba thay đổi sau rà
+ *    soát" lại chốt ngược: *"Cùng lý do, khối thông số kỹ thuật ở trang chi tiết
+ *    xe cũng chuyển sáng."* Quyết định đó chưa được áp vào bản dựng.
+ *
+ *    Ở đây theo quyết định, không theo bản dựng: đây là màn nhiều con số nhất
+ *    của trang chi tiết, và "tối cho cảm xúc, sáng cho con số" là ràng buộc
+ *    🔒, không phải sở thích. Đã ghi vào báo cáo bàn giao.
+ */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-9) 0;
+  background: var(--paper-0);
+  color: var(--paper-ink);
+}
+
+.dau { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-5); }
+.dau h2 { margin-top: var(--s-3); }
+
+.luoi {
+  display: grid;
+  margin-top: var(--s-7);
+  gap: 0 var(--s-6);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.o { padding: var(--s-4) 0; border-top: 1px solid var(--paper-line); }
+.o dt { color: var(--paper-muted); font-size: var(--fs-xs); }
+.o dd { margin-top: 4px; font-size: var(--fs-lead); font-weight: 500; }
+
+.rong { margin-top: var(--s-6); color: var(--paper-muted); font-size: var(--fs-sm); }
+
+.chiPhi { margin-top: var(--s-9); padding-top: var(--s-7); border-top: 1px solid var(--paper-line-strong); }

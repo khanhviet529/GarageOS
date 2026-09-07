@@ -30,12 +30,12 @@ export default function AppError({
   }, [error]);
 
   return (
-    <main className="container" style={{ maxWidth: 560, paddingTop: 48 }}>
-      <div className="card stack">
-        <h1 style={{ fontSize: 'var(--fs-xl)' }}>Màn hình gặp sự cố</h1>
-        <p className="muted">
-          Đây là lỗi của phần mềm, không phải do bạn thao tác sai. Dữ liệu đã lưu
-          không bị ảnh hưởng.
+    <main className="mx-auto w-[min(560px,100%)] p-5 pt-12">
+      <div className="card flex flex-col gap-4">
+        <h1 className="text-20 font-bold text-text">Màn hình gặp sự cố</h1>
+        <p className="text-13 leading-body text-text-muted">
+          Đây là lỗi của phần mềm, không phải do bạn thao tác sai. Dữ liệu đã lưu không bị
+          ảnh hưởng.
         </p>
 
         <div className="row">

@@ -1,0 +1,23 @@
+/*
+ * CTA cuối — KHÔNG chiếm trọn một màn.
+ *
+ * ⚠️ Bản dựng đầu cho khối này một khung nhìn đầy đủ và đo được 507 px nội dung
+ *    trong 900 px: màn RỖNG NHẤT trang mà vẫn chiếm một lượt "lật trang". Gộp
+ *    vào ngay trên chân trang thì không mất gì.
+ */
+.cta {
+  padding: var(--s-9) 0;
+  border-top: 1px solid var(--line);
+  background: var(--photo);
+  text-align: center;
+}
+.trong { display: grid; justify-items: center; gap: var(--s-4); }
+.tieuDe { max-width: 18ch; font-size: clamp(2.25rem, 5.7vw, 5.125rem); }
+.dan { max-width: 46ch; color: var(--text-muted); font-size: var(--fs-lead); }
+.nut { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-3); margin-top: var(--s-2); }
+
+@media (max-width: 620px) {
+  .cta { padding: var(--s-8) 0; }
+  .nut { width: 100%; }
+  .nut > * { flex: 1 1 100%; }
+}

@@ -1,0 +1,65 @@
+/*
+ * Chuyển động — DES-LS-002 §7. CSS thuần, BA LOẠI, không có loại thứ tư.
+ *
+ *   1. Chữ và thẻ hiện dần khi vào khung nhìn   — `animation-timeline: view()`
+ *   2. Ảnh hero dịch chậm khi cuộn              — `animation-timeline: scroll()`
+ *   3. Nút và thẻ đổi trạng thái khi rê chuột   — 150 ms, khai ở từng module
+ *
+ * 🔒 Không GSAP, không framer-motion. Chúng nặng hơn TOÀN BỘ phần chữ của
+ *    trang, cho một hiệu ứng mà trình duyệt đã làm được ở luồng compositor.
+ *
+ * 🔒 TRẠNG THÁI TĨNH MẶC ĐỊNH LÀ TRẠNG THÁI CUỐI.
+ *
+ *    Mọi quy tắc chuyển động nằm TRONG `@supports` + `prefers-reduced-motion`.
+ *    Ngoài hai lớp bảo vệ đó, `.hien` và `.troi` không khai một thuộc tính nào —
+ *    nên trình duyệt chưa hỗ trợ timeline hiện thẳng kết quả đầy đủ.
+ *
+ *    💡 Đây là lý do các lớp này KHÔNG đặt `opacity: 0` ở ngoài rồi hoàn lại
+ *       bên trong. Đặt ngoài nghĩa là trình duyệt cũ hiện một trang trắng — một
+ *       lỗi im lặng, vì trang vẫn "chạy", chỉ là không đọc được.
+ *
+ * Khoảnh khắc chữ ký (bóc giá theo vị trí cuộn) cần một timeline ĐẶT TÊN gắn
+ * vào cả màn hình, không phải timeline của từng con số. Nó nằm trong
+ * `components/boc-gia-lan-banh.module.css` cùng với khối nó phục vụ.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .hien {
+      animation: hien-len linear both;
+      animation-timeline: view();
+      animation-range: entry 4% cover 26%;
+    }
+    /* Xếp lớp trong một cụm: thẻ sau vào chậm hơn thẻ trước một nhịp ngắn. */
+    .hien-2 { animation-range: entry 4% cover 32%; }
+    .hien-3 { animation-range: entry 4% cover 38%; }
+    .hien-4 { animation-range: entry 4% cover 44%; }
+  }
+
+  @supports (animation-timeline: scroll()) {
+    .troi {
+      animation: troi-xuong linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 100svh;
+    }
+  }
+}
+
+@keyframes hien-len {
+  from { opacity: 0; transform: translate3d(0, 18px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes troi-xuong {
+  from { transform: translate3d(0, 0, 0) scale(1.07); }
+  to { transform: translate3d(0, 9%, 0) scale(1.07); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

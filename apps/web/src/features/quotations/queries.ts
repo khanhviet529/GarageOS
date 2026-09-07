@@ -1,7 +1,7 @@
 'use client';
 
-import { quotationsApi } from '@/lib/api/quotations';
-import { repairOrdersApi } from '@/lib/api/repair-orders';
+import { quotationsApi } from '@/features/quotations/api';
+import { repairOrdersApi } from '@/features/repair-orders/api';
 import { useQuery } from '@tanstack/react-query';
 import type { RepairOrderDetail } from '@garageos/contracts';
 import { repairOrderKeys } from '@/features/repair-orders/queries';

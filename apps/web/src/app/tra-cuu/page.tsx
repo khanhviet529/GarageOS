@@ -54,25 +54,33 @@ export default function TraCuuLanding() {
   }
 
   return (
-    <main className="public">
+    <>
       <header className="public-header">
         <div className="garage">GarageOS</div>
         <div className="plate mono">Tra cứu đơn</div>
       </header>
 
-      <div className="card stack">
-        <h2>Nhập mã truy cập</h2>
-        <p className="muted">
-          Mã gồm chữ và số, garage in trên giấy bàn giao hoặc gửi kèm liên kết
-          trong tin nhắn.
-        </p>
+      <main className="public flex flex-col gap-4">
+        <div className="card flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-26 font-bold tracking-[-0.7px] text-text">Nhập mã truy cập</h1>
+          <p className="text-13 leading-body text-text-dim">
+            Mã gồm chữ và số, garage in trên giấy bàn giao hoặc gửi kèm liên kết trong tin
+            nhắn.
+          </p>
+        </div>
 
-        <form onSubmit={di} className="stack">
+        <form onSubmit={di} className="flex flex-col gap-4">
           <div className="field">
             <label htmlFor="ma-truy-cap">Mã truy cập <span className="req">*</span></label>
+            {/*
+              Mono, KHÔNG dùng class `.otp`. `.otp` giãn chữ 10px cho mã sáu số
+              — đúng ở đó, sai ở đây: mã truy cập dài 43 ký tự, giãn ra thì nó
+              tràn khỏi ô và khách không soi được mình dán thiếu ký tự nào.
+            */}
             <input
               id="ma-truy-cap"
-              className="otp"
+              className="mono min-h-[46px] text-14"
               autoFocus
               autoComplete="off"
               autoCorrect="off"
@@ -94,27 +102,38 @@ export default function TraCuuLanding() {
               xem đã dán thiếu phần đầu hoặc phần cuối chưa.
             </p>
           )}
-          <button className="lg" type="submit" disabled={daSap === '' || quaNgan}>
+          <button
+            className="min-h-[44px] w-full text-14"
+            type="submit"
+            disabled={daSap === '' || quaNgan}
+          >
             Xem đơn
           </button>
         </form>
-      </div>
+        </div>
 
-      <div className="card">
-        <h3>Khách hàng đã từng vào xưởng?</h3>
-        <p className="muted small">
-          Khi garage gửi link, bạn theo dõi được tiến độ sửa chữa, xem báo giá và
-          duyệt từng hạng mục ngay tại đây.
-        </p>
-        <p className="muted small">
-          Nếu bạn là nhân viên garage, hãy <a href="/dang-nhap">đăng nhập</a> để dùng
-          bảng điều khiển đầy đủ.
-        </p>
-      </div>
+        <div className="card flex flex-col gap-2.5">
+          <h3>Khách hàng đã từng vào xưởng?</h3>
+          <p className="text-12 leading-body text-text-muted">
+            Khi garage gửi link, bạn theo dõi được tiến độ sửa chữa, xem báo giá và duyệt
+            từng hạng mục ngay tại đây.
+          </p>
+          <p className="text-12 leading-body text-text-muted">
+            Nếu bạn là nhân viên garage, hãy{' '}
+            <a href="/dang-nhap" className="text-brand underline underline-offset-2">
+              đăng nhập
+            </a>{' '}
+            để dùng bảng điều khiển đầy đủ.
+          </p>
+        </div>
 
-      <p className="public-foot">
-        © {new Date().getFullYear()} GarageOS · Hệ thống quản lý xưởng dịch vụ ô tô
-      </p>
-    </main>
+        {/*
+          Không in năm hiện tại ở đây. Trang được kết xuất tĩnh, nên
+          `new Date().getFullYear()` đóng băng năm BUILD vào HTML — và mỗi ngày
+          1 tháng 1, chân trang lặng lẽ sai cho tới lần build kế tiếp.
+        */}
+        <p className="public-foot">GarageOS · Hệ thống quản lý xưởng dịch vụ ô tô</p>
+      </main>
+    </>
   );
 }

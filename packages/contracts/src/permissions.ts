@@ -288,6 +288,40 @@ export const ACTION_ROLES = {
    * bán hàng — người chịu trách nhiệm phải là quản lý.
    */
   'sales:leadRedact': ['SALES_MANAGER', 'OWNER'],
+
+  /*
+   * Catalog thương mại — SRS-LS-EXP-001 §4. Ba nhóm quyền, tách nhau có lý do.
+   */
+
+  /** Biểu phí lăn bánh: một bảng, cả tenant dùng chung, sai một dòng là sai mọi trang xe. */
+  'showroom:feeScheduleRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+  'showroom:feeScheduleWrite': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * 🔒 `INV-LS-21` ở dạng cụ thể nhất: sửa GIÁ tách khỏi sửa NỘI DUNG.
+   *
+   * `marketing:catalogWrite` cho phép sửa mô tả, ảnh, SEO. Đổi giá công bố là
+   * việc khác hẳn — nó để lại vết bất biến trong `vehicle_price_log` và là thứ
+   * khách chụp màn hình mang đến showroom. Biên tập viên nội dung không cần
+   * quyền đó, và trao thừa quyền thì không ai phát hiện cho đến khi giá sai.
+   */
+  'showroom:priceWrite': ['MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+
+  /** Ưu đãi, trả góp, màu — nội dung thương mại, đi qua revision. */
+  'showroom:commerceWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'SALES_MANAGER', 'OWNER'],
+
+  /**
+   * 🔒 Cập nhật khả năng giao xe — quyền RỘNG NHẤT trong nhóm này, và đó là chủ ý.
+   *
+   * Người biết "Long Biên còn màu gì, giao sau bao lâu" là người đứng ở
+   * showroom, không phải biên tập viên marketing. Bắt họ đi qua màn soạn nội
+   * dung — đứng cạnh nút Xuất bản — là cách chắc chắn để hoặc dữ liệu không bao
+   * giờ được cập nhật, hoặc nội dung chưa duyệt bị đẩy ra công khai.
+   *
+   * Đây là lý do `vehicle_availability` KHÔNG đi qua revision (§3 của SRS): dữ
+   * liệu vận hành và nội dung marketing có hai vòng đời, hai nhóm người.
+   */
+  'showroom:availabilityWrite': ['SALES_ADVISOR', 'SALES_MANAGER', 'BRANCH_MANAGER', 'OWNER'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type PermissionAction = keyof typeof ACTION_ROLES;
@@ -354,4 +388,9 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'sales:leadTransition': 'chuyển trạng thái lead',
   'sales:leadAddActivity': 'ghi hoạt động lên lead',
   'sales:leadRedact': 'xoá dữ liệu cá nhân của lead',
+  'showroom:feeScheduleRead': 'xem biểu phí lăn bánh',
+  'showroom:feeScheduleWrite': 'sửa biểu phí lăn bánh',
+  'showroom:priceWrite': 'đổi giá công bố của xe',
+  'showroom:commerceWrite': 'sửa ưu đãi, trả góp và màu xe',
+  'showroom:availabilityWrite': 'cập nhật khả năng giao xe của chi nhánh',
 };

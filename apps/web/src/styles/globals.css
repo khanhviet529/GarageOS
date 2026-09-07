@@ -1,0 +1,29 @@
+/*
+ * Điểm vào duy nhất của CSS — `app/layout.tsx` chỉ import tệp này.
+ *
+ * Ba tệp bên dưới tách theo VAI TRÒ, không theo màn hình:
+ *
+ *   tokens.css      bảng token + ánh xạ sang tiện ích Tailwind (`@theme`)
+ *   base.css        nền tảng: reset, phông, viền tiêu điểm, giảm chuyển động
+ *   components.css  lớp mỏng cho những dáng lặp lại và CÓ TÊN trong thiết kế
+ *
+ * `@import` phải đứng trước mọi at-rule khác theo chuẩn CSS, nên `@source` và
+ * `@custom-variant` nằm sau khối import.
+ */
+@import 'tailwindcss';
+@import './tokens.css';
+@import './base.css';
+@import './components.css';
+
+/*
+ * Tailwind quét mã nguồn từ thư mục của chính tệp CSS này trở lên. Khai báo
+ * tường minh `src/` để việc quét không phụ thuộc vào chỗ đặt tệp.
+ */
+@source '../';
+
+/*
+ * Chế độ tối bật bằng CLASS trên <html> (next-themes, `attribute="class"`),
+ * không bằng `prefers-color-scheme` trực tiếp — người dùng phải LẬT NGƯỢC được
+ * lựa chọn của hệ điều hành. Mặc định vẫn theo hệ điều hành: `defaultTheme="system"`.
+ */
+@custom-variant dark (&:where(.dark, .dark *));

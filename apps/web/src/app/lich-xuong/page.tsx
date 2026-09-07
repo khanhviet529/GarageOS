@@ -1,16 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { AppHeader } from '@/components/AppHeader';
-import { ErrorState } from '@/components/ErrorState';
-import { EmptyState } from '@/components/EmptyState';
-import { useToast } from '@/components/Toast';
-import { IconLamMoi } from '@/components/Icon';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CalendarDays, Pencil, RefreshCw, RotateCcw } from 'lucide-react';
+import { AppHeader } from '@/components/layout/app-header';
+import { ErrorState } from '@/components/error-state';
+import { EmptyState } from '@/components/empty-state';
+import { useToast } from '@/components/toast';
 import { formatPlate } from '@garageos/domain';
-import { BangCuon } from '@/components/BangCuon';
-import { BangGioCong } from '@/components/BangGioCong';
-import { HopQc } from '@/components/HopQc';
-import { SkeletonTable } from '@/components/Skeleton';
+import { BangCuon } from '@/components/bang-cuon';
+import { BangGioCong } from '@/features/workshop-schedule/bang-gio-cong';
+import { HopQc } from '@/features/workshop-schedule/hop-qc';
+import { SkeletonTable } from '@/components/skeleton';
+import { TieuDeTrang } from '@/components/tieu-de-trang';
+import { Button } from '@/components/ui/button';
 import { auth } from '@/lib/api';
 import {
   api,
@@ -37,7 +39,15 @@ function homNay(): string {
 }
 
 export default function TrangLichXuong() {
-  const [ngay, setNgay] = useState(homNay());
+  /*
+   * 🔒 Ngày khởi tạo RỖNG rồi mới đặt trong effect.
+   *
+   * Trang này được kết xuất tĩnh, nên `useState(homNay())` đóng băng ngày build
+   * vào HTML. Khi React hydrate với ngày thật, giá trị của ô `<input type="date">`
+   * lệch — React ghi một lỗi console, và ngày trên lịch có thể là ngày của lần
+   * build gần nhất cho tới khi ai đó chạm vào ô.
+   */
+  const [ngay, setNgay] = useState('');
   const [bays, setBays] = useState<Bay[]>([]);
   const [lich, setLich] = useState<WorkAssignmentItem[] | null>(null);
   const [choXep, setChoXep] = useState<PendingWorkItem[]>([]);
@@ -59,7 +69,10 @@ export default function TrangLichXuong() {
   const viec = choXep.find((w) => w.quotationLineId === viecId);
   const batDauISO = `${ngay}T${gio}:00`;
 
+  useEffect(() => setNgay(homNay()), []);
+
   const tai = useCallback(() => {
+    if (ngay === '') return;
     Promise.all([api.listBays(), api.listSchedule(ngay), api.listPendingWork()])
       .then(([b, l, p]) => {
         setBays(b);
@@ -79,7 +92,7 @@ export default function TrangLichXuong() {
   // Gợi ý thợ đổi theo hạng mục VÀ theo khung giờ: cùng một người có thể rảnh
   // lúc 8h và bận lúc 10h, nên không hỏi lại là hiển thị thông tin đã cũ.
   useEffect(() => {
-    if (viecId === '') {
+    if (viecId === '' || ngay === '') {
       setThoList([]);
       return;
     }
@@ -98,7 +111,7 @@ export default function TrangLichXuong() {
     return () => {
       huy = true;
     };
-  }, [viecId, batDauISO]);
+  }, [viecId, batDauISO, ngay]);
 
   async function xepLich(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -140,49 +153,73 @@ export default function TrangLichXuong() {
 
   const gioTrongNgay = Array.from({ length: GIO_DONG - GIO_MO }, (_, i) => GIO_MO + i);
 
+  /** Khoang nào đang có việc trong ngày đang xem — để nhãn cột trái nói được */
+  const soViecTheoKhoang = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of lich ?? []) {
+      if (a.status === 'CANCELLED') continue;
+      m.set(a.bayId, (m.get(a.bayId) ?? 0) + 1);
+    }
+    return m;
+  }, [lich]);
+
+  const soKhoangBan = bays.filter((b) => (soViecTheoKhoang.get(b.id) ?? 0) > 0).length;
+
   return (
     <>
       <AppHeader current="lich-xuong" />
-      <main id="noi-dung" className="container stack">
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ marginBottom: 0 }}>Lịch xưởng</h2>
-            <div className="row">
-              {capNhatLuc !== '' && (
-                <span className="hint" style={{ alignSelf: 'center' }}>
-                  Cập nhật {capNhatLuc}
-                </span>
-              )}
-              <button type="button" className="secondary co-icon" onClick={tai}>
-                <IconLamMoi /> Làm mới
-              </button>
-            </div>
+      <main id="noi-dung" className="container flex flex-col gap-5">
+        <TieuDeTrang
+          tieuDe="Lịch xưởng"
+          phu={
+            bays.length === 0
+              ? 'Đang tải khoang…'
+              : `${bays.length} khoang · ${soKhoangBan} đang có việc · ${choXep.length} hạng mục chờ phân công`
+          }
+        >
+          {capNhatLuc !== '' && (
+            <span className="hidden font-mono text-11 text-text-dim sm:inline">
+              Cập nhật {capNhatLuc}
+            </span>
+          )}
+          <div className="field">
+            <label htmlFor="ngay-lich" className="sr-only">
+              Ngày
+            </label>
+            <input
+              id="ngay-lich"
+              type="date"
+              className="w-auto"
+              value={ngay}
+              onChange={(e) => setNgay(e.target.value)}
+            />
           </div>
+          <Button variant="vien" onClick={() => setNgay(homNay())}>
+            <CalendarDays className="size-3.5" aria-hidden />
+            Hôm nay
+          </Button>
+          <Button variant="vien" type="button" onClick={tai}>
+            <RefreshCw className="size-3.5" aria-hidden />
+            Làm mới
+          </Button>
+        </TieuDeTrang>
 
-          <div className="card-section">
-            {loi !== null && <ErrorState message={loi} onRetry={tai} />}
+        {loi !== null && <ErrorState message={loi} onRetry={tai} />}
 
-            <div className="row">
-              <div className="field">
-                <label htmlFor="ngay-lich">Ngày</label>
-                <input
-                  id="ngay-lich"
-                  type="date"
-                  value={ngay}
-                  onChange={(e) => setNgay(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {lich === null ? (
+        <section className="card overflow-hidden p-0">
+          {lich === null ? (
+            <div className="p-4 md:p-[18px]">
               <SkeletonTable rows={6} cols={6} />
-            ) : bays.length === 0 ? (
+            </div>
+          ) : bays.length === 0 ? (
+            <div className="p-4 md:p-[18px]">
               <EmptyState
                 title="Chi nhánh chưa khai báo khoang nào"
                 description="Mời quản lý chi nhánh vào phần cấu hình để tạo khoang sửa chữa trước khi xếp lịch."
               />
-            ) : (
-              <BangCuon moTa="Lịch xưởng theo khoang và giờ">
+            </div>
+          ) : (
+            <BangCuon moTa="Lịch xưởng theo khoang và giờ">
               <table className="lich">
                 <caption className="sr-only">
                   Lịch xưởng theo khoang và giờ. Mỗi hàng là một khoang.
@@ -198,120 +235,136 @@ export default function TrangLichXuong() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bays.map((b) => (
-                    <tr key={b.id}>
-                      <th scope="row" className="nowrap">
-                        {b.name}
-                        {b.capabilities.includes('HV_SAFE_ZONE') && (
-                          <span className="tag canh-bao" title="Có vùng an toàn cao áp">
-                            cao áp
+                  {bays.map((b) => {
+                    const dem = soViecTheoKhoang.get(b.id) ?? 0;
+                    return (
+                      <tr key={b.id}>
+                        <th scope="row" className="nowrap">
+                          <span className="block text-12 font-semibold text-text">
+                            {b.name}
+                            {b.capabilities.includes('HV_SAFE_ZONE') && (
+                              <span className="tag canh-bao" title="Có vùng an toàn cao áp">
+                                cao áp
+                              </span>
+                            )}
                           </span>
-                        )}
-                      </th>
-                      {gioTrongNgay.map((h) => {
-                        const trongO = lich.filter((a) => {
-                          const s = new Date(a.plannedStart);
-                          return a.bayId === b.id && s.getHours() === h;
-                        });
-                        return (
-                          <td key={h} className="o-lich">
-                            {trongO.map((a) => (
-                              <div key={a.id} className={`viec tt-${a.status.toLowerCase()}`}>
-                                <strong className="mono">{formatPlate(a.plateNumber)}</strong>
-                                <span className="small">{a.description}</span>
-                                <span className="small muted">
-                                  {hhmm(a.plannedStart)}–{hhmm(a.plannedEnd)} · {a.technicianName}
-                                </span>
-                                <span className="small">
-                                  {ASSIGNMENT_STATUS_LABEL[a.status] ?? a.status}
-                                </span>
-                                {/*
-                                  Việc làm lại phải nhìn ra NGAY trên lịch: nó
-                                  không tính tiền khách, nên điều phối cần phân
-                                  biệt được với việc thường khi quét mắt cả ngày.
-                                */}
-                                {a.reworkOfId !== null && (
-                                  <span className="tag canh-bao">
-                                    làm lại
-                                    {a.reworkReason !== null &&
-                                      ` · ${REWORK_REASON_LABEL[a.reworkReason] ?? a.reworkReason}`}
+                          <span
+                            className={`mt-0.5 block font-mono text-10 ${dem > 0 ? 'text-text-dim' : 'text-ok'}`}
+                          >
+                            {dem > 0 ? `${dem} việc` : 'trống'}
+                          </span>
+                        </th>
+                        {gioTrongNgay.map((h) => {
+                          const trongO = lich.filter((a) => {
+                            const s = new Date(a.plannedStart);
+                            return a.bayId === b.id && s.getHours() === h;
+                          });
+                          return (
+                            <td key={h} className="o-lich">
+                              {trongO.map((a) => (
+                                <div key={a.id} className={`viec tt-${a.status.toLowerCase()}`}>
+                                  <strong className="mono text-11 text-text">
+                                    {formatPlate(a.plateNumber)}
+                                  </strong>
+                                  <span className="text-11 text-text-muted">{a.description}</span>
+                                  <span className="font-mono text-10 text-text-dim">
+                                    {hhmm(a.plannedStart)}–{hhmm(a.plannedEnd)} · {a.technicianName}
                                   </span>
-                                )}
-                                {a.status === 'QC_FAILED' && a.qcNote !== null && (
-                                  <span className="small" title={a.qcNote}>
-                                    ✎ {a.qcNote.slice(0, 40)}
+                                  <span className="font-mono text-10 text-text-muted">
+                                    {ASSIGNMENT_STATUS_LABEL[a.status] ?? a.status}
                                   </span>
-                                )}
-                                {a.status === 'DONE' && (
-                                  <HopQc
-                                    assignmentId={a.id}
-                                    moTaViec={`${a.plateNumber} · ${a.description}`}
-                                    onXong={tai}
-                                  />
-                                )}
-                                {/*
-                                  Một nút duy nhất mở bảng giờ công, thay cho
-                                  hai nút "Bắt đầu"/"Xong" trước đây.
+                                  {/*
+                                    Việc làm lại phải nhìn ra NGAY trên lịch: nó
+                                    không tính tiền khách, nên điều phối cần phân
+                                    biệt được với việc thường khi quét mắt cả ngày.
+                                  */}
+                                  {a.reworkOfId !== null && (
+                                    <span className="tag canh-bao ml-0 gap-1">
+                                      <RotateCcw className="size-2.5" aria-hidden />
+                                      làm lại
+                                      {a.reworkReason !== null &&
+                                        ` · ${REWORK_REASON_LABEL[a.reworkReason] ?? a.reworkReason}`}
+                                    </span>
+                                  )}
+                                  {a.status === 'QC_FAILED' && a.qcNote !== null && (
+                                    <span
+                                      className="flex items-start gap-1 text-10 text-danger"
+                                      title={a.qcNote}
+                                    >
+                                      <Pencil className="mt-px size-2.5 shrink-0" aria-hidden />
+                                      {a.qcNote.slice(0, 40)}
+                                    </span>
+                                  )}
+                                  {a.status === 'DONE' && (
+                                    <HopQc
+                                      assignmentId={a.id}
+                                      moTaViec={`${a.plateNumber} · ${a.description}`}
+                                      onXong={tai}
+                                    />
+                                  )}
+                                  {/*
+                                    Một nút duy nhất mở bảng giờ công, thay cho
+                                    hai nút "Bắt đầu"/"Xong" trước đây.
 
-                                  🔒 Đổi trạng thái phân công KHÔNG còn là hành
-                                  động riêng: nó là HỆ QUẢ của việc bấm giờ
-                                  (0030 + TimeLogService). Để hai đường song
-                                  song thì có trạng thái "IN_PROGRESS mà không
-                                  có đoạn giờ nào", và giờ công của việc đó
-                                  vĩnh viễn bằng 0.
-                                */}
-                                <button
-                                  type="button"
-                                  className="secondary small-btn"
-                                  onClick={() => setXemGio(a)}
-                                >
-                                  Giờ công
-                                </button>
-                                {/*
-                                  Huỷ chỉ hiện khi CHƯA bấm giờ lần nào
-                                  (SCHEDULED). Đã có giờ công rồi thì huỷ là bỏ
-                                  đi dữ liệu lương của thợ — việc đó thuộc luồng
-                                  huỷ đơn có quyết toán ở BC-10, không phải một
-                                  nút trên lịch.
-                                */}
-                                {a.status === 'SCHEDULED' && (
+                                    🔒 Đổi trạng thái phân công KHÔNG còn là hành
+                                    động riêng: nó là HỆ QUẢ của việc bấm giờ
+                                    (0030 + TimeLogService). Để hai đường song
+                                    song thì có trạng thái "IN_PROGRESS mà không
+                                    có đoạn giờ nào", và giờ công của việc đó
+                                    vĩnh viễn bằng 0.
+                                  */}
                                   <button
                                     type="button"
-                                    className="secondary small-btn"
-                                    onClick={() => void doiTrangThai(a.id, 'CANCELLED')}
-                                    aria-label={`Huỷ phân công ${a.repairOrderCode} — ${a.description}`}
+                                    className="secondary small-btn self-start"
+                                    onClick={() => setXemGio(a)}
                                   >
-                                    Huỷ
+                                    Giờ công
                                   </button>
-                                )}
-                              </div>
-                            ))}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                                  {/*
+                                    Huỷ chỉ hiện khi CHƯA bấm giờ lần nào
+                                    (SCHEDULED). Đã có giờ công rồi thì huỷ là bỏ
+                                    đi dữ liệu lương của thợ — việc đó thuộc luồng
+                                    huỷ đơn có quyết toán ở BC-10, không phải một
+                                    nút trên lịch.
+                                  */}
+                                  {a.status === 'SCHEDULED' && (
+                                    <button
+                                      type="button"
+                                      className="secondary small-btn self-start"
+                                      onClick={() => void doiTrangThai(a.id, 'CANCELLED')}
+                                      aria-label={`Huỷ phân công ${a.repairOrderCode} — ${a.description}`}
+                                    >
+                                      Huỷ
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </BangCuon>
-            )}
-          </div>
-        </div>
+          )}
+        </section>
 
         {xemGio !== null && (
-          <div className="card">
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ marginBottom: 0 }}>
+          <section className="card">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="mb-0">
                 Giờ công · {xemGio.repairOrderCode} · {xemGio.description}
               </h2>
-              <button type="button" className="secondary" onClick={() => setXemGio(null)}>
+              <Button variant="vien" type="button" className="ml-auto" onClick={() => setXemGio(null)}>
                 Đóng
-              </button>
+              </Button>
             </div>
-            <p className="hint" style={{ marginTop: 8 }}>
+            <p className="hint mt-2">
               Thợ: {xemGio.technicianName} · khoang {xemGio.bayName}
             </p>
-            <div style={{ marginTop: 12 }}>
+            <div className="mt-3">
               <BangGioCong
                 assignmentId={xemGio.id}
                 /*
@@ -324,17 +377,17 @@ export default function TrangLichXuong() {
                 onDoiTrangThai={tai}
               />
             </div>
-          </div>
+          </section>
         )}
 
-        <div className="card">
+        <section className="card">
           <h2>Xếp việc chờ</h2>
           {choXep.length === 0 ? (
             <p className="alert info">Không còn hạng mục nào chờ phân công.</p>
           ) : (
             <>
               <form onSubmit={xepLich} className="row top">
-                <div className="field">
+                <div className="field min-w-[220px] flex-[2]">
                   <label htmlFor="chon-viec">Hạng mục chờ</label>
                   <select
                     id="chon-viec"
@@ -361,7 +414,7 @@ export default function TrangLichXuong() {
                     onChange={(e) => setGio(e.target.value)}
                   />
                 </div>
-                <div className="field">
+                <div className="field flex-1">
                   <label htmlFor="chon-khoang">Khoang</label>
                   <select id="chon-khoang" value={bayId} onChange={(e) => setBayId(e.target.value)}>
                     {bays.map((b) => (
@@ -371,7 +424,7 @@ export default function TrangLichXuong() {
                     ))}
                   </select>
                 </div>
-                <div className="field">
+                <div className="field min-w-[200px] flex-[2]">
                   <label htmlFor="chon-tho">Thợ</label>
                   <select
                     id="chon-tho"
@@ -391,17 +444,22 @@ export default function TrangLichXuong() {
                     ))}
                   </select>
                 </div>
-                <button type="submit" disabled={dangXep || viecId === '' || thoId === ''}>
+                <Button
+                  type="submit"
+                  dangXuLy={dangXep}
+                  disabled={viecId === '' || thoId === ''}
+                >
                   {dangXep ? 'Đang xếp…' : 'Xếp lịch'}
-                </button>
+                </Button>
               </form>
 
               {viec !== undefined && (
-                <p className="hint" style={{ marginTop: 8 }}>
+                <p className="hint mt-2">
                   Định mức {viec.standardHours}h
                   {viec.requiredCertifications.length > 0 &&
                     ` · yêu cầu chứng chỉ: ${viec.requiredCertifications.join(', ')}`}
-                  {viec.serviceCategory === 'HV_SYSTEM' && ' · phải làm ở khoang có vùng an toàn cao áp'}
+                  {viec.serviceCategory === 'HV_SYSTEM' &&
+                    ' · phải làm ở khoang có vùng an toàn cao áp'}
                   {viec.reworkOfId !== null && viec.reworkReason !== null && (
                     <>
                       {' · '}
@@ -418,7 +476,7 @@ export default function TrangLichXuong() {
               )}
             </>
           )}
-        </div>
+        </section>
       </main>
     </>
   );
