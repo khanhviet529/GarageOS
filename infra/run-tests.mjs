@@ -76,10 +76,29 @@ const r = spawnSync(
 
 if (tenCI) {
   const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
-  process.stdout.write(out);
 
-  if ((r.status ?? 1) !== 0) {
+  /*
+   * 🔒 In CHẨN ĐOÁN TRƯỚC, output đầy đủ SAU — và không bao giờ ngược lại.
+   *
+   * Bản trước làm đúng ngược: đổ vài MB TAP ra stdout rồi mới in `::error::`.
+   * Một lượt CI đỏ mà log dừng giữa chừng một dòng:
+   *
+   *     duration_ms: 9.2 ELIFECYCLE  Test failed.
+   *
+   * Không có `not ok` nào trong toàn bộ log, không có annotation nào, không có
+   * dòng tổng kết `# fail`. Nhìn từ ngoài thì như test chạy sạch rồi tự thoát 1.
+   * Phần đuôi — nơi chứa đúng bài đỏ — bị nuốt: `process.exit()` ngay sau một
+   * lệnh ghi lớn cắt phần chưa kịp xả, và mấy dòng `::error::` xếp sau nó cũng
+   * đi theo. Cơ chế dựng riêng để chẩn đoán CI hỏng đúng lúc CI cần nó nhất.
+   *
+   * Hai đổi: chẩn đoán lên trước hàng đợi, và thoát bằng `process.exitCode` để
+   * Node tự xả xong mới kết thúc thay vì cắt ngang.
+   */
+  const status = r.status ?? 1;
+
+  if (status !== 0) {
     const dong = out.split('\n');
+    let daBao = false;
     for (const [i, l] of dong.entries()) {
       // `not ok 12 - tên bài` — bỏ qua dòng của suite cha, chúng chỉ nói
       // "N subtests failed" và không thêm thông tin gì.
@@ -90,8 +109,25 @@ if (tenCI) {
       const loi = /error:\s*(?:\|-?\s*\n)?\s*'?(.+?)'?\s*$/m.exec(ctx);
       const chiTiet = loi === null ? '' : ` — ${loi[1]}`;
       console.log(`::error title=Test đỏ::${m[1]}${chiTiet}`.replace(/\r/g, ''));
+      daBao = true;
+    }
+
+    /*
+     * Thoát khác 0 mà không có `not ok` nào nghĩa là tiến trình chết trước khi
+     * kịp báo cáo — hết bộ nhớ, lỗi ở tầng import, hoặc bị giết. Nói thẳng ra
+     * điều đó kèm 40 dòng cuối, thay vì để log im lặng như lần trước.
+     */
+    if (!daBao) {
+      const duoi = out.trimEnd().split('\n').slice(-40).join('\n');
+      console.log(
+        `::error title=Test chết giữa chừng::Thoát ${status} mà không có dòng "not ok" nào — ` +
+          'tiến trình test dừng trước khi báo cáo. 40 dòng cuối nằm trong log.',
+      );
+      console.log(`::group::40 dòng cuối trước khi chết\n${duoi}\n::endgroup::`);
     }
   }
+
+  process.stdout.write(out);
 }
 
-process.exit(r.status ?? 1);
+process.exitCode = r.status ?? 1;
