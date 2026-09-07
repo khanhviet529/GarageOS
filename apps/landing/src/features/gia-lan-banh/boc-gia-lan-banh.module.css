@@ -215,7 +215,22 @@
   to { transform: scaleX(1); }
 }
 
+/*
+ * 🔒 Các dòng phí KHÔNG mờ đi — chúng trượt vào.
+ *
+ * Bản trước chạy `opacity: .3 → 1`. Ở mức .3, `--paper-muted #5d605b` trên
+ * `--paper-0 #f3f1eb` chỉ còn 1,9:1: chữ không đọc được. Mà `animation-timeline`
+ * ở đây là timeline theo VỊ TRÍ CUỘN, không phải theo thời gian — nên đó không
+ * phải một khoảnh khắc thoáng qua. Người mở trang mà chưa cuộn tới khối này thì
+ * các dòng phí đứng nguyên ở mức mờ đó, không giới hạn thời gian.
+ *
+ * Đây đúng là thứ WCAG 1.4.3 nói tới, và axe bắt được chín dòng.
+ *
+ * Trượt thì giữ được cảm giác "từng khoản hiện ra theo tay cuộn" mà không bao
+ * giờ đặt chữ dưới ngưỡng đọc được. Con số duy nhất đổi là quãng đường; màu thì
+ * luôn là màu cuối.
+ */
 @keyframes hang-sang {
-  from { opacity: .3; }
-  to { opacity: 1; }
+  from { transform: translate3d(0, 10px, 0); }
+  to { transform: none; }
 }
