@@ -1,6 +1,6 @@
 'use client';
 
-import { quotationsApi, type AddQuotationLineRequest } from '@/lib/api/quotations';
+import { quotationsApi, type AddQuotationLineRequest } from '@/features/quotations/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { repairOrderKeys } from '@/features/repair-orders/queries';
 import { quotationKeys } from './queries';

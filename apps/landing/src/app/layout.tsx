@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Be_Vietnam_Pro, JetBrains_Mono } from 'next/font/google';
+import { Be_Vietnam_Pro, IBM_Plex_Mono } from 'next/font/google';
 import { requestHost, productionEnvironment } from '@/lib/api';
 import { loadSite } from '@/lib/site';
 import './globals.css';
@@ -11,7 +11,7 @@ const giaoDien = Be_Vietnam_Pro({
   variable: '--font-ui-vn',
 });
 
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   subsets: ['latin', 'latin-ext', 'vietnamese'],
   weight: ['400', '500'],
   display: 'swap',

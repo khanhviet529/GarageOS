@@ -1,0 +1,336 @@
+/* =========================================================================
+   1 · TOKEN — nguồn duy nhất
+   =========================================================================
+
+   🔒 Bảng này là bản sao đúng-từng-giá-trị của bảng token trong đặc tả thị
+   giác. Không màu nào được đặt ngoài đây. Nếu một component cần một sắc độ
+   chưa có tên, đó là dấu hiệu component đó sai, không phải bảng này thiếu.
+
+   Vì sao token nằm ở `:root`/`.dark` chứ không nằm thẳng trong `@theme`:
+   `@theme` sinh biến ở `:root` một lần, không đổi theo class. Tách làm hai
+   tầng — token đổi theo theme, `@theme inline` chỉ TRỎ tới token — thì mọi
+   tiện ích Tailwind tự đổi màu khi bật/tắt chế độ tối, không cần biến thể
+   `dark:` ở từng chỗ dùng.
+   ------------------------------------------------------------------------ */
+
+:root {
+  /* Nền — sáng */
+  --ink-0: #f3f1eb;
+  --ink-1: #ffffff;
+  --ink-2: #f7f6f2;
+  --ink-3: #e6e3da;
+
+  /* Chữ — sáng */
+  --text: #161817;
+  --text-muted: #55584f;
+  --text-dim: #6b6e66;
+
+  /* Đường kẻ — sáng */
+  --line: #1618171f;
+  /*
+   * 🔒 `--line-strong` ĐẬM HƠN bảng token gốc (#16181740 → #1618178c).
+   *
+   * Việc của nó là "viền nút phụ", tức là RANH GIỚI CỦA MỘT THÀNH PHẦN ĐIỀU
+   * KHIỂN, và SC 1.4.11 đòi 3:1 cho ranh giới đó. Giá trị gốc đo được 2,3:1
+   * trên nền thẻ và 2,89:1 trên chip — trượt ở mọi tầng nền, và trượt theo
+   * kiểu mắt thường không nhìn ra. Sắc độ giữ nguyên (vẫn là mực của bảng
+   * token), chỉ nâng độ đục tới ngưỡng đo được bằng `pnpm kiem:tuong-phan`.
+   */
+  --line-strong: #1618178c;
+
+  /* Thương hiệu và hành động — sáng */
+  --brand: #b32e20;
+  --action: #b32e20;
+  --action-hover: #96261a;
+
+  /* Trạng thái — sáng */
+  --ok: #177a4e;
+  --warn: #8a5f12;
+  --danger: #b3271a;
+
+  /*
+   * Nền tô mờ của nhãn trạng thái.
+   *
+   * 🔒 Không dùng `color-mix()` hay alpha của chính token trạng thái: ở chế độ
+   * SÁNG, một lớp mờ của `--ok` (#177a4e) trên nền trắng cho ra màu xanh xám
+   * đục, còn ở chế độ TỐI thì `--ok` (#62d19b) cho ra màu bạc hà nhạt. Cùng một
+   * công thức, hai kết quả không cùng họ. Nên nền tô được ghi thẳng cho từng
+   * theme, và cặp chữ/nền của mỗi nhãn được đo bằng `pnpm kiem:tuong-phan`.
+   */
+  --ok-soft: #177a4e14;
+  --warn-soft: #8a5f1214;
+  --danger-soft: #b3271a14;
+  --brand-soft: #b32e2014;
+
+  /* Khối SÁNG — cùng giá trị ở cả hai theme, theo bảng token */
+  --paper-0: #f3f1eb;
+  --paper-1: #e8e5dd;
+  --paper-card: #ffffff;
+  --paper-ink: #161817;
+  --paper-muted: #5d605b;
+  --paper-line: #16181724;
+
+  /* Giếng ảnh — chỉ landing dùng, giữ ở đây để một bảng token là đủ */
+  --photo: #0e1113;
+
+  /*
+   * 🔒 Nhãn kỹ thuật chia theo BỀ MẶT, không theo theme. Một khối SÁNG nằm
+   * trong trang TỐI vẫn phải dùng `--signal-light`. Nên hai biến này KHÔNG đảo
+   * theo `.dark`; `--signal` chỉ là lối tắt cho bề mặt mặc định của theme.
+   */
+  --signal-dark: #c9a227;
+  --signal-light: #7a5c00;
+  --signal: var(--signal-light);
+
+  /* Chữ trên nền hành động — trắng ở cả hai theme (đo: 6,31:1 và 5,30:1) */
+  --on-action: #ffffff;
+
+  /* ── Ánh xạ sang tên biến của shadcn/ui ────────────────────────────────
+     🔒 Một biến shadcn = ĐÚNG MỘT token của dự án. Không có giá trị nào được
+     viết trực tiếp ở đây; nếu có thì đó là một màu thứ hai lẻn vào hệ. */
+  --background: var(--ink-0);
+  --foreground: var(--text);
+  --card: var(--ink-1);
+  --card-foreground: var(--text);
+  --popover: var(--ink-1);
+  --popover-foreground: var(--text);
+  --primary: var(--action);
+  --primary-foreground: var(--on-action);
+  --secondary: var(--ink-3);
+  --secondary-foreground: var(--text);
+  --muted: var(--ink-2);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--ink-3);
+  --accent-foreground: var(--text);
+  --destructive: var(--action);
+  --destructive-foreground: var(--on-action);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--brand);
+
+  --radius: 6px;
+
+  /*
+   * Cho trình duyệt biết bề mặt đang sáng hay tối, để nó vẽ ô đánh dấu, thanh
+   * cuộn và bộ chọn ngày theo đúng nền. Thiếu dòng này thì một ô checkbox chưa
+   * tick ở chế độ tối là một ô TRẮNG chói giữa thẻ tối.
+   */
+  color-scheme: light;
+}
+
+.dark {
+  --ink-0: #08090a;
+  --ink-1: #15181b;
+  --ink-2: #1d2125;
+  --ink-3: #2a2f34;
+
+  --text: #f5f5f3;
+  --text-muted: #b5b7b4;
+  --text-dim: #8b908c;
+
+  --line: #ffffff1f;
+  /* Xem chú thích ở `:root` — nâng từ #ffffff40 lên #ffffff5c để đạt 3:1 */
+  --line-strong: #ffffff5c;
+
+  --brand: #ff705c;
+  --action: #c73526;
+  --action-hover: #ae2e21;
+
+  --ok: #62d19b;
+  --warn: #e6b877;
+  --danger: #ff8f84;
+
+  --ok-soft: #62d19b1f;
+  --warn-soft: #e6b8771f;
+  --danger-soft: #ff8f841f;
+  --brand-soft: #ff705c1f;
+
+  --signal: var(--signal-dark);
+
+  color-scheme: dark;
+}
+
+/* =========================================================================
+   2 · @theme — tiện ích Tailwind sinh ra từ token, và CHỈ từ token
+   ========================================================================= */
+
+@theme inline {
+  /*
+   * 🔒 Xoá sạch bảng màu mặc định của Tailwind (zinc, slate, red, …).
+   *
+   * Để lại nó nghĩa là có hai hệ màu sống song song: `text-zinc-400` và
+   * `text-text-dim` cùng biên dịch được, và bảng token thôi là nguồn duy nhất.
+   * Sau đó không có cách nào phát hiện chỗ dùng sai ngoài việc đọc từng dòng.
+   * Xoá đi thì một class ngoài bảng đơn giản là không tồn tại.
+   */
+  --color-*: initial;
+
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  /* Chữ trên nền hành động; cũng là mực của khối giấy trên nền tối */
+  --color-white: #ffffff;
+
+  --color-ink-0: var(--ink-0);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-dim: var(--text-dim);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-action: var(--action);
+  --color-action-hover: var(--action-hover);
+  --color-on-action: var(--on-action);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --color-signal: var(--signal);
+  --color-signal-dark: var(--signal-dark);
+  --color-signal-light: var(--signal-light);
+
+  --color-paper-0: var(--paper-0);
+  --color-paper-1: var(--paper-1);
+  --color-paper-card: var(--paper-card);
+  --color-paper-ink: var(--paper-ink);
+  --color-paper-muted: var(--paper-muted);
+  --color-paper-line: var(--paper-line);
+  --color-photo: var(--photo);
+
+  /* Tên của shadcn — cùng token, khác nhãn */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* ── Phông ────────────────────────────────────────────────────────────── */
+  --font-serif: initial;
+  --font-sans: var(--font-be-vietnam-pro), 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas,
+    monospace;
+
+  /* ── Thang chữ ────────────────────────────────────────────────────────
+     🔒 Sàn 10px, và chỉ cho nhãn mono viết hoa có giãn chữ. Thang được đặt
+     theo đúng các cỡ có trong bộ thiết kế, không phải theo thang mặc định của
+     Tailwind — để một cỡ lạ không thể lọt vào mà không ai thấy.
+
+     `--text-N--line-height` đặt 1.25 cho MỌI cỡ. Đoạn văn nhiều dòng thêm
+     `leading-body` (1.6). Hai giá trị, không có giá trị thứ ba. */
+  --text-*: initial;
+  --text-10: 10px;
+  --text-10--line-height: 1.25;
+  --text-11: 11px;
+  --text-11--line-height: 1.25;
+  --text-12: 12px;
+  --text-12--line-height: 1.25;
+  --text-13: 13px;
+  --text-13--line-height: 1.25;
+  --text-14: 14px;
+  --text-14--line-height: 1.25;
+  --text-15: 15px;
+  --text-15--line-height: 1.25;
+  --text-17: 17px;
+  --text-17--line-height: 1.25;
+  --text-20: 20px;
+  --text-20--line-height: 1.25;
+  --text-22: 22px;
+  --text-22--line-height: 1.25;
+  --text-26: 26px;
+  --text-26--line-height: 1.25;
+  --text-30: 30px;
+  --text-30--line-height: 1.25;
+  --text-34: 34px;
+  --text-34--line-height: 1.25;
+
+  /* 🔒 Đúng hai giá trị line-height trong toàn hệ */
+  --leading-*: initial;
+  --leading-tight: 1.25;
+  --leading-body: 1.6;
+
+  /* ── Bo góc ───────────────────────────────────────────────────────────── */
+  --radius-*: initial;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* ── Chuyển động ──────────────────────────────────────────────────────
+     Một thang duy nhất: 120ms cho phản hồi bấm, 180ms cho lớp phủ vào/ra. */
+  --animate-hien-len: hien-len 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-mo-dan: mo-dan 120ms ease-out;
+  --animate-truot-phai: truot-phai 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-nhap-nhay: nhap-nhay 1.4s ease-in-out infinite;
+  --animate-vua-doi: vua-doi 1.2s ease-out 1;
+}
+
+@keyframes hien-len {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mo-dan {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes truot-phai {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes nhap-nhay {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+/* Dòng bảng vừa đổi: nháy nền một lần rồi tắt hẳn — mắt biết chỗ nào vừa thay */
+@keyframes vua-doi {
+  from {
+    background-color: var(--brand-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+

@@ -1,0 +1,108 @@
+/*
+ * Trang *Xe đang bán* — trang CÔNG CỤ, cuộn thường.
+ *
+ * 🔒 Mô hình mỗi-khối-một-màn-hình CHỈ áp cho trang kể chuyện. Ở đây người dùng
+ *    QUÉT chứ không ĐỌC: có bộ lọc, có sắp xếp, có so sánh. Ép trang công cụ vào
+ *    khung nhìn cố định là làm chậm người đang vội.
+ */
+.dau { padding: var(--s-9) 0 var(--s-7); background: var(--photo); }
+.dauTrong { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-5); }
+.dauTrong h1 { margin-top: var(--s-3); font-size: var(--fs-title-xl); }
+.dem { color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-sm); }
+
+.loc {
+  position: sticky;
+  z-index: 25;
+  top: 78px;
+  padding: var(--s-4) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--ink-0);
+}
+.locTrong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.vach { width: 1px; height: 26px; margin: 0 var(--s-3); background: var(--line); }
+.sapXep { display: flex; align-items: center; gap: var(--s-2); margin-left: auto; }
+
+.than { padding: var(--s-8) 0 var(--s-9); background: var(--paper-0); color: var(--paper-ink); }
+.luoi { display: grid; gap: var(--s-6); grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+
+.the { display: flex; flex-direction: column; }
+.gieng {
+  position: relative;
+  display: grid;
+  aspect-ratio: 4 / 5;
+  place-items: center;
+  overflow: clip;
+  background: var(--paper-1);
+  color: var(--paper-muted);
+}
+.gieng img { width: 100%; height: 100%; object-fit: cover; transition: transform var(--nhanh) var(--ease-out); }
+.the:hover .gieng img { transform: scale(1.03); }
+.dauThe { position: absolute; top: var(--s-4); right: var(--s-4); left: var(--s-4); display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); }
+
+.soSanh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--paper-line-strong);
+  border-radius: var(--r-md);
+  background: var(--paper-card);
+  color: var(--paper-muted);
+  font-size: var(--fs-label-lg);
+  font-weight: 600;
+}
+.soSanh:hover { border-color: var(--paper-ink); color: var(--paper-ink); }
+.soSanhChon { border-color: var(--paper-ink); background: var(--paper-ink); color: var(--paper-0); }
+
+.chu { padding-top: var(--s-4); }
+.chu h2 { font-size: var(--fs-title-sm); }
+.phu { margin-top: 4px; color: var(--paper-muted); font-size: var(--fs-xs); }
+.dongGia { display: flex; align-items: baseline; gap: var(--s-3); padding: var(--s-3) 0 0; font-size: var(--fs-xs); }
+.dongGia .keo { flex: 1 1 auto; border-bottom: 1px dotted var(--paper-line); }
+.dongGia b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.niemYet { border-top: 1px solid var(--paper-line); margin-top: var(--s-3); }
+.niemYet dt, .niemYet dd { color: var(--paper-muted); }
+.lanBanh b { color: var(--signal-light); }
+.xem { display: inline-flex; align-items: center; gap: 6px; margin-top: var(--s-3); font-size: var(--fs-xs); font-weight: 600; }
+.xem:hover { color: var(--paper-action); }
+
+.ghiChu { margin-top: var(--s-7); }
+.rong { padding: var(--s-9) 0; color: var(--paper-muted); text-align: center; }
+
+/* ── Bảng so sánh ─────────────────────────────────────────────────────── */
+.bangSoSanh { margin-bottom: var(--s-8); padding: var(--s-6); background: var(--paper-card); overflow-x: auto; }
+.bangSoSanh h2 { font-size: var(--fs-title-sm); }
+.bangSoSanh table { width: 100%; margin-top: var(--s-5); font-size: var(--fs-xs); }
+.bangSoSanh th, .bangSoSanh td { padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--paper-line); text-align: left; vertical-align: top; }
+.bangSoSanh thead th { font-size: var(--fs-sm); }
+.bangSoSanh tbody th { width: 200px; color: var(--paper-muted); font-weight: 400; }
+.bangSoSanh td { font-variant-numeric: tabular-nums; }
+
+.thanhSoSanh {
+  position: sticky;
+  z-index: 26;
+  bottom: 0;
+  padding: var(--s-4) 0;
+  background: var(--paper-ink);
+  color: var(--paper-0);
+}
+.thanhSoSanhTrong { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.vien {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  background: rgb(255 255 255 / 12%);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.thanhSoSanhTrong .nut { margin-left: auto; }
+
+@media (max-width: 900px) {
+  .loc { top: 60px; }
+  .sapXep { margin-left: 0; }
+}

@@ -1,0 +1,61 @@
+/*
+ * Màn 4 · Xe nổi bật — điểm điện ảnh của trang (Lamborghini/Ferrari).
+ *
+ * 🔒 ĐÚNG MỘT khối được nổi bật một xe (DES-LS-002 §2b). Hero đã nói lời hứa
+ *    của đại lý; đây là chỗ duy nhất một cái tên xe được phép to bằng cả màn.
+ */
+.man {
+  display: flex;
+  min-height: var(--man-hinh);
+  flex-direction: column;
+  background: var(--photo);
+}
+
+.anh { position: relative; flex: 1 1 auto; min-height: 260px; overflow: clip; }
+.anh img { width: 100%; height: 100%; object-fit: cover; }
+.trong {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  justify-items: center;
+  gap: var(--s-4);
+  background: var(--ink-1);
+  color: var(--ink-3);
+}
+.ghiChuAnh {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  letter-spacing: .16em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.chu { padding: var(--s-6) 0 var(--s-7); }
+.ten {
+  margin-top: var(--s-4);
+  font-size: var(--fs-cinema);
+  letter-spacing: -.04em;
+}
+
+.duoi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-7);
+  margin-top: var(--s-6);
+}
+.soLieu { display: flex; flex-wrap: wrap; gap: var(--s-7); }
+.soLieu > div { display: grid; gap: 6px; }
+.soLieu dd { font-size: var(--fs-lead); font-weight: 500; }
+.nut { margin-left: auto; }
+
+.chuThich { margin-top: var(--s-5); }
+
+@media (max-width: 860px) {
+  .duoi { gap: var(--s-5); }
+  .soLieu { gap: var(--s-5); }
+  .nut { width: 100%; margin-left: 0; }
+  .nut a { width: 100%; }
+}

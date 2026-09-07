@@ -1,0 +1,31 @@
+.man {
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-9) 0;
+  background: var(--photo);
+}
+.luoi { display: grid; align-items: center; gap: var(--s-8); grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr); }
+.chu h1 { max-width: 14ch; margin-top: var(--s-4); font-size: var(--fs-title-xl); }
+.dan { max-width: 46ch; margin-top: var(--s-5); color: var(--text-muted); }
+
+.tim { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-6); }
+.tim input {
+  flex: 1 1 260px;
+  min-height: 48px;
+  padding: 0 var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--ink-1);
+  color: var(--text);
+}
+.tim input::placeholder { color: var(--text-dim); }
+
+.loiTat { margin-top: var(--s-7); padding-top: var(--s-5); border-top: 1px solid var(--line); }
+.loiTatDs { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-3); }
+
+.anh { display: grid; aspect-ratio: 4 / 3; align-content: center; justify-items: center; gap: var(--s-4); background: var(--ink-1); color: var(--ink-3); }
+.ghiChuAnh { max-width: 32ch; color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-label); letter-spacing: .16em; text-align: center; text-transform: uppercase; }
+
+@media (max-width: 860px) { .luoi { grid-template-columns: minmax(0, 1fr); } .anh { display: none; } }

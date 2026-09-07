@@ -13,8 +13,64 @@
  * KHÔNG có công tắc riêng. Khách không thể duyệt phụ tùng mà không duyệt công.
  */
 import { use, useEffect, useMemo, useState } from 'react';
+import { Check, Circle, Wrench } from 'lucide-react';
 import { formatMoney, formatDateTime } from '@/lib/api';
 import { formatPlate } from '@garageos/domain';
+import { chiSoChang } from '@/lib/hien-thi';
+
+/**
+ * Sáu chặng, nói bằng giọng của KHÁCH.
+ *
+ * Bảng gom trạng thái dùng chung với màn nội bộ (`lib/hien-thi`) để hai bên
+ * không bao giờ vẽ ra hai tiến độ khác nhau cho cùng một chiếc xe. Chỉ NHÃN là
+ * khác: nội bộ nói "Khách duyệt", ở đây là "Bạn đã duyệt" — khách không đọc
+ * chính mình ở ngôi thứ ba.
+ */
+const CHANG_KHACH = [
+  'Đã tiếp nhận',
+  'Đã gửi báo giá',
+  'Bạn đã duyệt',
+  'Đang sửa chữa',
+  'Kiểm tra chất lượng',
+  'Sẵn sàng bàn giao',
+];
+
+function TienDo({ status }: { status: string }) {
+  const hienTai = chiSoChang(status);
+  if (hienTai < 0) return null;
+  return (
+    <ol className="flex flex-col gap-3.5">
+      {CHANG_KHACH.map((nhan, i) => {
+        const xong = i < hienTai;
+        const dang = i === hienTai;
+        return (
+          <li key={nhan} className="flex items-center gap-3.5">
+            <span
+              className={`grid size-6 shrink-0 place-items-center rounded-full ${
+                xong ? 'bg-ok' : dang ? 'bg-action' : 'bg-ink-3'
+              }`}
+            >
+              {xong ? (
+                <Check className="size-3.5 text-white" aria-hidden />
+              ) : dang ? (
+                <Wrench className="size-3.5 text-white" aria-hidden />
+              ) : (
+                <Circle className="size-3.5 text-text-dim" aria-hidden />
+              )}
+            </span>
+            <span
+              className={`text-14 ${
+                dang ? 'font-semibold text-text' : xong ? 'font-medium text-text' : 'text-text-dim'
+              }`}
+            >
+              {nhan}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -144,64 +200,87 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
     return (
       <main className="public">
         <div className="card">
-          <h1>Không mở được trang</h1>
-          <p className="muted">{error}</p>
+          <h1 className="text-20 font-bold text-text">Không mở được trang</h1>
+          <p className="mt-2 text-13 leading-body text-text-muted">{error}</p>
         </div>
       </main>
     );
   }
-  if (view === null) return <main className="public"><p className="muted">Đang tải…</p></main>;
+  if (view === null)
+    return (
+      <main className="public">
+        <p className="text-13 text-text-dim" role="status">
+          Đang tải…
+        </p>
+      </main>
+    );
 
   const q = view.quotation;
 
   return (
-    <main className="public">
+    <>
       <header className="public-header">
         <div className="garage">{view.garageName}</div>
         <div className="plate mono">{formatPlate(view.vehicle.plateNumber)}</div>
       </header>
 
-      <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div className="muted small">Đơn tiếp nhận</div>
-            <div className="mono">{view.orderCode}</div>
-          </div>
-          <span className="tag status">{view.statusLabel}</span>
-        </div>
-        <table style={{ marginTop: 12 }}>
-          <tbody>
-            <tr><th>Xe</th>
-                <td>{[view.vehicle.makeName, view.vehicle.modelName].filter(Boolean).join(' ') || '—'}</td></tr>
-            <tr><th>Nhận xe lúc</th><td>{formatDateTime(view.receivedAt)}</td></tr>
-            <tr><th>Yêu cầu của bạn</th><td>{view.customerComplaint}</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      {q === null && (
-        <div className="card">
-          <h2>Chưa có báo giá</h2>
-          <p className="muted">
-            Garage đang kiểm tra xe. Bạn sẽ nhận được báo giá tại chính trang này.
+      <main className="public flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-30 font-bold tracking-[-0.8px] text-text">
+            {view.statusLabel}
+          </h1>
+          <p className="text-14 text-text-dim">
+            <span className="mono">{formatPlate(view.vehicle.plateNumber)}</span> · Đơn{' '}
+            <span className="mono">{view.orderCode}</span> · Nhận{' '}
+            {formatDateTime(view.receivedAt)}
           </p>
         </div>
-      )}
 
-      {q !== null && (
+        {/* Tiến độ — thứ khách mở link này để xem, nên nó đứng đầu */}
         <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0 }}>Báo giá</h2>
-            <span className="tag status">{q.statusLabel}</span>
+          <TienDo status={view.status} />
+          {view.promisedAt !== null && (
+            <p className="mt-4 border-t border-line pt-3.5 text-13 text-text-muted">
+              Dự kiến trả xe: <span className="mono text-text">{formatDateTime(view.promisedAt)}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="card">
+          <h2>Yêu cầu của bạn</h2>
+          <p className="whitespace-pre-wrap text-13 leading-body text-text-muted">
+            {view.customerComplaint}
+          </p>
+          {[view.vehicle.makeName, view.vehicle.modelName].filter(Boolean).length > 0 && (
+            <p className="hint mt-3">
+              Xe: {[view.vehicle.makeName, view.vehicle.modelName].filter(Boolean).join(' ')}
+            </p>
+          )}
+        </div>
+
+        {q === null && (
+          <div className="card">
+            <h2>Chưa có báo giá</h2>
+            <p className="text-13 leading-body text-text-muted">
+              Garage đang kiểm tra xe. Bạn sẽ nhận được báo giá tại chính trang này.
+            </p>
+          </div>
+        )}
+
+        {q !== null && (
+        <div className="card">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="mb-0">Báo giá</h2>
+            <span className="tag status ml-auto">{q.statusLabel}</span>
           </div>
 
           {q.expired && (
-            <div className="alert warn" style={{ marginTop: 12 }} role="alert">
+            <div className="alert warn mt-3" role="alert">
               Báo giá đã hết hạn. Vui lòng liên hệ garage để nhận báo giá mới.
             </div>
           )}
           {!q.expired && q.validUntil !== null && q.canRespond && (
-            <p className="hint" style={{ marginTop: 8 }}>
+            <p className="hint mt-2">
               Vui lòng phản hồi trước {formatDateTime(q.validUntil)}.
             </p>
           )}
@@ -278,7 +357,7 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
             })}
           </ul>
 
-          <table className="totals" style={{ marginTop: 16 }}>
+          <table className="totals mt-4">
             <tbody>
               <tr><th>Tạm tính</th><td className="mono">{formatMoney(q.subtotalAmount)}</td></tr>
               <tr><th>Thuế GTGT</th><td className="mono">{formatMoney(q.taxAmount)}</td></tr>
@@ -302,19 +381,19 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
           </table>
 
           {error !== null && (
-            <div className="alert error" style={{ marginTop: 12 }} role="alert">{error}</div>
+            <div className="alert error mt-3" role="alert">{error}</div>
           )}
 
           {q.canRespond && step === 'choose' && (
             <>
-              <p className="hint" style={{ marginTop: 12 }}>
+              <p className="hint mt-3">
                 Chọn từng hạng mục. Phụ tùng đi kèm sẽ theo quyết định của hạng mục đó.
               </p>
-              <button className="lg block" disabled={!allDecided || busy} onClick={() => void requestOtp()}>
+              <button className="block min-h-[44px] text-14" disabled={!allDecided || busy} onClick={() => void requestOtp()}>
                 {busy ? 'Đang gửi…' : 'Xác nhận lựa chọn'}
               </button>
               {!allDecided && (
-                <p className="hint" style={{ marginTop: 8 }}>
+                <p className="hint mt-2">
                   Vui lòng chọn Đồng ý hoặc Không cho tất cả hạng mục.
                 </p>
               )}
@@ -322,11 +401,11 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
           )}
 
           {step === 'otp' && (
-            <div className="stack" style={{ marginTop: 16 }}>
+            <div className="mt-4 flex flex-col gap-4">
               <div className="alert info">
                 Mã xác thực đã gửi tới số <strong>{otpInfo?.phoneMasked}</strong>.
                 {otpInfo?.devCode !== undefined && (
-                  <div style={{ marginTop: 6 }}>
+                  <div className="mt-1.5">
                     Bản chạy thử — mã của bạn: <strong className="mono">{otpInfo.devCode}</strong>
                   </div>
                 )}
@@ -344,7 +423,7 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
                   autoFocus
                 />
               </div>
-              <button className="lg block" disabled={otp.length !== 6 || busy} onClick={() => void submit()}>
+              <button className="block min-h-[44px] text-14" disabled={otp.length !== 6 || busy} onClick={() => void submit()}>
                 {busy ? 'Đang xác nhận…' : 'Xác nhận'}
               </button>
               <button className="secondary block" onClick={() => { setStep('choose'); setOtp(''); }}>
@@ -355,8 +434,7 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
 
           {step === 'done' && (
             <div
-              className="alert success"
-              style={{ marginTop: 16 }}
+              className="alert success mt-4"
               // Mọi thông báo LỖI trong dự án đều có role="alert", nhưng khối
               // xác nhận thành công quan trọng nhất — khách vừa duyệt báo giá —
               // lại im lặng hoàn toàn với trình đọc màn hình. `role="status"`
@@ -364,7 +442,7 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
               role="status"
             >
               <strong>Đã ghi nhận phản hồi của bạn.</strong>
-              <div style={{ marginTop: 6 }}>
+              <div className="mt-1.5">
                 {thieuHang.length === 0
                   ? 'Garage sẽ tiến hành các hạng mục bạn đã đồng ý. Bạn có thể mở lại trang này bất cứ lúc nào để theo dõi tiến độ.'
                   : 'Garage đã nhận yêu cầu của bạn. Có phụ tùng cần đặt thêm — xem bên dưới.'}
@@ -381,9 +459,9 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
             phải chờ. Và không hiện số tồn kho — đó là chuyện nội bộ.
           */}
           {step === 'done' && thieuHang.length > 0 && (
-            <div className="alert warn" style={{ marginTop: 12 }} role="status">
+            <div className="alert warn mt-3" role="status">
               <strong>Cần đặt thêm phụ tùng</strong>
-              <ul style={{ marginTop: 6, paddingLeft: 18 }}>
+              <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-5">
                 {thieuHang.map((t) => (
                   <li key={t.sku}>
                     {t.partName}
@@ -393,7 +471,7 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
                   </li>
                 ))}
               </ul>
-              <div style={{ marginTop: 6 }}>
+              <div className="mt-1.5">
                 Garage sẽ liên hệ báo thời gian dự kiến. Các hạng mục còn lại vẫn được
                 tiến hành bình thường.
               </div>
@@ -402,10 +480,11 @@ export default function TrackingPage({ params }: { params: Promise<{ token: stri
         </div>
       )}
 
-      <p className="public-foot">
-        Trang này dành riêng cho xe {formatPlate(view.vehicle.plateNumber)}. Đừng chia sẻ
-        đường dẫn cho người khác.
-      </p>
-    </main>
+        <p className="public-foot">
+          Trang này dành riêng cho xe {formatPlate(view.vehicle.plateNumber)}. Đừng chia sẻ
+          đường dẫn cho người khác.
+        </p>
+      </main>
+    </>
   );
 }

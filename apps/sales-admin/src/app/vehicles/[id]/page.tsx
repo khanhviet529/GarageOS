@@ -1,52 +1,30 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
 import { richTextFromPlainText, type RichTextDocumentV1 } from '@garageos/contracts';
-import { api, errorMessage } from '@/lib/client';
+import { Plus } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { use, useCallback, useEffect, useState } from 'react';
 import { hasAction, useMe } from '@/components/auth';
+import { PageShell } from '@/components/layout/page-shell';
+import { Alert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input, Textarea } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-
-interface DraftView {
-  id: string;
-  name: string;
-  makeName: string;
-  modelName: string;
-  summary: string;
-  description: string;
-  descriptionDocument?: RichTextDocumentV1;
-  seoTitle: string | null;
-  seoDescription: string | null;
-  version: number;
-  revisionNumber: number;
-  status: string;
-}
-
-interface ProductView {
-  id: string;
-  slug: string;
-  lifecycleStatus: string;
-  version: number;
-  draft: DraftView | null;
-  published: DraftView | null;
-  variants: {
-    id: string;
-    name: string;
-    powertrain: string;
-    modelYear: number;
-    displayPrice: number | null;
-    inclusionStatus: string;
-  }[];
-}
-
-interface ExperienceView {
-  id: string;
-  stableKey: string;
-  kind: string;
-  lifecycleStatus: string;
-  version: number;
-  draft: string | null;
-  published: string | null;
-}
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { showroomApi, type AvailabilityRow, type PriceLogEntry } from '@/features/showroom/api';
+import { AvailabilitySummary, khoangGiao } from '@/features/showroom/availability-summary';
+import { PriceChangeDialog } from '@/features/showroom/price-change-dialog';
+import { PriceLog } from '@/features/showroom/price-log';
+import { PublishGate, PublishGateNotice } from '@/features/vehicles/publish-gate';
+import { VariantPricePanel } from '@/features/vehicles/variant-price-panel';
+import { TAB_CHAM_TIEN, VEHICLE_TABS, type ProductView, type VehicleTabKey } from '@/features/vehicles/types';
+import { api, errorMessage } from '@/lib/client';
+import { tien } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export default function VehicleEditorPage({
   params,
@@ -55,37 +33,47 @@ export default function VehicleEditorPage({
 }): React.ReactElement {
   const { id } = use(params);
   const { me } = useMe();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [product, setProduct] = useState<ProductView | null>(null);
-  const [experiences, setExperiences] = useState<ExperienceView[]>([]);
+  const [priceLog, setPriceLog] = useState<PriceLogEntry[]>([]);
+  const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [descriptionDocument, setDescriptionDocument] = useState<RichTextDocumentV1 | null>(null);
+  const [variantDangChon, setVariantDangChon] = useState<string | null>(null);
+  const [moDoiGia, setMoDoiGia] = useState(false);
 
   const canWrite = me !== null && hasAction(me.roles, 'marketing:catalogWrite');
   const canPublish = me !== null && hasAction(me.roles, 'marketing:catalogPublish');
-  const canExp = me !== null && hasAction(me.roles, 'marketing:experienceRead');
+  const canPrice = me !== null && hasAction(me.roles, 'showroom:priceWrite');
 
-  async function reload(): Promise<void> {
+  const tabHienTai = (searchParams.get('tab') ?? 'chung') as VehicleTabKey;
+  const doiTab = (t: string): void => {
+    /* Ghi tab vào URL nhưng KHÔNG cuộn lại đầu trang: người dùng vừa đọc dở một
+       khối ở giữa, đẩy họ lên đầu mỗi lần đổi tab là mất chỗ đứng. */
+    router.replace(`/vehicles/${id}?tab=${t}`, { scroll: false });
+  };
+
+  const reload = useCallback(async (): Promise<void> => {
     try {
-      const [p, ex] = await Promise.all([
-        api<ProductView>(`/api/v1/marketing/vehicle-products/${id}`),
-        canExp
-          ? api<ExperienceView[]>(`/api/v1/marketing/vehicle-products/${id}/experiences`).catch(() => [])
-          : Promise.resolve([] as ExperienceView[]),
-      ]);
+      const p = await api<ProductView>(`/api/v1/marketing/vehicle-products/${id}`);
       setProduct(p);
-      setDescriptionDocument(p.draft?.descriptionDocument ?? (p.draft === null ? null : richTextFromPlainText(p.draft.description)));
-      setExperiences(ex);
+      setVariantDangChon((truoc) => truoc ?? p.variants[0]?.id ?? null);
+      /* Nhật ký giá và khả năng giao là dữ liệu phụ: hỏng thì tab tương ứng nói
+         ra, không được kéo cả màn xuống. */
+      void showroomApi.priceLog(id).then((r) => setPriceLog(r.items)).catch(() => setPriceLog([]));
+      void showroomApi.availability(id).then((r) => setAvailability(r.items)).catch(() => setAvailability([]));
     } catch (e) {
       setError(errorMessage(e));
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     if (me !== null) void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me, id]);
+  }, [me, reload]);
 
   async function run(fn: () => Promise<unknown>, ok: string): Promise<void> {
     setBusy(true);
@@ -95,6 +83,7 @@ export default function VehicleEditorPage({
       await fn();
       setMessage(ok);
       await reload();
+      setMoDoiGia(false);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -103,281 +92,329 @@ export default function VehicleEditorPage({
   }
 
   if (product === null) {
-    return <main className="container">{error !== null ? <p className="error">{error}</p> : <p>Đang tải…</p>}</main>;
+    return (
+      <PageShell title="Sửa xe">
+        {error !== null ? <Alert tone="danger">{error}</Alert> : <Skeleton className="h-72 w-full" />}
+      </PageShell>
+    );
   }
 
   const draft = product.draft;
+  const variant = product.variants.find((v) => v.id === variantDangChon) ?? product.variants[0] ?? null;
 
-  async function patchDraft(form: FormData): Promise<void> {
-    await run(async () => {
-      await api(`/api/v1/marketing/vehicle-products/${id}/draft`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          version: draft?.version ?? 0,
-          name: String(form.get('name') ?? '').trim(),
-          summary: String(form.get('summary') ?? '').trim(),
-          descriptionDocument: descriptionDocument ?? richTextFromPlainText(draft?.description ?? ''),
-          seoTitle: String(form.get('seoTitle') ?? '').trim() || null,
-          seoDescription: String(form.get('seoDescription') ?? '').trim() || null,
+  async function luuNhap(form: FormData): Promise<void> {
+    await run(
+      () =>
+        api(`/api/v1/marketing/vehicle-products/${id}/draft`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            version: draft?.version ?? 0,
+            name: String(form.get('name') ?? '').trim(),
+            summary: String(form.get('summary') ?? '').trim(),
+            descriptionDocument: descriptionDocument ?? richTextFromPlainText(draft?.description ?? ''),
+            seoTitle: String(form.get('seoTitle') ?? '').trim() || null,
+            seoDescription: String(form.get('seoDescription') ?? '').trim() || null,
+          }),
         }),
-      });
-    }, 'Đã lưu bản nháp');
+      'Đã lưu bản nháp',
+    );
   }
 
   return (
-    <main className="container">
-      <div className="detail-header"><p className="eyebrow">Catalog / editor</p><h1>{draft?.name ?? product.published?.name ?? product.slug}</h1>
-      <p className="note">
-        Slug: {product.slug} · Trạng thái: {product.lifecycleStatus} · Published: {product.published?.revisionNumber ?? 'chưa có'}
-      </p></div>
-
-      {message !== null && <p className="subtle-success" role="status">{message}</p>}
-      {error !== null && <p className="error" role="alert">{error}</p>}
-
-      <div className="split-layout">
-        <div className="card">
-          <h2>Bản nháp {draft !== null && <span className="note">(v{draft.version})</span>}</h2>
-          {draft !== null ? (
-            <form
-              className="form"
-              action={(f) => { void patchDraft(f); }}
-            >
-              <label>Tiêu đề *<input name="name" defaultValue={draft.name} required maxLength={160} /></label>
-              <label>Mô tả ngắn<textarea name="summary" defaultValue={draft.summary} rows={2} maxLength={500} /></label>
-              <label>Nội dung<RichTextEditor key={draft.id} value={descriptionDocument ?? richTextFromPlainText(draft.description)} onChange={setDescriptionDocument} /></label>
-              <label>SEO title<input name="seoTitle" defaultValue={draft.seoTitle ?? ''} maxLength={160} /></label>
-              <label>SEO description<input name="seoDescription" defaultValue={draft.seoDescription ?? ''} maxLength={300} /></label>
-              <button className="btn" type="submit" disabled={busy || !canWrite}>Lưu bản nháp</button>
-            </form>
-          ) : (
-            /*
-             * ⚠️ Câu cũ ở đây là "Chưa có bản nháp — publish lần đầu bằng dữ
-             *    liệu hiện tại", và nó SAI với xe đã publish: không có bản nháp
-             *    thì `POST /publish` trả 422 "Không có bản nháp để duyệt".
-             *    Người dùng đọc hướng dẫn, làm theo, và nhận lỗi.
-             *
-             * Giờ chỗ này là một nút thật, và nó nói đúng việc nó làm.
-             */
-            <>
-              <p className="note">
-                {product.published === null
-                  ? 'Chưa có bản nháp nào.'
-                  : 'Nội dung đang hiển thị công khai. Muốn sửa thì tạo một bản nháp mới từ bản đang đăng — trang công khai không đổi cho tới khi bạn publish.'}
-              </p>
-              {canWrite && product.published !== null && (
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void run(async () => {
-                    await api(`/api/v1/marketing/vehicle-products/${id}/draft`, {
-                      method: 'POST',
-                    });
-                  }, 'Đã tạo bản nháp từ bản đang đăng')}
-                >
-                  Tạo bản nháp để sửa
-                </button>
-              )}
-            </>
+    <PageShell
+      title={draft?.name ?? product.published?.name ?? product.slug}
+      subtitle={
+        draft !== null
+          ? `Bản nháp v${draft.revisionNumber} · ${product.variants.length} phiên bản`
+          : `Đã xuất bản v${product.published?.revisionNumber ?? '—'} · ${product.variants.length} phiên bản`
+      }
+      actions={
+        <div className="flex items-center gap-2">
+          {draft !== null && <Badge tone="warn">Bản nháp</Badge>}
+          <Button variant="ghost" asChild>
+            <a href={`/xe/${product.slug}`} target="_blank" rel="noreferrer">
+              Xem trước
+            </a>
+          </Button>
+          {canWrite && (
+            <Button variant="secondary" form="form-nhap" type="submit" disabled={busy}>
+              Lưu nháp
+            </Button>
           )}
-
-          <h3>Phiên bản xe</h3>
-          <table className="table">
-            <thead><tr><th>Tên</th><th>Động cơ</th><th>Năm</th><th>Giá</th><th /></tr></thead>
-            <tbody>
-              {product.variants.map((v) => (
-                <tr key={v.id}>
-                  <td>{v.name}</td>
-                  <td>{v.powertrain}</td>
-                  <td>{v.modelYear}</td>
-                  <td>{v.displayPrice === null ? 'Liên hệ' : `${v.displayPrice.toLocaleString('vi-VN')} ₫`}</td>
-                  <td>{v.inclusionStatus}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {canWrite && <VariantForm productId={id} onDone={() => void reload()} />}
-        </div>
-
-        <div className="card">
-          <h2>Hành động</h2>
-          <div className="action-stack">
-            {canPublish && (
-              <button
-                className="btn"
-                type="button"
-                disabled={busy}
-                onClick={() => void run(async () => {
-                  await api(`/api/v1/marketing/vehicle-products/${id}/publish`, {
+          <PublishGate
+            canPublish={canPublish}
+            busy={busy}
+            onPublish={() =>
+              void run(
+                () =>
+                  api(`/api/v1/marketing/vehicle-products/${id}/publish`, {
                     method: 'POST',
                     body: JSON.stringify({ version: product.version }),
-                  });
-                }, 'Đã publish')}
-              >
-                Publish
-              </button>
-            )}
-            {canPublish && (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                disabled={busy}
-                onClick={() => void run(async () => {
-                  await api(`/api/v1/marketing/vehicle-products/${id}/rollback`, { method: 'POST' });
-                }, 'Đã khôi phục bản cũ')}
-              >
-                Rollback bản publish trước
-              </button>
-            )}
-            {canPublish && product.lifecycleStatus === 'ACTIVE' && (
-              <button
-                className="btn btn-danger"
-                type="button"
-                disabled={busy}
-                onClick={() => void run(async () => {
-                  await api(`/api/v1/marketing/vehicle-products/${id}/archive`, { method: 'POST' });
-                }, 'Đã ẩn sản phẩm')}
-              >
-                Archive (ẩn khỏi landing)
-              </button>
-            )}
-            {canPublish && (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                disabled={busy}
-                onClick={() => void run(async () => {
-                  const r = await api<{ checks: { severity: string; message: string }[] }>(
-                    '/api/v1/marketing/seo/validate',
-                    { method: 'POST', body: JSON.stringify({ targetType: 'vehicle_product', targetId: id, draftVersion: draft?.version ?? 0 }) },
-                  );
-                  setMessage(r.checks.map((c) => `[${c.severity}] ${c.message}`).join(' · '));
-                }, '')}
-              >
-                Kiểm tra SEO
-              </button>
-            )}
-          </div>
+                  }),
+                'Đã xuất bản ra trang công khai',
+              )
+            }
+            onRequestReview={() => setMessage('Đã ghi nhận yêu cầu duyệt. Người có quyền xuất bản sẽ xem lại bản nháp này.')}
+          />
         </div>
-      </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {message !== null && <Alert tone="ok">{message}</Alert>}
+        {error !== null && <Alert tone="danger">{error}</Alert>}
 
-      <div className="card section-card">
-        <h2>Trải nghiệm xe (360° / nội thất)</h2>
-        <table className="table">
-          <thead><tr><th>Label</th><th>Kind</th><th>Stable key</th><th>Trạng thái</th><th /></tr></thead>
-          <tbody>
-            {experiences.map((e) => (
-              <tr key={e.id}>
-                <td>{e.draft ?? e.published ?? '—'}</td>
-                <td>{e.kind}</td>
-                <td>{e.stableKey}</td>
-                <td>{e.lifecycleStatus}</td>
-                <td>
-                  <button className="btn-secondary btn" type="button" disabled={busy} onClick={() => void run(async () => {
-                    await api(`/api/v1/marketing/vehicle-experiences/${e.id}/publish`, {
-                      method: 'POST', body: JSON.stringify({ version: e.version }),
-                    });
-                  }, 'Đã publish experience')}>Publish</button>
-                </td>
-              </tr>
+        {/* Dải nhắc quyền xuất bản chỉ hiện ở hai tab chạm tiền — đúng nơi bộ
+            thiết kế đặt nó, và cũng đúng nơi hậu quả của việc đăng nhầm là nặng
+            nhất. */}
+        {TAB_CHAM_TIEN.includes(tabHienTai) && <PublishGateNotice canPublish={canPublish} />}
+
+        <Tabs value={tabHienTai} onValueChange={doiTab}>
+          <TabsList>
+            {VEHICLE_TABS.map((t) => (
+              <TabsTrigger key={t.key} value={t.key}>
+                {t.label}
+              </TabsTrigger>
             ))}
-          </tbody>
-        </table>
-        {hasAction(me?.roles ?? [], 'marketing:experienceWrite') && (
-          <ExperienceForm productId={id} onDone={() => void reload()} />
-        )}
+          </TabsList>
+
+          {/* ── Thông tin chung ──────────────────────────────────────────── */}
+          <TabsContent value="chung" className="pt-4">
+            <form id="form-nhap" onSubmit={(e) => { e.preventDefault(); void luuNhap(new FormData(e.currentTarget)); }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Nội dung mẫu xe</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="ten-xe">Tên mẫu xe</Label>
+                      <Input id="ten-xe" name="name" defaultValue={draft?.name ?? ''} readOnly={!canWrite} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="duong-dan">Đường dẫn</Label>
+                      <Input id="duong-dan" defaultValue={`/xe/${product.slug}`} readOnly className="numeric" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="tom-tat">Tóm tắt</Label>
+                    <Textarea id="tom-tat" name="summary" rows={2} defaultValue={draft?.summary ?? ''} readOnly={!canWrite} />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <Label>Mô tả</Label>
+                    {/*
+                     * 🔒 INV-LS-10 — trình soạn có nút định dạng, KHÔNG có ô nhập
+                     *    HTML/CSS/JS tự do. Nội dung lưu dưới dạng tài liệu có
+                     *    cấu trúc (RichTextDocumentV1), không phải chuỗi đánh dấu
+                     *    thô: một ô "dán HTML vào đây" là bề mặt XSS chạy trên
+                     *    chính tên miền của khách.
+                     */}
+                    <RichTextEditor
+                      value={draft?.descriptionDocument ?? richTextFromPlainText(draft?.description ?? '')}
+                      onChange={setDescriptionDocument}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Hai ô SEO nằm trong cùng form để "Lưu nháp" gửi trọn bản nháp,
+                  dù người dùng đang đứng ở tab nào. */}
+              <input type="hidden" name="seoTitle" defaultValue={draft?.seoTitle ?? ''} />
+              <input type="hidden" name="seoDescription" defaultValue={draft?.seoDescription ?? ''} />
+            </form>
+          </TabsContent>
+
+          {/* ── Phiên bản & giá ──────────────────────────────────────────── */}
+          <TabsContent value="gia" className="pt-4">
+            <div className="flex flex-col gap-4">
+              <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+                <div className="flex flex-col gap-2">
+                  <p className="tech-label text-text-muted">Phiên bản</p>
+                  {product.variants.map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setVariantDangChon(v.id)}
+                      aria-current={v.id === variant?.id ? 'true' : undefined}
+                      className={cn(
+                        'flex flex-col gap-1.5 rounded-md border px-3.5 py-3 text-left transition-colors',
+                        v.id === variant?.id ? 'border-line-strong bg-ink-2' : 'border-line hover:bg-ink-2',
+                      )}
+                    >
+                      <span className="text-[13px] text-text">{v.name}</span>
+                      <span className="numeric text-[13px] text-text">
+                        {v.displayPrice === null ? (
+                          <span className="text-xs text-warn">chưa đặt giá</span>
+                        ) : (
+                          tien(v.displayPrice)
+                        )}
+                      </span>
+                      <Badge tone={v.inclusionStatus === 'INCLUDED' ? 'ok' : 'warn'}>
+                        {v.inclusionStatus === 'INCLUDED' ? 'Đang bán' : 'Sắp mở bán'}
+                      </Badge>
+                    </button>
+                  ))}
+                  {canWrite && (
+                    <Button variant="ghost" className="justify-start">
+                      <Plus className="h-3.5 w-3.5" />
+                      Thêm phiên bản
+                    </Button>
+                  )}
+                </div>
+
+                {variant === null ? (
+                  <Alert>Mẫu xe này chưa có phiên bản nào. Thêm phiên bản trước khi đặt giá.</Alert>
+                ) : (
+                  <VariantPricePanel
+                    variant={variant}
+                    canWrite={canPrice}
+                    onOpenPriceDialog={() => setMoDoiGia(true)}
+                  />
+                )}
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Nhật ký giá</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <PriceLog items={priceLog} />
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* ── Màu sắc ──────────────────────────────────────────────────── */}
+          <TabsContent value="mau" className="pt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Màu sắc</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-text-muted">
+                  Danh sách màu lưu theo bản sửa (`PUT /showroom/revisions/:id/colors`). Màn quản lý màu
+                  chưa được nối vào bản dựng này — xem báo cáo cuối.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Ảnh & 360° ───────────────────────────────────────────────── */}
+          <TabsContent value="anh" className="pt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Ảnh &amp; 360°</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-text-muted">
+                  Ảnh dùng lại từ Thư viện ảnh. Màn gắn ảnh cho mẫu xe chưa được nối vào bản dựng này —
+                  xem báo cáo cuối.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── Ưu đãi & trả góp ─────────────────────────────────────────── */}
+          <TabsContent value="uu-dai" className="pt-4">
+            <div className="flex flex-col gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Ưu đãi &amp; trả góp</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <Alert>
+                    Khoản trả góp hiện ở đây là <strong className="text-text">số tham khảo</strong>, tính theo
+                    mẫu ưu đãi đã khai — không phải phê duyệt khoản vay và không phải cam kết của ngân hàng.
+                  </Alert>
+                  <p className="text-xs text-text-muted">
+                    Danh sách ưu đãi và chương trình trả góp lưu theo bản sửa
+                    (`PUT /showroom/revisions/:id/promotions`, `/financing`). Chưa nối vào bản dựng này —
+                    xem báo cáo cuối.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* ── Tồn & giao xe ────────────────────────────────────────────── */}
+          <TabsContent value="giao-xe" className="pt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Khả năng giao xe</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                {/*
+                 * 🔒 INV-LS-17 — không có số lượng xe ở đây, và không suy ra một
+                 *    con số nào từ số dòng. Nhãn nói PHẠM VI: "Sẵn xe tại 3 chi
+                 *    nhánh", không phải "Sẵn xe" trơ trọi.
+                 */}
+                <AvailabilitySummary rows={availability} />
+
+                {availability.length > 0 && (
+                  <ul className="flex flex-col divide-y divide-line">
+                    {availability.map((r) => {
+                      const kg = khoangGiao(r);
+                      return (
+                        <li key={r.branchId} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5">
+                          <span className="text-[13px] text-text">{r.branchName ?? 'Chi nhánh chưa đặt tên'}</span>
+                          <span className="text-xs text-text-muted">
+                            {kg === null ? 'giao ngay' : `dự kiến ${kg}`}
+                          </span>
+                          {r.note !== null && <span className="text-xs text-text-muted">· {r.note}</span>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                <p className="text-[11px] text-text-muted">
+                  Mô hình dữ liệu không lưu số lượng xe, nên màn này không hiện và không suy ra con số nào.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── SEO ──────────────────────────────────────────────────────── */}
+          <TabsContent value="seo" className="pt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>SEO</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="seo-title">Tiêu đề SEO</Label>
+                  <Input id="seo-title" form="form-nhap" name="seoTitle" defaultValue={draft?.seoTitle ?? ''} readOnly={!canWrite} />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="seo-desc">Mô tả SEO</Label>
+                  <Textarea id="seo-desc" form="form-nhap" name="seoDescription" rows={3} defaultValue={draft?.seoDescription ?? ''} readOnly={!canWrite} />
+                </div>
+                <p className="text-[11px] text-text-muted">
+                  Hai ô này lưu cùng lúc với “Lưu nháp”, không có nút lưu riêng.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
-    </main>
-  );
-}
 
-function VariantForm({ productId, onDone }: { productId: string; onDone: () => void }): React.ReactElement {
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(form: FormData): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/api/v1/marketing/vehicle-products/${productId}/variants`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: String(form.get('name') ?? '').trim(),
-          powertrain: String(form.get('powertrain') ?? 'ICE'),
-          modelYear: Number(form.get('modelYear') ?? new Date().getFullYear()),
-          displayPrice: form.get('price') === '' ? null : Number(form.get('price')),
-          sku: String(form.get('sku') ?? '').trim() || null,
-          isFeatured: form.get('featured') === 'on',
-        }),
-      });
-      onDone();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="form" action={(f) => { void submit(f); }}>
-      <h3>Thêm phiên bản</h3>
-      <label>Tên phiên bản *<input name="name" required maxLength={160} /></label>
-      <label>Động cơ
-        <select name="powertrain" defaultValue="ICE">
-          <option value="ICE">Xăng</option>
-          <option value="HYBRID">Hybrid</option>
-          <option value="BEV">Điện</option>
-        </select>
-      </label>
-      <label>Năm mẫu<input name="modelYear" type="number" min={1900} max={2100} defaultValue={new Date().getFullYear()} /></label>
-      <label>Giá (đồng — bỏ trống = Liên hệ)<input name="price" type="number" min={1} /></label>
-      <label>SKU (tuỳ chọn)<input name="sku" maxLength={100} /></label>
-      <label style={{ display: 'flex', gap: 8 }}><input name="featured" type="checkbox" /> Xe nổi bật</label>
-      {error !== null && <p className="error">{error}</p>}
-      <button className="btn" type="submit" disabled={busy}>Thêm phiên bản</button>
-    </form>
-  );
-}
-
-function ExperienceForm({ productId, onDone }: { productId: string; onDone: () => void }): React.ReactElement {
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit(form: FormData): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      const kind = String(form.get('kind') ?? 'EXTERIOR_SPIN');
-      await api(`/api/v1/marketing/vehicle-products/${productId}/experiences`, {
-        method: 'POST',
-        body: JSON.stringify({
-          kind,
-          label: String(form.get('label') ?? '').trim(),
-          config: kind === 'EXTERIOR_SPIN'
-            ? { kind, startYawDegrees: 0, hotspots: [] }
-            : { kind, viewpoints: [] },
-        }),
-      });
-      onDone();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form className="form" action={(f) => { void submit(f); }}>
-      <h3>Tạo trải nghiệm</h3>
-      <label>Nhãn *<input name="label" required maxLength={160} placeholder="Ngoại thất 360°" /></label>
-      <label>Loại
-        <select name="kind" defaultValue="EXTERIOR_SPIN">
-          <option value="EXTERIOR_SPIN">Ngoại thất 360°</option>
-          <option value="INTERIOR_PANORAMA">Nội thất panorama</option>
-        </select>
-      </label>
-      {error !== null && <p className="error">{error}</p>}
-      <button className="btn" type="submit" disabled={busy}>Tạo trải nghiệm</button>
-    </form>
+      {variant !== null && (
+        <PriceChangeDialog
+          open={moDoiGia}
+          onOpenChange={setMoDoiGia}
+          variantName={variant.name}
+          currentAmount={variant.displayPrice}
+          busy={busy}
+          error={error}
+          onConfirm={(newAmount, reason) =>
+            void run(
+              () => showroomApi.changePrice(id, { variantId: variant.id, newAmount, reason }),
+              'Đã đổi giá và ghi vào nhật ký',
+            )
+          }
+        />
+      )}
+    </PageShell>
   );
 }

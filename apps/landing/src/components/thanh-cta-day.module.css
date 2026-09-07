@@ -1,0 +1,33 @@
+/*
+ * Thanh CTA dính đáy — CHỈ trên điện thoại.
+ *
+ * 🔒 Trên máy tính không cần: hero luôn ở gần, và một thanh chiếm 72 px đáy màn
+ *    hình suốt hành trình cuộn là 72 px lấy đi của chính nội dung nó quảng cáo.
+ *    Trên điện thoại thì ngược lại — hero đã trôi qua từ lâu, và giá lăn bánh là
+ *    thứ khách cần nhìn thấy khi quyết định bấm.
+ */
+.thanh { display: none; }
+
+@media (max-width: 760px) {
+  .thanh {
+    position: sticky;
+    z-index: 28;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--s-4);
+    padding: var(--s-3) var(--page-gutter);
+    padding-bottom: max(var(--s-3), env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--ink-1);
+  }
+  .gia { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+  .gia b {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .thanh .nut { flex: 0 0 auto; }
+}
