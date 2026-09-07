@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 import { TenantAwareDb } from '@garageos/db';
 import { normalizeSlug } from '@garageos/domain';
 import { contentHashOf } from '../common/content-hash';
+import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
 import {
   ErrorCode,
   canonicalizeRichTextDocument,
@@ -67,26 +68,31 @@ export class MarketingService {
     nextCursor: string | null;
   }> {
     const limit = Math.min(Math.max(opts.limit, 1), 100);
+    const moc = tachConTro(opts.cursor);
     return this.db.withTenant(actor, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT p.id, p.slug, p.lifecycle_status, p.draft_revision_id,
                 p.published_revision_id, p.version, p.created_at,
+                ${MOC_CON_TRO('p')},
                 r.name, r.revision_number, r.status
            FROM vehicle_product p
            LEFT JOIN vehicle_product_revision r
              ON r.id IN (p.draft_revision_id, p.published_revision_id)
                 AND r.id = p.draft_revision_id
+          WHERE ($2::timestamptz IS NULL OR (
+                  p.created_at < $2::timestamptz
+                  OR (p.created_at = $2::timestamptz AND p.id > $3::uuid)
+                ))
           ORDER BY p.created_at DESC, p.id
           LIMIT $1 + 1`,
-        [limit],
+        [limit, moc?.moc ?? null, moc?.id ?? null],
       );
+      const conNua = rows.length > limit;
       const items: AdminProductRow[] = [];
       let nextCursor: string | null = null;
       for (const row of rows) {
-        if (items.length === limit) {
-          nextCursor = `${(row.created_at as Date).toISOString()}_${row.id as string}`;
-          break;
-        }
+        if (items.length === limit) break;
+        if (conNua && items.length === limit - 1) nextCursor = ghepConTro(row);
         items.push(this.toAdminProductRow(row));
       }
       return { items, nextCursor };

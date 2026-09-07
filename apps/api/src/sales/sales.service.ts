@@ -18,7 +18,7 @@ import {
   type LeadView,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
-import { MOC_CON_TRO, ghepConTro } from '../common/con-tro-trang';
+import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
 import type { PublicTenantContext } from '../public-landing/tenant-context.service';
 
 /**
@@ -91,17 +91,15 @@ export class SalesService {
        *    `PublicLandingService.listProducts` xếp `created_at DESC, id ASC`
        *    nên phải viết tách ra. Cùng một bài toán, hai lời giải, vì hai thứ tự.
        *
-       * `lastIndexOf('_')`: uuid không chứa `_`, nhưng chuỗi ISO thì có thể đổi
-       * dạng — cắt từ phải luôn lấy đúng phần id.
+       * Việc TÁCH con trỏ nằm ở `common/con-tro-trang.ts` — cùng một bản với hai
+       * chỗ phân trang còn lại. Mốc ở lại dạng chuỗi để không mất micro giây.
        */
-      if (opts.cursor !== undefined && opts.cursor !== '') {
-        const cat = opts.cursor.lastIndexOf('_');
-        if (cat > 0) {
-          params.push(opts.cursor.slice(0, cat), opts.cursor.slice(cat + 1));
-          cond.push(
-            `(sl.created_at, sl.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
-          );
-        }
+      const moc = tachConTro(opts.cursor);
+      if (moc !== null) {
+        params.push(moc.moc, moc.id);
+        cond.push(
+          `(sl.created_at, sl.id) < ($${params.length - 1}::timestamptz, $${params.length}::uuid)`,
+        );
       }
       const where = cond.length > 0 ? `WHERE ${cond.join(' AND ')}` : '';
       params.push(limit);
