@@ -7,6 +7,17 @@
   --paper-1: #e8e5dd;
   --paper-ink: #161817;
   --paper-muted: #5d605b;
+  /*
+   * 🔒 Thương hiệu TRÊN BỀ MẶT SÁNG. Không dùng `--brand-strong` ở đây.
+   *
+   * `--brand-strong #c73526` là màu cho nền TỐI. Trên giấy nó đo 4,69:1 (trên
+   * `--paper-0`) và **4,21:1** trên `--paper-1` — tức là qua ở tầng này và
+   * trượt ở tầng kia, đúng loại lỗi không ai thấy bằng mắt. axe bắt được đúng
+   * một chỗ; bốn chỗ còn lại chỉ chưa rơi xuống `--paper-1` mà thôi.
+   *
+   * #b32e20 đo 5,01:1 trên `--paper-1` và 5,59:1 trên `--paper-0`.
+   */
+  --paper-brand: #b32e20;
   --ink-0: var(--surface-0);
   --ink-1: var(--surface-1);
   --ink-2: var(--surface-2);

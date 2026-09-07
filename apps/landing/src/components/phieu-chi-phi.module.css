@@ -1,6 +1,6 @@
 .ticket { padding: var(--s-9) 0; border-bottom: 1px solid var(--paper-line); background: var(--paper-1); }
 .container { color: var(--paper-ink); }
-.container :global(.eyebrow) { color: var(--brand-strong); }
+.container :global(.eyebrow) { color: var(--paper-brand); }
 .container h2 { max-width: 30ch; margin: var(--s-4) 0 var(--s-7); font-size: var(--fs-2xl); }
 .amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .amountLarge { font-size: 1.16em; }
