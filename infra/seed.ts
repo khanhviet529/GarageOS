@@ -269,7 +269,7 @@ async function main(): Promise<void> {
     vehicle_color, onroad_fee_schedule,
     financing_program_template,
     lead_form_consent_version, lead_form,
-    site_redirect, site_navigation,
+    site_theme, site_redirect, site_navigation,
     article_tag, article_revision, article, article_category,
     faq_placement, faq_item,
     testimonial, vehicle_variant_revision, vehicle_variant,

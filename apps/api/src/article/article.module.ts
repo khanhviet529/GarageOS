@@ -4,6 +4,7 @@ import { ArticleController } from './article.controller';
 import { NavigationController } from './navigation.controller';
 import { LeadFormController } from './lead-form.controller';
 import { UserAdminController } from './user-admin.controller';
+import { SiteThemeController } from './site-theme.controller';
 
-@Module({ providers: [ArticleService], controllers: [ArticleController, NavigationController, LeadFormController, UserAdminController], exports: [ArticleService] })
+@Module({ providers: [ArticleService], controllers: [ArticleController, NavigationController, LeadFormController, UserAdminController, SiteThemeController], exports: [ArticleService] })
 export class ArticleModule {}

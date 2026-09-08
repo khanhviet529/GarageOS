@@ -366,3 +366,43 @@ export const UserRolesInput = z.object({
   version: z.number().int().nonnegative(),
 });
 export type UserRolesInput = z.infer<typeof UserRolesInput>;
+
+/* ============================== Bảng màu landing ============================= */
+
+/**
+ * 🔒 Tên trường ở đây là tên TIẾNG VIỆT của bốn token, trùng khít
+ *    `BangMauLanding` trong `packages/domain/src/tuong-phan.ts`.
+ *
+ *    Khác với phần còn lại của contracts (dùng tiếng Anh), bốn khoá này đi
+ *    nguyên vẹn từ ô nhập của biên tập viên → HTTP → cổng kiểm AA → cột trong
+ *    DB. Dịch chúng sang tiếng Anh ở giữa chặng sẽ tạo một bảng ánh xạ bốn dòng
+ *    mà không tầng nào cần — và một chỗ nữa để đổi nhầm `nenChinh` thành
+ *    `nenNoi` mà kiểu vẫn hợp lệ.
+ */
+const HexMau = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Mã màu phải có dạng #rrggbb');
+
+export const SiteThemeInput = z.object({
+  nenChinh: HexMau,
+  nenNoi: HexMau,
+  thuongHieu: HexMau,
+  nutChinh: HexMau,
+  /*
+   * Zod chỉ canh KIỂU và khoảng. Bậc hợp lệ (0/4/8/16) và toàn bộ luật tương
+   * phản do `loiBangMau()` ở domain quyết, và cuối cùng là `CHECK` ở 0083 —
+   * xem chú thích của migration về việc vì sao ngưỡng AA không nằm ở DB.
+   */
+  boGoc: z.number().int().min(0).max(16),
+  /** Optimistic lock. `0` cho lần lưu đầu tiên, khi tenant chưa có dòng nào. */
+  version: z.number().int().nonnegative(),
+});
+export type SiteThemeInput = z.infer<typeof SiteThemeInput>;
+
+export const SiteThemeView = SiteThemeInput.extend({
+  /** `false` = tenant chưa từng lưu; giá trị trả về là mặc định của hệ thống. */
+  daLuu: z.boolean(),
+});
+export type SiteThemeView = z.infer<typeof SiteThemeView>;
+
+/** Phần landing cần để vẽ — không có `version`, không có dấu vết ai sửa. */
+export const PublicSiteTheme = SiteThemeInput.omit({ version: true });
+export type PublicSiteTheme = z.infer<typeof PublicSiteTheme>;

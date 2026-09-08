@@ -43,6 +43,7 @@ export const ErrorCode = {
    * phát hiện ma trận quyền khai sai.
    */
   BRANCH_OUT_OF_SCOPE: 'BRANCH_OUT_OF_SCOPE',
+  THEME_NOT_APPLICABLE: 'THEME_NOT_APPLICABLE',
   LANDING_PAGE_NOT_PUBLISHABLE: 'LANDING_PAGE_NOT_PUBLISHABLE',
   PREVIEW_NOT_FOUND: 'PREVIEW_NOT_FOUND',
 } as const;
@@ -80,6 +81,13 @@ export const HTTP_STATUS_OF_ERROR: Record<ErrorCode, number> = {
   LEAD_ALREADY_CLOSED: 409,
   ASSIGNEE_OUT_OF_SCOPE: 422,
   BRANCH_OUT_OF_SCOPE: 422,
+  /*
+   * Bảng màu ĐÚNG DẠNG nhưng không dùng được: cặp màu trượt AA, nền quá sáng,
+   * bo góc ngoài thang. 422 chứ không phải 400 — cùng lý do với
+   * `SEO_VALIDATION_FAILED`: payload đọc được và hợp lệ về kiểu, thứ nó không
+   * qua được là một CỔNG NỘI DUNG.
+   */
+  THEME_NOT_APPLICABLE: 422,
   LANDING_PAGE_NOT_PUBLISHABLE: 422,
   PREVIEW_NOT_FOUND: 404,
 };

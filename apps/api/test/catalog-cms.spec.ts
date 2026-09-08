@@ -712,3 +712,222 @@ describe('🔒 Gán vai — chống LEO THANG và chống TỰ KHOÁ', () => {
     assert.equal(dt.includes('0901000001'), false, 'RLS phải chặn — INV-T-01');
   });
 });
+
+describe('🔒 Bảng màu landing — cổng AA nằm ở MÁY CHỦ', () => {
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * Vì sao khối này tồn tại
+   *
+   * Màn *Cài đặt → Giao diện* đo tám cặp màu và khoá nút Lưu khi còn cặp trượt.
+   * Chú thích trong đó viết "kiểm tra mà không chặn thì chỉ là trang trí".
+   * Đúng — và một nút bị khoá cũng vậy: nguyên tắc 1 của dự án nói UI KHÔNG
+   * BAO GIỜ tính là enforce, và `curl` thì không thấy nút nào.
+   *
+   * Nên mọi bài dưới đây gọi thẳng API, không qua trình duyệt.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
+  const MAC_DINH = {
+    nenChinh: '#08090a',
+    nenNoi: '#15181b',
+    thuongHieu: '#ff705c',
+    nutChinh: '#c73526',
+    boGoc: 4,
+  };
+
+  /** Bảng màu của tenant A trước khi khối này chạy — để trả lại nguyên trạng. */
+  let banDau: Record<string, unknown> | null = null;
+
+  before(async () => {
+    const { rows } = await admin.query<Record<string, unknown>>(
+      'SELECT nen_chinh, nen_noi, thuong_hieu, nut_chinh, bo_goc FROM site_theme WHERE tenant_id = $1',
+      [TENANT_A],
+    );
+    banDau = rows[0] ?? null;
+  });
+
+  after(async () => {
+    /*
+     * 🔒 Dọn sau khi chạy. Hai bài trong dự án đã đỏ vì đúng lỗi này: một bài
+     *    đổi dữ liệu dùng chung rồi để nguyên, và bài chạy sau đo nhầm thứ.
+     */
+    await admin.query('DELETE FROM site_theme WHERE tenant_id = ANY($1::uuid[])', [[TENANT_A, TENANT_B]]);
+    if (banDau !== null) {
+      await admin.query(
+        `INSERT INTO site_theme
+           (tenant_id, nen_chinh, nen_noi, thuong_hieu, nut_chinh, bo_goc, created_by, updated_by)
+         SELECT $1, $2, $3, $4, $5, $6, u.id, u.id FROM app_user u WHERE u.tenant_id = $1 LIMIT 1`,
+        [TENANT_A, banDau.nen_chinh, banDau.nen_noi, banDau.thuong_hieu, banDau.nut_chinh, banDau.bo_goc],
+      );
+    }
+  });
+
+  async function docTheme(): Promise<{ status: number; body: any }> {
+    return api('GET', '/api/v1/marketing/site-theme', editor);
+  }
+
+  /** Lưu với `version` đọc ngay trước đó — hợp đồng optimistic lock của endpoint. */
+  async function luu(mau: Record<string, unknown>): Promise<{ status: number; body: any }> {
+    const hienTai = await docTheme();
+    return api('PUT', '/api/v1/marketing/site-theme', editor, {
+      ...mau,
+      version: hienTai.body.version as number,
+    });
+  }
+
+  test('chưa lưu lần nào thì trả MẶC ĐỊNH kèm daLuu=false, không phải 404', async () => {
+    await admin.query('DELETE FROM site_theme WHERE tenant_id = $1', [TENANT_A]);
+    const r = await docTheme();
+    assert.equal(r.status, 200);
+    assert.equal(r.body.daLuu, false);
+    assert.equal(r.body.version, 0);
+    assert.deepEqual(
+      {
+        nenChinh: r.body.nenChinh,
+        nenNoi: r.body.nenNoi,
+        thuongHieu: r.body.thuongHieu,
+        nutChinh: r.body.nutChinh,
+        boGoc: r.body.boGoc,
+      },
+      MAC_DINH,
+      'mặc định trả về phải là bảng màu đang có trong tokens.css',
+    );
+  });
+
+  test('lưu được bảng màu đạt chuẩn, và đọc lại đúng thứ vừa lưu', async () => {
+    /*
+     * ⚠️ `#8f2417` trông hợp lý mà KHÔNG dùng được: viền nút trên nền trang chỉ
+     *    đạt 2,31:1, dưới ngưỡng 3:1 của SC 1.4.11. Bản đầu của bài này dùng nó,
+     *    lượt lưu bị chính cổng AA từ chối, và ba bài sau đó đo một tenant không
+     *    có dòng nào — chúng đỏ vì một lý do không liên quan đến thứ chúng kiểm.
+     */
+    const r = await luu({ ...MAC_DINH, thuongHieu: '#ff9a3c', nutChinh: '#d1452f', boGoc: 8 });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.daLuu, true);
+
+    const doc = await docTheme();
+    assert.equal(doc.body.thuongHieu, '#ff9a3c');
+    assert.equal(doc.body.boGoc, 8);
+    /*
+     * 🔒 Dòng vừa `INSERT` có `version = 0` — `touch_row()` chỉ tăng ở `UPDATE`.
+     *
+     * Ghim con số này lại vì nó là một cái bẫy thật: màn *Giao diện* từng nạp
+     * dữ liệu bằng cách so `version` với giá trị khởi tạo (cũng là 0), nên nó
+     * bỏ qua đúng bảng màu ĐẦU TIÊN mà showroom lưu — trang công khai đổi màu
+     * còn màn quản trị vẫn hiện màu mặc định.
+     */
+    assert.equal(doc.body.version, 0, 'lần lưu đầu là INSERT, version vẫn là 0');
+  });
+
+  test('🔒 bảng màu TRƯỢT AA bị từ chối dù gọi thẳng API', async () => {
+    /*
+     * Một nút hồng nhạt: chữ trắng trên nó đạt chưa tới 2:1. Đây là kiểu bảng
+     * màu trông "sang" trong khung xem trước và không đọc được trên điện thoại
+     * ngoài nắng.
+     *
+     * Thông điệp phải nói ra CẶP NÀO hỏng — "bảng màu không hợp lệ" thì người
+     * nhận nó qua API không có cách nào biết phải sửa ô nào.
+     */
+    const r = await luu({ ...MAC_DINH, nutChinh: '#e8b4a8' });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+    assert.match(String(r.body.error?.message ?? ''), /Chữ trắng trên nút chính/);
+    assert.match(
+      String(r.body.error?.message ?? ''),
+      /cần 4\.5:1/,
+      'lỗi phải nói ra ngưỡng, không chỉ "không hợp lệ"',
+    );
+  });
+
+  test('🔒 nền quá sáng bị từ chối, kể cả khi mọi cặp chữ đều đạt', async () => {
+    /*
+     * Ca này là lý do cổng không chỉ đo tương phản: `--ink-2`/`--ink-3` (ô nhập,
+     * chip) không nằm trong bốn token, nên một trang nền sáng vẫn giữ nguyên hai
+     * mảng xám đen — và không cặp nào trong bảng nhìn thấy chỗ hỏng đó.
+     */
+    const r = await luu({
+      ...MAC_DINH,
+      nenChinh: '#fbfbf9',
+      nenNoi: '#f1efe9',
+      thuongHieu: '#8f2417',
+      nutChinh: '#8f2417',
+    });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+    assert.match(String(r.body.error?.message ?? ''), /quá sáng/);
+  });
+
+  test('bo góc ngoài bốn bậc bị từ chối', async () => {
+    const r = await luu({ ...MAC_DINH, boGoc: 7 });
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+  });
+
+  test('version cũ bị từ chối — hai người sửa cùng lúc không ghi đè nhau', async () => {
+    const truoc = (await docTheme()).body.version as number;
+    const ok = await api('PUT', '/api/v1/marketing/site-theme', editor, { ...MAC_DINH, version: truoc });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+
+    const lai = await api('PUT', '/api/v1/marketing/site-theme', editor, {
+      ...MAC_DINH,
+      thuongHieu: '#ff8866',
+      version: truoc,
+    });
+    assert.equal(lai.status, 409, JSON.stringify(lai.body));
+  });
+
+  test('🔒 landing lấy được bảng màu qua /public/site, và tenant khác không thấy nó', async () => {
+    await luu({ ...MAC_DINH, thuongHieu: '#ffa07a' });
+
+    const r = await fetch(`${API}/api/v1/public/site`, {
+      headers: {
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+    });
+    assert.equal(r.status, 200);
+    const site = (await r.json()) as { theme: { thuongHieu: string; boGoc: number } | null };
+    assert.equal(site.theme?.thuongHieu, '#ffa07a');
+    assert.equal(site.theme?.boGoc, 4);
+
+    /*
+     * Tenant B chưa lưu bảng màu nào, nên `theme` của nó phải là `null`. Thấy
+     * màu của tenant A ở đây nghĩa là RLS thủng ở đúng payload công khai nhất.
+     */
+    const { rows: hostB } = await admin.query<{ hostname: string }>(
+      `SELECT hostname FROM site_domain
+        WHERE tenant_id = $1 AND status = 'ACTIVE' AND is_primary LIMIT 1`,
+      [TENANT_B],
+    );
+    assert.ok(hostB[0] !== undefined, 'seed phải có domain chính cho tenant B để dựng được ca này');
+    const rb = await fetch(`${API}/api/v1/public/site`, {
+      headers: {
+        'x-garageos-original-host': hostB[0].hostname,
+        'x-garageos-original-host-signature': hostSignature(hostB[0].hostname),
+      },
+    });
+    if (rb.status === 200) {
+      const siteB = (await rb.json()) as { theme: unknown };
+      assert.equal(siteB.theme, null, 'tenant B chưa lưu bảng màu nào mà lại thấy một bảng màu');
+    }
+  });
+
+  test('🔒 tenant khác ghi bảng màu của mình, không đụng được bảng màu tenant A', async () => {
+    const truoc = await docTheme();
+    const r = await api('PUT', '/api/v1/marketing/site-theme', ownerB, { ...MAC_DINH, version: 0 });
+    /*
+     * `ownerB` LÀ owner — của tenant khác — nên đây không phải bài kiểm 403. Nó
+     * ghi vào bảng màu của chính tenant B; điều cần chứng minh là bảng màu của
+     * tenant A không nhúc nhích.
+     */
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+
+    const sau = await docTheme();
+    assert.deepEqual(
+      { m: sau.body.thuongHieu, v: sau.body.version },
+      { m: truoc.body.thuongHieu, v: truoc.body.version },
+      'lượt ghi của tenant B đã chạm vào dòng của tenant A',
+    );
+    const { rows } = await admin.query<{ n: string }>(
+      'SELECT count(*) AS n FROM site_theme WHERE tenant_id = $1',
+      [TENANT_A],
+    );
+    assert.equal(Number(rows[0]!.n), 1, 'tenant A vẫn phải có đúng một dòng của riêng nó');
+  });
+});
