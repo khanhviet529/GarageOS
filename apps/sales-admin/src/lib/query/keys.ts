@@ -5,6 +5,7 @@ export const queryKeys = {
   products: () => ['products'] as const,
   categories: () => ['categories'] as const,
   testimonials: () => ['testimonials'] as const,
+  faqItems: () => ['faq-items'] as const,
   product: (id: string) => ['products', id] as const,
   landingPages: () => ['landing-pages'] as const,
   landingPage: (id: string) => ['landing-pages', id] as const,

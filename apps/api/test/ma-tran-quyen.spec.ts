@@ -442,6 +442,25 @@ const KICH_BAN: KichBan[] = [
     goi: (v) => call('POST', `/api/v1/marketing/testimonials/${UUID_GIA}/publish`, undefined, v),
   },
   {
+    quyen: 'marketing:faqRead',
+    ten: 'Xem câu hỏi thường gặp',
+    goi: (v) => call('GET', '/api/v1/marketing/faq-items', undefined, v),
+  },
+  {
+    quyen: 'marketing:faqWrite',
+    ten: 'Sửa câu hỏi thường gặp',
+    goi: (v) =>
+      call('PATCH', `/api/v1/marketing/faq-items/${UUID_GIA}`, {
+        question: 'Câu hỏi thử?', answer: 'Trả lời thử.', topic: null, displayOrder: 0,
+        surfaces: [], version: 0,
+      }, v),
+  },
+  {
+    quyen: 'marketing:faqPublish',
+    ten: 'Công bố câu hỏi thường gặp',
+    goi: (v) => call('POST', `/api/v1/marketing/faq-items/${UUID_GIA}/publish`, undefined, v),
+  },
+  {
     quyen: 'showroom:feeScheduleRead',
     ten: 'Xem biểu phí lăn bánh',
     goi: (v) => call('GET', '/api/v1/showroom/fee-schedules', undefined, v),

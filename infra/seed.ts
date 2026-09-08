@@ -267,6 +267,7 @@ async function main(): Promise<void> {
     vehicle_experience_version, vehicle_experience,
     vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
     vehicle_color, onroad_fee_schedule,
+    faq_placement, faq_item,
     testimonial, vehicle_variant_revision, vehicle_variant,
     vehicle_product_revision, vehicle_product, vehicle_product_category,
     media_publication, media_rendition, media_asset,
@@ -1841,6 +1842,81 @@ async function main(): Promise<void> {
        VALUES ($1,$2,$3,$4::vehicle_availability_status,$5,$6,$7)`,
       [TENANT_A, productId, b.id, tt.status, tt.min, tt.max, publisherId],
     );
+  }
+
+  /*
+   * Câu hỏi thường gặp — bốn câu này TRƯỚC ĐÂY là mảng hằng trong
+   * `apps/landing/src/app/lien-he/page.tsx`. Chuyển nguyên văn vào dữ liệu để
+   * trang Liên hệ trông y như cũ sau khi đổi nguồn, và để có ca thử thật cho
+   * `faq_placement`.
+   *
+   * Câu thứ năm cố ý để nháp và câu thứ sáu cố ý chỉ gắn bề mặt VEHICLE: bài
+   * kiểm cần một câu KHÔNG được lọt ra `CONTACT` vì trạng thái, và một câu
+   * không lọt ra vì bề mặt. Hai lý do khác nhau, hai đường rò khác nhau.
+   */
+  console.log('Tạo câu hỏi thường gặp...');
+  const FAQ_SEED: {
+    hoi: string;
+    dap: string;
+    chuDe: string;
+    trangThai: 'DRAFT' | 'PUBLISHED';
+    beMat: string[];
+  }[] = [
+    {
+      hoi: 'Lái thử có mất phí không?',
+      dap: 'Không. Lái thử miễn phí, không cần đặt cọc và không ràng buộc mua.',
+      chuDe: 'Lái thử',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT', 'HOME'],
+    },
+    {
+      hoi: 'Giá lăn bánh trên trang có đúng không?',
+      dap: 'Là số ước tính theo biểu phí đang hiệu lực, hiện kèm ngày hiệu lực ngay cạnh con số. Showroom xác nhận lại khi ký hợp đồng.',
+      chuDe: 'Giá và chi phí',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT', 'VEHICLE'],
+    },
+    {
+      hoi: 'Có hỗ trợ trả góp không?',
+      dap: 'Có. Khoản trả góp trên trang là con số tham khảo; ngân hàng xét hồ sơ và quyết định điều kiện vay riêng.',
+      chuDe: 'Giá và chi phí',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT', 'VEHICLE'],
+    },
+    {
+      hoi: 'Mua xe ở đây có bắt buộc bảo dưỡng ở đây không?',
+      dap: 'Không bắt buộc. Nhưng xe mua tại đây được tạo hồ sơ sẵn trong hệ thống xưởng, nên lần bảo dưỡng đầu không phải khai lại từ đầu.',
+      chuDe: 'Sau khi mua',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT'],
+    },
+    {
+      hoi: 'Xe điện sạc ở đâu?',
+      dap: 'Bản nháp — chưa duyệt nội dung.',
+      chuDe: 'Xe điện',
+      trangThai: 'DRAFT',
+      beMat: ['CONTACT'],
+    },
+    {
+      hoi: 'Pin xe điện bảo hành bao lâu?',
+      dap: 'Tám năm hoặc 160.000 km, tuỳ điều kiện nào đến trước.',
+      chuDe: 'Xe điện',
+      trangThai: 'PUBLISHED',
+      beMat: ['VEHICLE'],
+    },
+  ];
+  for (const [i, c] of FAQ_SEED.entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO faq_item (tenant_id, question, answer, topic, display_order, status, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6::testimonial_status,$7,$7) RETURNING id`,
+      [TENANT_A, c.hoi, c.dap, c.chuDe, i, c.trangThai, publisherId],
+    );
+    for (const s of c.beMat) {
+      await db.query(
+        `INSERT INTO faq_placement (tenant_id, faq_item_id, surface) VALUES ($1,$2,$3::faq_surface)`,
+        [TENANT_A, rows[0]!.id, s],
+      );
+    }
   }
 
   await db.query('COMMIT');

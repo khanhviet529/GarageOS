@@ -273,6 +273,17 @@ export const ACTION_ROLES = {
   'marketing:reviewRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:reviewWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:reviewPublish': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Câu hỏi thường gặp — SRS-LS-EXP-001 §4.10.
+   *
+   * Ba bậc, cùng khuôn với đánh giá và trang landing: viết KHÁC công bố. Đó là
+   * toàn bộ lý do có hai vai marketing. Câu trả lời cho "bảo hành bao lâu" là
+   * một lời hứa với khách, không phải một dòng ghi chú nội bộ.
+   */
+  'marketing:faqRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:faqWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:faqPublish': ['MARKETING_PUBLISHER', 'OWNER'],
   'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
   'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
   'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
@@ -401,6 +412,9 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'marketing:reviewRead': 'xem testimonial',
   'marketing:reviewWrite': 'soạn testimonial',
   'marketing:reviewPublish': 'publish hoặc ẩn testimonial',
+  'marketing:faqRead': 'xem câu hỏi thường gặp',
+  'marketing:faqWrite': 'sửa câu hỏi thường gặp',
+  'marketing:faqPublish': 'công bố câu hỏi thường gặp',
   'sales:leadRead': 'xem lead được gán',
   'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
   'sales:leadAssign': 'gán lead cho tư vấn',

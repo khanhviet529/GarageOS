@@ -292,6 +292,9 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'vehicle-products/:slug/gia-lan-banh',
       'landing-page', 'landing-page-preview',
       'site-profile', 'branch-public-profiles', 'branches', 'site', 'leads', 'leads/:id',
+      // Câu hỏi thường gặp: nội dung trang web, không có số tiền nào. Vai bị cấm
+      // đã có bài riêng canh ở `ma-tran-quyen.spec.ts`.
+      'faq-items', 'faq',
     ]);
 
     const thieu: string[] = [];

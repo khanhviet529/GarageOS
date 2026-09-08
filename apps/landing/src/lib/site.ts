@@ -1,5 +1,5 @@
 import { requestHost, fetchPublic, httpStatusForPublicApiError } from '@/lib/api';
-import type { PublicSiteView } from '@garageos/contracts';
+import type { PublicSiteView, PublicFaqItem, FaqSurface } from '@garageos/contracts';
 
 /**
  * Nạp site profile published theo host của request — mỗi trang gọi một lần.
@@ -63,4 +63,21 @@ export function formatPriceParts(amount: number | null): GiaTach {
 export function formatPrice(amount: number | null): string {
   const { so, kyHieu } = formatPriceParts(amount);
   return kyHieu === null ? so : `${so} ${kyHieu}`;
+}
+
+/**
+ * Câu hỏi thường gặp của MỘT bề mặt.
+ *
+ * ⚠️ Hỏng thì trả mảng RỖNG, không ném lỗi. Khối FAQ là nội dung phụ trợ; một
+ *    lượt gọi hỏng không được kéo cả trang Liên hệ xuống 500 — người đang cần
+ *    số điện thoại showroom vẫn phải thấy số điện thoại showroom.
+ */
+export async function loadFaq(surface: FaqSurface): Promise<PublicFaqItem[]> {
+  try {
+    const host = await requestHost();
+    const kq = await fetchPublic<{ items: PublicFaqItem[] }>(host, `/faq?surface=${surface}`);
+    return kq.items;
+  } catch {
+    return [];
+  }
 }

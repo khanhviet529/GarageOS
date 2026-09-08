@@ -60,3 +60,75 @@ export type TestimonialUpdateInput = z.infer<typeof TestimonialUpdateInput>;
 
 export const PublicTestimonial = z.object({ id: z.string().uuid(), displayName: z.string(), content: z.string(), rating: z.number().int().min(1).max(5).nullable(), featured: z.boolean(), vehicleId: z.string().uuid().nullable() });
 export type PublicTestimonial = z.infer<typeof PublicTestimonial>;
+
+/* ============================ Câu hỏi thường gặp ============================ */
+
+/**
+ * Nơi một câu hỏi được hiện — SRS-LS-EXP-001 §4.10.
+ *
+ * 🔒 KHÔNG có giá trị `FAQ`. Câu hỏi thường gặp luôn là một KHỐI NHÚNG trong
+ *    trang khác, không có trang riêng. Nút "Xem tất cả" ở khối FAQ từng trỏ vào
+ *    hư vô đúng vì giả định ngược lại; 2026-09-04 đổi thành "Xem thêm 6 câu" mở
+ *    tại chỗ.
+ *
+ *    Thêm một giá trị vào đây mà không thêm cả một trang và một mục menu là
+ *    dựng lại đúng cái nút dẫn tới URL không tồn tại. Enum này được nhân đôi ở
+ *    `faq_surface` (migration 0076) và bài kiểm đối chiếu hai bản.
+ */
+export const FaqSurface = z.enum(['HOME', 'CONTACT', 'VEHICLE', 'NEWS']);
+export type FaqSurface = z.infer<typeof FaqSurface>;
+
+export const FAQ_SURFACE_LABEL: Record<FaqSurface, string> = {
+  HOME: 'Trang chủ',
+  CONTACT: 'Liên hệ',
+  VEHICLE: 'Chi tiết xe',
+  NEWS: 'Tin tức',
+};
+
+/**
+ * ⚠️ Màn vỏ trong sales-admin xin `GET/PUT /marketing/faq-groups` và
+ *    `/faq-groups/:id/items` — một mô hình NHÓM chứa câu hỏi. Mô hình ở đây
+ *    không có bảng nhóm, và đó là chủ ý:
+ *
+ *    · "Nhóm" mà giao diện muốn là `topic` — một nhãn chữ trên chính câu hỏi.
+ *      Một bảng nhóm chỉ để đựng một cái tên là thêm một bảng, một màn quản lý
+ *      nhóm, và một câu hỏi mới ("xoá nhóm thì câu hỏi đi đâu?").
+ *    · "Chọn nhóm nào hiện ở trang nào" là `faq_placement`, và nó chính xác
+ *      hơn: cùng một chủ đề có thể muốn hiện ở Liên hệ mà không hiện ở Trang
+ *      chủ.
+ *
+ *    SRS-LS-EXP-001 §4.10 chốt `faq_item` + `faq_placement`, viết sau bản vỏ.
+ */
+export const FaqItemInput = z.object({
+  question: z.string().trim().min(1).max(300),
+  answer: z.string().trim().min(1).max(4_000),
+  /** Nhãn nhóm, tự do. Null = chưa xếp nhóm. */
+  topic: z.string().trim().max(80).nullable().optional(),
+  displayOrder: z.number().int().min(0).max(10_000).default(0),
+  /** Trang nào hiện câu này. Rỗng = chưa hiện ở đâu cả. */
+  surfaces: z.array(FaqSurface).max(4).default([]),
+});
+export type FaqItemInput = z.infer<typeof FaqItemInput>;
+
+export const FaqItemUpdateInput = FaqItemInput.extend({ version: z.number().int().nonnegative() });
+export type FaqItemUpdateInput = z.infer<typeof FaqItemUpdateInput>;
+
+export const FaqItemRow = z.object({
+  id: z.string().uuid(),
+  question: z.string(),
+  answer: z.string(),
+  topic: z.string().nullable(),
+  displayOrder: z.number().int(),
+  status: z.enum(['DRAFT', 'PUBLISHED', 'HIDDEN']),
+  surfaces: z.array(FaqSurface),
+  version: z.number().int(),
+});
+export type FaqItemRow = z.infer<typeof FaqItemRow>;
+
+export const PublicFaqItem = z.object({
+  id: z.string().uuid(),
+  question: z.string(),
+  answer: z.string(),
+  topic: z.string().nullable(),
+});
+export type PublicFaqItem = z.infer<typeof PublicFaqItem>;

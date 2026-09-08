@@ -231,4 +231,27 @@ test.describe('Trang bán xe công khai', () => {
     // Không được lọt timestamp ISO ra trang.
     expect(html).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/);
   });
+
+  /*
+   * 🔒 Khối câu hỏi thường gặp đến từ DỮ LIỆU, không phải mảng hằng trong mã.
+   *
+   * Trước migration 0076 bốn câu này nằm thẳng trong `lien-he/page.tsx`. Bài
+   * này canh hai chiều cùng lúc, và chiều thứ hai mới là chiều dễ hỏng:
+   *
+   *   · câu đã CÔNG BỐ và bật ở trang Liên hệ thì phải hiện
+   *   · câu còn NHÁP thì KHÔNG được hiện, dù đã bật đúng trang đó
+   *
+   * Seed dựng sẵn "Xe điện sạc ở đâu?" ở trạng thái nháp, gắn đúng bề mặt
+   * CONTACT — nên nếu điều kiện lọc theo trạng thái biến mất, bài này đỏ chứ
+   * không phải chờ ai đó phát hiện nội dung chưa duyệt trên trang thật.
+   */
+  test('LD-E11 — câu hỏi thường gặp lấy từ dữ liệu, và bản NHÁP không lọt ra', async ({
+    page,
+  }) => {
+    await page.goto(`${LANDING}/lien-he`, { waitUntil: 'domcontentloaded' });
+    const html = await page.content();
+
+    expect(html).toContain('Lái thử có mất phí không?');
+    expect(html).not.toContain('Xe điện sạc ở đâu?');
+  });
 });

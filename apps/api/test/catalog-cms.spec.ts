@@ -2,7 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { Pool } from 'pg';
-import { canonicalizeRichTextDocument, RichTextDocumentV1 } from '@garageos/contracts';
+import { canonicalizeRichTextDocument, FaqSurface, RichTextDocumentV1 } from '@garageos/contracts';
 
 const API = process.env.API_URL ?? 'http://localhost:3001';
 const ADMIN_URL = process.env.DATABASE_ADMIN_URL ?? 'postgresql://garageos:garageos_dev@localhost:5433/garageos';
@@ -62,5 +62,149 @@ describe('Catalog CMS — tenant, lifecycle and FK guards', () => {
   test('RLS prevents app role from reading another tenant', async () => {
     const client = await app.connect();
     try { await client.query('BEGIN'); await client.query("SELECT set_config('app.tenant_id',$1,true)", [TENANT_B]); const rows = await client.query('SELECT id FROM testimonial WHERE tenant_id=$1', [TENANT_A]); assert.equal(rows.rowCount, 0); } finally { await client.query('ROLLBACK').catch(() => undefined); client.release(); }
+  });
+});
+
+describe('🔒 Câu hỏi thường gặp — công bố và bề mặt là HAI cửa khác nhau', () => {
+  /*
+   * Khối FAQ trên landing lọc bằng hai điều kiện độc lập: `status='PUBLISHED'`
+   * và `faq_placement.enabled` cho đúng bề mặt. Bỏ sót một trong hai là đẩy nội
+   * dung chưa duyệt ra trang công khai.
+   *
+   * Seed dựng sẵn hai ca đối chứng, và chúng KHÁC LOẠI nhau:
+   *   · "Xe điện sạc ở đâu?"        — gắn CONTACT nhưng còn DRAFT
+   *   · "Pin xe điện bảo hành..."   — đã PUBLISHED nhưng chỉ gắn VEHICLE
+   * Một bài kiểm chỉ có một trong hai sẽ xanh dù thiếu hẳn một điều kiện lọc.
+   */
+  async function congKhai(duong: string): Promise<{ status: number; body: any }> {
+    const r = await fetch(`${API}${duong}`, {
+      headers: {
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }
+
+  test('landing chỉ nhận câu ĐÃ CÔNG BỐ và ĐÚNG bề mặt', async () => {
+    const r = await congKhai('/api/v1/public/faq?surface=CONTACT');
+    assert.equal(r.status, 200);
+    const hoi = (r.body.items as { question: string }[]).map((c) => c.question);
+
+    assert.ok(hoi.includes('Lái thử có mất phí không?'), 'câu đã công bố ở CONTACT phải hiện');
+    assert.equal(
+      hoi.includes('Xe điện sạc ở đâu?'),
+      false,
+      'câu còn NHÁP lọt ra trang công khai — thiếu điều kiện status',
+    );
+    assert.equal(
+      hoi.includes('Pin xe điện bảo hành bao lâu?'),
+      false,
+      'câu chỉ gắn bề mặt VEHICLE lọt vào CONTACT — thiếu điều kiện surface',
+    );
+  });
+
+  test('cùng một câu, bề mặt khác thì kết quả khác', async () => {
+    const xe = await congKhai('/api/v1/public/faq?surface=VEHICLE');
+    assert.equal(xe.status, 200);
+    const hoi = (xe.body.items as { question: string }[]).map((c) => c.question);
+    assert.ok(hoi.includes('Pin xe điện bảo hành bao lâu?'));
+    assert.equal(hoi.includes('Mua xe ở đây có bắt buộc bảo dưỡng ở đây không?'), false);
+  });
+
+  test('🔒 thiếu hoặc sai `surface` bị từ chối, không âm thầm trả cả thư viện', async () => {
+    assert.equal((await congKhai('/api/v1/public/faq')).status, 400);
+    assert.equal((await congKhai('/api/v1/public/faq?surface=FAQ')).status, 400,
+      'bề mặt FAQ KHÔNG tồn tại — không có trang FAQ riêng (SRS §4.10)');
+  });
+
+  test('biên tập viên tạo, sửa và gắn bề mặt; công bố là quyền KHÁC', async () => {
+    const tao = await api('POST', '/api/v1/marketing/faq-items', editor, {
+      question: `Câu thử ${uniq}?`,
+      answer: 'Trả lời thử.',
+      topic: 'Thử',
+      displayOrder: 90,
+      surfaces: ['CONTACT'],
+    });
+    assert.equal(tao.status, 201, JSON.stringify(tao.body));
+    const id = tao.body.id as string;
+
+    // Chưa công bố thì landing không thấy
+    const truoc = await congKhai('/api/v1/public/faq?surface=CONTACT');
+    assert.equal((truoc.body.items as { id: string }[]).some((c) => c.id === id), false);
+
+    // 🔒 Biên tập viên KHÔNG công bố được
+    const camCongBo = await api('POST', `/api/v1/marketing/faq-items/${id}/publish`, editor);
+    assert.equal(camCongBo.status, 403, 'biên tập viên không được tự công bố');
+
+    const congBo = await api('POST', `/api/v1/marketing/faq-items/${id}/publish`, publisher);
+    assert.equal(congBo.status, 201, JSON.stringify(congBo.body));
+
+    const sau = await congKhai('/api/v1/public/faq?surface=CONTACT');
+    assert.ok((sau.body.items as { id: string }[]).some((c) => c.id === id));
+
+    /*
+     * 🔒 Sửa được KHI ĐANG PUBLISHED — khác testimonial, và có lý do.
+     * Testimonial là lời của người khác; câu hỏi thường gặp là lời của chính
+     * xưởng, và một câu trả lời SAI đang hiện trên trang thì thứ cần nhất là
+     * sửa được ngay.
+     */
+    const sua = await api('PATCH', `/api/v1/marketing/faq-items/${id}`, editor, {
+      question: `Câu thử ${uniq}?`,
+      answer: 'Trả lời đã sửa.',
+      topic: 'Thử',
+      displayOrder: 90,
+      surfaces: ['CONTACT'],
+      version: 1,
+    });
+    assert.equal(sua.status, 200, JSON.stringify(sua.body));
+    const daSua = await congKhai('/api/v1/public/faq?surface=CONTACT');
+    assert.equal(
+      (daSua.body.items as { id: string; answer: string }[]).find((c) => c.id === id)?.answer,
+      'Trả lời đã sửa.',
+    );
+
+    // Bỏ hết bề mặt thì biến khỏi trang, dù vẫn PUBLISHED
+    const goBeMat = await api('PATCH', `/api/v1/marketing/faq-items/${id}`, editor, {
+      question: `Câu thử ${uniq}?`,
+      answer: 'Trả lời đã sửa.',
+      topic: 'Thử',
+      displayOrder: 90,
+      surfaces: [],
+      version: 2,
+    });
+    assert.equal(goBeMat.status, 200, JSON.stringify(goBeMat.body));
+    const cuoi = await congKhai('/api/v1/public/faq?surface=CONTACT');
+    assert.equal((cuoi.body.items as { id: string }[]).some((c) => c.id === id), false);
+
+    assert.equal((await api('DELETE', `/api/v1/marketing/faq-items/${id}`, editor)).status, 200);
+  });
+
+  test('🔒 tenant khác không đọc và không sửa được câu hỏi của tenant này', async () => {
+    const cua = await api('GET', '/api/v1/marketing/faq-items', publisher);
+    const idA = (cua.body.items as { id: string }[])[0]!.id;
+    const cuaB = await api('GET', '/api/v1/marketing/faq-items', ownerB);
+    assert.equal(
+      (cuaB.body.items as { id: string }[]).some((c) => c.id === idA),
+      false,
+      'RLS phải chặn — INV-T-01',
+    );
+    const sua = await api('PATCH', `/api/v1/marketing/faq-items/${idA}`, ownerB, {
+      question: 'Chiếm', answer: 'Chiếm', topic: null, displayOrder: 0, surfaces: [], version: 0,
+    });
+    assert.equal(sua.status, 409);
+  });
+
+  test('🔒 enum bề mặt ở TypeScript khớp enum ở database', async () => {
+    /*
+     * Hai bản của cùng một danh sách: `FaqSurface` trong contracts và
+     * `faq_surface` trong migration 0076. Lệch nhau thì một giá trị hợp lệ ở
+     * tầng này bị từ chối ở tầng kia — và lỗi hiện ra dưới dạng 500 chứ không
+     * phải một câu nói được điều gì sai.
+     */
+    const { rows } = await admin.query<{ v: string }>(
+      `SELECT unnest(enum_range(NULL::faq_surface))::text AS v`,
+    );
+    assert.deepEqual(rows.map((r) => r.v).sort(), [...FaqSurface.options].sort());
   });
 });

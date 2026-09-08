@@ -11,6 +11,8 @@ import {
   type PublicTestimonial,
   type PublicSiteView,
   type ChiPhiSoHuuView,
+  type PublicFaqItem,
+  type FaqSurface,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
@@ -31,6 +33,24 @@ export class PublicLandingService {
     @Inject(TenantAwareDb) private readonly db: TenantAwareDb,
     @Inject(ShowroomService) private readonly showroom: ShowroomService,
   ) {}
+
+  /**
+   * Câu hỏi thường gặp đang CÔNG BỐ ở một bề mặt.
+   *
+   * Lọc bằng SQL chứ không lọc ở tầng trên: `status = 'PUBLISHED'` và
+   * `placement.enabled` là HAI điều kiện độc lập, và bỏ sót một trong hai là
+   * đẩy nội dung chưa duyệt ra trang công khai.
+   */
+  async faq(ctx: PublicTenantContext, surface: FaqSurface): Promise<PublicFaqItem[]> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicFaqItem>(
+      `SELECT f.id, f.question, f.answer, f.topic
+         FROM faq_item f
+         JOIN faq_placement p ON p.faq_item_id = f.id AND p.enabled
+        WHERE f.status = 'PUBLISHED' AND p.surface = $1::faq_surface
+        ORDER BY f.display_order, f.created_at`,
+      [surface],
+    )).rows);
+  }
 
   async testimonials(ctx: PublicTenantContext): Promise<PublicTestimonial[]> {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicTestimonial>(

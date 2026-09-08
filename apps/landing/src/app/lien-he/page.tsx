@@ -7,21 +7,21 @@ import { Icon } from '@/components/ui/icon';
 import css from '@/features/lien-he/lien-he.module.css';
 import { noIndex } from '@/lib/api';
 import { buildMetadata } from '@/lib/seo';
-import { loadSite } from '@/lib/site';
+import { loadFaq, loadSite } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Bốn câu hay được hỏi nhất, và câu trả lời là CHÍNH SÁCH của hệ thống — không
- * có con số nào ở đây được suy ra từ dữ liệu, nên không có con số nào bị lệch
- * khi dữ liệu đổi.
+ * Câu hỏi và câu trả lời đến từ máy chủ (`faq_item` + `faq_placement`, migration
+ * 0076), lọc theo bề mặt `CONTACT`.
+ *
+ * 🔒 Trước đây bốn câu này là một mảng HẰNG ngay trong file. Sửa một câu trả lời
+ *    là một lần deploy — nên trên thực tế không ai sửa, và câu trả lời cứ cũ dần
+ *    trong khi chính sách đổi. Đó là hình dạng quen thuộc của nội dung chết:
+ *    không ai xoá nó, chỉ là không ai cập nhật được nó.
+ *
+ * Khối rỗng thì cả phần biến mất, không hiện tiêu đề trống — xem dưới.
  */
-const FAQ = [
-  ['Lái thử có mất phí không?', 'Không. Lái thử miễn phí, không cần đặt cọc và không ràng buộc mua.'],
-  ['Giá lăn bánh trên trang có đúng không?', 'Là số ước tính theo biểu phí đang hiệu lực, hiện kèm ngày hiệu lực ngay cạnh con số. Showroom xác nhận lại khi ký hợp đồng.'],
-  ['Có hỗ trợ trả góp không?', 'Có. Khoản trả góp trên trang là con số tham khảo; ngân hàng xét hồ sơ và quyết định điều kiện vay riêng.'],
-  ['Mua xe ở đây có bắt buộc bảo dưỡng ở đây không?', 'Không bắt buộc. Nhưng xe mua tại đây được tạo hồ sơ sẵn trong hệ thống xưởng, nên lần bảo dưỡng đầu không phải khai lại từ đầu.'],
-] as const;
 
 interface ThamSo { 'nhu-cau'?: string }
 
@@ -30,7 +30,7 @@ export default async function ContactPage({
 }: {
   searchParams: Promise<ThamSo>;
 }): Promise<React.ReactElement> {
-  const site = await loadSite();
+  const [site, faq] = await Promise.all([loadSite(), loadFaq('CONTACT')]);
   const tham = await searchParams;
   const laiThu = tham['nhu-cau'] === 'lai-thu';
   const chiNhanh = site?.publicBranches ?? [];
@@ -136,19 +136,26 @@ export default async function ContactPage({
           </section>
         )}
 
-        <section className={`${css.faq} man-giay`} aria-labelledby="faq-tieu-de">
-          <div className="container">
-            <h2 id="faq-tieu-de">Câu hỏi thường gặp</h2>
-            <div className={css.dsFaq}>
-              {FAQ.map(([hoi, dap]) => (
-                <details key={hoi}>
-                  <summary>{hoi}</summary>
-                  <p>{dap}</p>
-                </details>
-              ))}
+        {/*
+          Không có câu nào công bố thì KHÔNG hiện tiêu đề rỗng. Một mục "Câu hỏi
+          thường gặp" trống nói với khách rằng trang bị hỏng; không có mục đó thì
+          không nói gì cả, và không nói gì là đúng.
+        */}
+        {faq.length > 0 && (
+          <section className={`${css.faq} man-giay`} aria-labelledby="faq-tieu-de">
+            <div className="container">
+              <h2 id="faq-tieu-de">Câu hỏi thường gặp</h2>
+              <div className={css.dsFaq}>
+                {faq.map((c) => (
+                  <details key={c.id}>
+                    <summary>{c.question}</summary>
+                    <p>{c.answer}</p>
+                  </details>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/*
           Thanh dính đáy chỉ hiện trên điện thoại, và nó là *Gọi* chứ không phải

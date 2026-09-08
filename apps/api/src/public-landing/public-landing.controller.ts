@@ -7,6 +7,8 @@ import {
   type LeadCreateResult,
   type PublicProductDetail,
   type PublicProductSummary,
+  FaqSurface,
+  type PublicFaqItem,
   type PublicTestimonial,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
@@ -63,6 +65,31 @@ export class PublicLandingController {
     const resolution = await this.tenantCtx.resolvePublic(req);
     if (!this.applyAliasRedirect(resolution, req, res)) return;
     res.json({ items: await this.svc.testimonials(this.requireContext(resolution)) } as { items: PublicTestimonial[] });
+  }
+
+  /**
+   * Câu hỏi thường gặp của MỘT bề mặt.
+   *
+   * 🔒 `surface` bắt buộc, không có mặc định. Trả cả thư viện khi thiếu tham số
+   *    nghe có vẻ tiện, nhưng nó đẩy việc lọc sang trình duyệt — và một khối FAQ
+   *    của trang Liên hệ sẽ tải về cả những câu chỉ dành cho trang xe rồi giấu
+   *    đi. Giấu ở trình duyệt không phải là không gửi.
+   */
+  @Get('faq')
+  async faq(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('surface') surface?: string,
+  ): Promise<void> {
+    const resolution = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(resolution, req, res)) return;
+    const mat = FaqSurface.safeParse(surface);
+    if (!mat.success) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Thiếu hoặc sai tham số `surface`.');
+    }
+    res.json({ items: await this.svc.faq(this.requireContext(resolution), mat.data) } as {
+      items: PublicFaqItem[];
+    });
   }
 
   @Get('vehicle-products')
