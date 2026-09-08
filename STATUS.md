@@ -47,9 +47,9 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 704 (domain 96, api 598, infra 10) |
-| E2E Playwright | 86 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 74 |
+| Test tự động | 845 (domain 113, api 677, db 43, infra 12) |
+| E2E Playwright | 96 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 83 |
 | Vòng review đã chạy | 10 vòng `/codex-review` + 2 vòng rà soát thủ công + 3 vòng rà soát thiết kế |
 | Phát hiện đã xử lý | 25 + ~50 + 22 |
 
@@ -412,6 +412,7 @@ ra đời. Thêm mọi bảng mới vào bài quét quyền so cột service `UP
 | Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
 | Tiêu đề cột chân trang chưa cấu hình được | `site_navigation` gắn `column_index` vào từng DÒNG, nên một tiêu đề cột sẽ phải lặp lại trên mọi dòng của cột đó — và hai dòng ghi hai tiêu đề khác nhau là chuyện chắc chắn xảy ra. Làm đúng cần một bảng riêng cho cột; liên kết bên dưới đã cấu hình được, tiêu đề thì chưa |
 | `TRANG_CO_THAT` là danh sách viết tay ở hai nơi | Máy chủ (`public-landing.controller.ts`) và màn quản trị (`website/navigation`) mỗi nơi giữ một bản danh sách bốn route landing. Khi có bảng `site_page` thì điều kiện đổi thành một phép JOIN và cả hai bản biến mất. Trong lúc chờ, quên cập nhật một bản chỉ làm mục menu bị ẩn thừa — hướng hỏng an toàn, nhưng vẫn là hai bản sao |
+| Bảng màu landing chỉ đổi được BỐN token | `--ink-2` (ô nhập), `--ink-3` (chip), `--photo` và cả họ `--paper-*` giữ nguyên giá trị đã được `pnpm kiem:tuong-phan` đo. Vì thế cổng lưu bắt hai màu nền phải TỐI (`NEN_PHAI_TOI_DUOI`): nền sáng vẫn có thể qua tám cặp AA nhưng để lại hai mảng xám đen giữa trang, và không cặp nào trong bảng nhìn thấy chỗ đó. Mở thêm token thì phải mở thêm cặp kiểm — bốn token là ranh giới cố ý |
 | ĐỔI TÊN một màu xe vẫn cắt liên kết ảnh | `replaceColors` ghi đè theo khoá tự nhiên `(revision, name)`, nên đổi tên = xoá một màu + thêm một màu khác, và `vehicle_product_media.color_id` về null qua `ON DELETE SET NULL`. Sửa thật là cho `VehicleColorInput` mang `id` — đổi hợp đồng và đổi cả màn quản trị, nên chưa làm cùng lượt vá xoá-rồi-chèn |
 
 ## Nợ đã trả

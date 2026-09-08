@@ -1,7 +1,17 @@
 'use client';
 
 import { Check, Lock, TriangleAlert } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  BANG_MAU_MAC_DINH,
+  BO_GOC_CHO_PHEP,
+  capMauLanding,
+  hexHopLe,
+  kiemCapMau,
+  loiBangMau,
+  nenQuaSang,
+  type BangMauLanding,
+} from '@garageos/domain';
 import { hasAction, useMe } from '@/components/auth';
 import { PageShell } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
@@ -9,22 +19,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { kiemCapMau, hopLe, type CapMau } from '@/lib/contrast';
+import { useSiteTheme, useSiteThemeMutation } from '@/features/giao-dien/queries';
+import { errorMessage } from '@/lib/client';
 import { cn } from '@/lib/utils';
 
 /*
- * Bốn token ngữ nghĩa mà biên tập viên được đổi. Bốn — không phải hai mươi:
- * mỗi token thêm vào là một cặp màu nữa phải kiểm, và một cách nữa để bảng màu
- * của một tenant tự mâu thuẫn.
+ * 🔒 Bốn token, bảng màu mặc định, danh sách bậc bo góc và toàn bộ phép đo AA
+ *    đều đến từ `@garageos/domain`.
+ *
+ * Bản trước khai lại tất cả ở ngay đây, và tám cặp màu được dựng inline trong
+ * một `useMemo`. Chừng nào chỉ có màn này kiểm thì không sao — nhưng máy chủ
+ * bây giờ cũng từ chối bảng màu trượt chuẩn, và hai danh sách cặp khác nhau sẽ
+ * cho hai kết luận khác nhau: nút sáng lên rồi lượt lưu trả 422, hoặc tệ hơn,
+ * máy chủ nhận một bảng màu mà màn này đã chặn.
  */
-const MAC_DINH = {
-  nenChinh: '#08090a',
-  nenNoi: '#15181b',
-  thuongHieu: '#ff705c',
-  nutChinh: '#c73526',
-};
-
-type Khoa = keyof typeof MAC_DINH;
+type Khoa = keyof BangMauLanding;
 
 const NHAN: Record<Khoa, { ten: string; mo: string }> = {
   nenChinh: { ten: 'Nền chính', mo: 'Nền của toàn trang' },
@@ -33,15 +42,42 @@ const NHAN: Record<Khoa, { ten: string; mo: string }> = {
   nutChinh: { ten: 'Nút chính', mo: 'Nền của nút hành động' },
 };
 
-const BO_GOC = [0, 4, 8, 16];
-
 export default function AppearancePage(): React.ReactElement {
   const { me } = useMe();
   const canRead = me !== null && hasAction(me.roles, 'marketing:experienceRead');
   const canWrite = me !== null && hasAction(me.roles, 'marketing:experienceWrite');
 
-  const [mau, setMau] = useState(MAC_DINH);
-  const [boGoc, setBoGoc] = useState(4);
+  const theme = useSiteTheme(canRead);
+  const luuTheme = useSiteThemeMutation();
+
+  const [mau, setMau] = useState<BangMauLanding>(BANG_MAU_MAC_DINH);
+  const [boGoc, setBoGoc] = useState<number>(4);
+  const [version, setVersion] = useState(0);
+  const [daLuu, setDaLuu] = useState(false);
+  const [loiLuu, setLoiLuu] = useState<string | null>(null);
+
+  /*
+   * ⚠️ Nạp ĐÚNG MỘT LẦN, không đồng bộ hai chiều.
+   *
+   * `theme.data` đổi lại sau mỗi lượt lưu (query bị invalidate) và sau mỗi lần
+   * cửa sổ lấy lại tiêu điểm. Chép nó vào state mỗi lần như thế sẽ ghi đè lên
+   * những gì người dùng đang gõ dở.
+   *
+   * ⚠️ Cờ riêng, KHÔNG so bằng `version`. Dòng vừa `INSERT` có `version = 0` —
+   *    đúng bằng giá trị khởi tạo ở đây — nên phép so đó sẽ bỏ qua chính bảng
+   *    màu đầu tiên mà showroom lưu, và màn hình hiện màu mặc định trong khi
+   *    trang công khai đã đổi màu.
+   */
+  const [daNap, setDaNap] = useState(false);
+  useEffect(() => {
+    const d = theme.data;
+    if (d === undefined || daNap) return;
+    const { version: v, daLuu: _daLuu, boGoc: bg, ...bangMau } = d;
+    setMau(bangMau);
+    setBoGoc(bg);
+    setVersion(v);
+    setDaNap(true);
+  }, [theme.data, daNap]);
 
   /*
    * ═══════════════════════════════════════════════════════════════════════
@@ -53,23 +89,37 @@ export default function AppearancePage(): React.ReactElement {
    * bỏ qua, và bảng màu trượt chuẩn sẽ ra tới người dùng cuối.
    * ═══════════════════════════════════════════════════════════════════════
    */
-  const ketQua = useMemo(() => {
-    const cap: CapMau[] = [
-      { nhan: 'Chữ chính trên nền trang', chu: '#f5f5f3', nen: mau.nenChinh, nguong: 4.5 },
-      { nhan: 'Chữ chính trên nền nổi', chu: '#f5f5f3', nen: mau.nenNoi, nguong: 4.5 },
-      { nhan: 'Chữ phụ trên nền trang', chu: '#b5b7b4', nen: mau.nenChinh, nguong: 4.5 },
-      { nhan: 'Chữ phụ trên nền nổi', chu: '#b5b7b4', nen: mau.nenNoi, nguong: 4.5 },
-      { nhan: 'Thương hiệu làm chữ trên nền trang', chu: mau.thuongHieu, nen: mau.nenChinh, nguong: 4.5 },
-      { nhan: 'Thương hiệu làm chữ trên nền nổi', chu: mau.thuongHieu, nen: mau.nenNoi, nguong: 4.5 },
-      { nhan: 'Chữ trắng trên nút chính', chu: '#ffffff', nen: mau.nutChinh, nguong: 4.5 },
-      { nhan: 'Viền nút chính trên nền trang', chu: mau.nutChinh, nen: mau.nenChinh, nguong: 3 },
-    ];
-    return kiemCapMau(cap);
-  }, [mau]);
+  const ketQua = useMemo(() => kiemCapMau(capMauLanding(mau)), [mau]);
 
   const truot = ketQua.filter((k) => !k.dat);
-  const moiHexHopLe = Object.values(mau).every(hopLe);
-  const khoaLuu = truot.length > 0 || !moiHexHopLe;
+  const moiHexHopLe = Object.values(mau).every(hexHopLe);
+  /*
+   * 🔒 MỘT hàm quyết định "lưu được hay không", và máy chủ gọi đúng hàm đó.
+   *
+   * `loiBangMau` bao cả ba loại: hex sai dạng, nền quá sáng, và cặp trượt AA.
+   * Danh sách `truot` bên trên chỉ còn dùng để VẼ — nó không được là căn cứ
+   * khoá nút, vì như thế màn hình lại có luật riêng của nó.
+   */
+  const loi = useMemo(() => loiBangMau(mau, boGoc), [mau, boGoc]);
+  const khoaLuu = loi.length > 0;
+  const nenSang = (['nenChinh', 'nenNoi'] as const).filter((k) => nenQuaSang(mau[k]));
+
+  async function luu(): Promise<void> {
+    setLoiLuu(null);
+    try {
+      const kq = await luuTheme.mutateAsync({ ...mau, boGoc, version });
+      setVersion(kq.version);
+      setDaLuu(true);
+    } catch (cause) {
+      setLoiLuu(errorMessage(cause));
+    }
+  }
+
+  function doiMau(thay: Partial<BangMauLanding>): void {
+    setMau((t) => ({ ...t, ...thay }));
+    setDaLuu(false);
+    setLoiLuu(null);
+  }
 
   return (
     <PageShell
@@ -77,12 +127,25 @@ export default function AppearancePage(): React.ReactElement {
       subtitle="Mọi khối trên trang công khai lấy màu và bo góc từ đây"
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => setMau(MAC_DINH)}>
+          <Button
+            variant="secondary"
+            disabled={!canWrite}
+            onClick={() => {
+              setMau(BANG_MAU_MAC_DINH);
+              setBoGoc(4);
+              setDaLuu(false);
+              setLoiLuu(null);
+            }}
+          >
             Khôi phục mặc định
           </Button>
-          <Button disabled={khoaLuu || !canWrite} aria-describedby={khoaLuu ? 'ly-do-khoa' : undefined}>
+          <Button
+            disabled={khoaLuu || !canWrite || luuTheme.isPending}
+            aria-describedby={khoaLuu ? 'ly-do-khoa' : undefined}
+            onClick={() => void luu()}
+          >
             {khoaLuu && <Lock className="h-3.5 w-3.5" />}
-            Lưu và áp dụng
+            {luuTheme.isPending ? 'Đang lưu…' : 'Lưu và áp dụng'}
           </Button>
         </div>
       }
@@ -102,7 +165,7 @@ export default function AppearancePage(): React.ReactElement {
                   <div key={k} className="flex items-center gap-3">
                     <span
                       className="h-[26px] w-[26px] shrink-0 rounded-sm border border-line"
-                      style={{ background: hopLe(mau[k]) ? mau[k] : 'transparent' }}
+                      style={{ background: hexHopLe(mau[k]) ? mau[k] : 'transparent' }}
                       aria-hidden="true"
                     />
                     <span className="min-w-0 flex-1">
@@ -114,10 +177,10 @@ export default function AppearancePage(): React.ReactElement {
                     <Input
                       id={`mau-${k}`}
                       value={mau[k]}
-                      onChange={(e) => setMau((t) => ({ ...t, [k]: e.target.value }))}
-                      className={cn('numeric w-28 shrink-0', !hopLe(mau[k]) && 'border-danger')}
+                      onChange={(e) => doiMau({ [k]: e.target.value })}
+                      className={cn('numeric w-28 shrink-0', !hexHopLe(mau[k]) && 'border-danger')}
                       readOnly={!canWrite}
-                      aria-invalid={!hopLe(mau[k])}
+                      aria-invalid={!hexHopLe(mau[k])}
                     />
                   </div>
                 ))}
@@ -126,10 +189,10 @@ export default function AppearancePage(): React.ReactElement {
                 <div
                   className={cn(
                     'mt-1 flex items-start gap-2.5 rounded-md px-3 py-2.5 text-[13px]',
-                    truot.length === 0 ? 'bg-ok/8 text-ok' : 'bg-danger/8 text-danger',
+                    khoaLuu ? 'bg-danger/8 text-danger' : 'bg-ok/8 text-ok',
                   )}
                 >
-                  {truot.length === 0 ? (
+                  {!khoaLuu ? (
                     <>
                       <Check className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>Cả {ketQua.length} cặp màu đều qua ngưỡng AA.</span>
@@ -138,7 +201,10 @@ export default function AppearancePage(): React.ReactElement {
                     <>
                       <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>
-                        {truot.length} cặp màu chưa đạt AA. Nút “Lưu và áp dụng” khoá cho tới khi sửa xong.
+                        {nenSang.length > 0
+                          ? `${nenSang.map((k) => NHAN[k].ten.toLowerCase()).join(' và ')} quá sáng.`
+                          : `${truot.length} cặp màu chưa đạt AA.`}{' '}
+                        Nút “Lưu và áp dụng” khoá cho tới khi sửa xong.
                       </span>
                     </>
                   )}
@@ -153,11 +219,14 @@ export default function AppearancePage(): React.ReactElement {
               <CardContent>
                 <Label className="mb-2 block">Bo góc</Label>
                 <div className="flex flex-wrap gap-2">
-                  {BO_GOC.map((r) => (
+                  {BO_GOC_CHO_PHEP.map((r) => (
                     <button
                       key={r}
                       type="button"
-                      onClick={() => setBoGoc(r)}
+                      onClick={() => {
+                        setBoGoc(r);
+                        setDaLuu(false);
+                      }}
                       aria-pressed={boGoc === r}
                       className={cn(
                         'flex h-[62px] w-[100px] items-center justify-center border text-xs transition-colors',
@@ -183,11 +252,11 @@ export default function AppearancePage(): React.ReactElement {
                     theo, nên người dùng thấy hậu quả trước khi lưu. */}
                 <div
                   className="overflow-hidden border border-line p-4"
-                  style={{ background: hopLe(mau.nenChinh) ? mau.nenChinh : undefined, borderRadius: `${boGoc}px` }}
+                  style={{ background: hexHopLe(mau.nenChinh) ? mau.nenChinh : undefined, borderRadius: `${boGoc}px` }}
                 >
                   <div
                     className="p-3.5"
-                    style={{ background: hopLe(mau.nenNoi) ? mau.nenNoi : undefined, borderRadius: `${boGoc}px` }}
+                    style={{ background: hexHopLe(mau.nenNoi) ? mau.nenNoi : undefined, borderRadius: `${boGoc}px` }}
                   >
                     <p className="tech-label" style={{ color: mau.thuongHieu }}>
                       Showroom
@@ -201,7 +270,7 @@ export default function AppearancePage(): React.ReactElement {
                     <span
                       className="mt-3 inline-flex px-3 py-1.5 text-xs"
                       style={{
-                        background: hopLe(mau.nutChinh) ? mau.nutChinh : undefined,
+                        background: hexHopLe(mau.nutChinh) ? mau.nutChinh : undefined,
                         color: '#ffffff',
                         borderRadius: `${boGoc}px`,
                       }}
@@ -279,21 +348,45 @@ export default function AppearancePage(): React.ReactElement {
                 <Lock className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   <span className="block font-medium">Chưa lưu được bảng màu này</span>
-                  <span className="mt-0.5 block text-xs">
-                    {!moiHexHopLe
-                      ? 'Có mã màu chưa đúng dạng #rrggbb.'
-                      : `${truot.length} cặp màu dưới ngưỡng AA. Sửa theo gợi ý ở trên rồi lưu lại — bảng màu trượt chuẩn sẽ ra tới người dùng cuối và không ai đo lại nó nữa.`}
-                  </span>
+                  {/*
+                    * Liệt kê ĐÚNG những gì cổng `loiBangMau` trả về. Viết lại
+                    * lý do bằng lời của màn hình là cách hai bên bắt đầu nói
+                    * khác nhau — và người dùng sẽ tin màn hình.
+                    */}
+                  <ul className="mt-0.5 flex list-disc flex-col gap-0.5 pl-4 text-xs">
+                    {loi.map((l) => (
+                      <li key={l.thongDiep}>{l.thongDiep}</li>
+                    ))}
+                  </ul>
+                  {moiHexHopLe && truot.length > 0 && (
+                    <span className="mt-1 block text-xs">
+                      Sửa theo gợi ý ở trên rồi lưu lại — bảng màu trượt chuẩn sẽ ra tới người dùng cuối và
+                      không ai đo lại nó nữa.
+                    </span>
+                  )}
                 </span>
               </Alert>
             )}
 
-            <Alert className="items-start">
-              <span className="text-xs">
-                Màn này chưa nối được với máy chủ: chưa có endpoint lưu bảng màu cho landing. Phần kiểm tra
-                và chặn đã hoạt động đầy đủ. Xem báo cáo cuối.
-              </span>
-            </Alert>
+            {loiLuu !== null && <Alert tone="danger">{loiLuu}</Alert>}
+
+            {daLuu && loiLuu === null && (
+              <Alert tone="ok" className="items-start">
+                <Check className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="text-xs">
+                  Đã lưu. Trang công khai lấy bảng màu mới ở lượt tải kế tiếp.
+                </span>
+              </Alert>
+            )}
+
+            {theme.data?.daLuu === false && !daLuu && (
+              <Alert className="items-start">
+                <span className="text-xs">
+                  Showroom chưa lưu bảng màu nào — bốn giá trị đang hiện là mặc định của hệ thống, và trang
+                  công khai đang dùng chính chúng.
+                </span>
+              </Alert>
+            )}
           </div>
         </div>
       )}

@@ -186,4 +186,56 @@ test.describe('Sales Admin', () => {
     // phiên bản do máy tự điền.
     await expect(page.getByText(/Bản (tiêu chuẩn|cao cấp|điện|xăng)/)).toHaveCount(0);
   });
+
+  test('SA-E06 — bảng màu landing lưu được, và cổng AA khoá nút trước khi lưu', async ({
+    page,
+  }) => {
+    /*
+     * ⚠️ Màn *Giao diện* là màn CUỐI CÙNG của sales-admin còn ở trạng thái "đã
+     *    dựng xong nhưng chưa nối máy chủ". Nó đo tám cặp màu, gợi ý màu thay
+     *    thế, khoá nút Lưu — và nút Lưu không có `onClick`.
+     *
+     * 💡 Đó là lý do bài này kiểm cả hai chiều trong một lượt: chiều CHẶN (bảng
+     *    màu trượt AA thì không lưu được) và chiều LƯU (bấm xong, tải lại trang,
+     *    màu vẫn còn). Chỉ kiểm chiều chặn thì một nút không nối vào đâu vẫn
+     *    xanh — đúng kiểu bài kiểm đã để lọt `MK-01`.
+     */
+    await dangNhap(page);
+    await page.goto(`${ADMIN}/settings/appearance`);
+
+    const oNutChinh = page.getByLabel('Nút chính');
+    await expect(oNutChinh).toBeVisible({ timeout: 15_000 });
+    const nutLuu = page.getByRole('button', { name: /lưu và áp dụng/i });
+
+    /* ── Chiều CHẶN ────────────────────────────────────────────────────── */
+    await oNutChinh.fill('#e8b4a8');
+    await expect(nutLuu).toBeDisabled();
+    /* Nói ra CẶP nào hỏng, không chỉ "bảng màu không hợp lệ". */
+    await expect(page.getByText(/Chữ trắng trên nút chính/).first()).toBeVisible();
+
+    /* ── Chiều LƯU ─────────────────────────────────────────────────────── */
+    await oNutChinh.fill('#d1452f');
+    await expect(nutLuu).toBeEnabled();
+    await nutLuu.click();
+    await expect(page.getByText(/Đã lưu/)).toBeVisible({ timeout: 15_000 });
+
+    /*
+     * 🔒 Tải lại, không tin vào state trong bộ nhớ.
+     *
+     * Dòng vừa `INSERT` có `version = 0` — đúng bằng giá trị khởi tạo của màn
+     * hình. Một bản trước nạp dữ liệu bằng cách so `version` nên nó bỏ qua đúng
+     * bảng màu ĐẦU TIÊN mà showroom lưu: trang công khai đã đổi màu còn màn
+     * quản trị vẫn hiện màu mặc định.
+     */
+    await page.reload();
+    await expect(page.getByLabel('Nút chính')).toHaveValue('#d1452f', { timeout: 15_000 });
+
+    /*
+     * Trả lại mặc định — bộ E2E phải độc lập với thứ tự chạy, và bài axe của
+     * landing đo đúng những màu này.
+     */
+    await page.getByLabel('Nút chính').fill('#c73526');
+    await page.getByRole('button', { name: /lưu và áp dụng/i }).click();
+    await expect(page.getByText(/Đã lưu/)).toBeVisible({ timeout: 15_000 });
+  });
 });

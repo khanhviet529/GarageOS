@@ -11,6 +11,7 @@ export const queryKeys = {
   articleDraft: (id: string) => ['articles', id, 'draft'] as const,
   navigation: () => ['navigation'] as const,
   redirects: () => ['redirects'] as const,
+  siteTheme: () => ['site-theme'] as const,
   leadForm: () => ['lead-form'] as const,
   consentVersions: () => ['lead-form', 'consent-versions'] as const,
   adminUsers: () => ['admin-users'] as const,
