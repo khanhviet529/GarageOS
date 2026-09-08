@@ -181,6 +181,15 @@ export const RepairOrderListItem = z.object({
   customerName: z.string(),
   customerComplaint: z.string(),
   receivedAt: z.string(),
+  /**
+   * Giờ hẹn trả xe. Null = chưa hẹn.
+   *
+   * 🔒 Có mặt ở DANH SÁCH chứ không chỉ ở chi tiết, vì câu hỏi "xe nào sắp tới
+   *    hẹn" chỉ trả lời được khi nhìn cả danh sách. Thiếu nó thì màn *Xe trong
+   *    xưởng* phải mở từng đơn để biết, và cố vấn sẽ không mở — họ sẽ nhớ, rồi
+   *    quên.
+   */
+  promisedAt: z.string().nullable(),
 });
 export type RepairOrderListItem = z.infer<typeof RepairOrderListItem>;
 

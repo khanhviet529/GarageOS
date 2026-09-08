@@ -410,7 +410,7 @@ ra đời. Thêm mọi bảng mới vào bài quét quyền so cột service `UP
 | Mỗi màn hình web tự dựng lại vòng đời dữ liệu của riêng nó | 5 bản sao của `useState(null) + useEffect + .catch`, mỗi bản thiếu một mảnh khác nhau. Một lớp server state (SWR/React Query) xử lý cùng lúc retry, refetch và trạng thái tải — đáng làm nhưng chưa cấp bách |
 | Máy trạng thái `Quotation` chưa có trigger riêng | Các đường của báo giá đang được chặn gián tiếp bằng `one_pending_quotation`, trigger đóng băng sau khi gửi, và điều kiện `status='SENT'` trong câu UPDATE |
 | Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
-| `MarketingService.listProducts` phát ra `nextCursor` nhưng SQL của nó không dùng `cursor` | Mọi trang đều là trang một. Cùng họ với ba lỗi đã ghi ở đầu `phan-trang-va-gia.spec.ts` — một API trả `nextCursor` là đang **nói rằng** phân trang hoạt động. Chưa nổ vì màn quản trị catalog chưa phân trang; sửa cùng lúc với màn đó, và bài kiểm phải đi hết một vòng chứ không chỉ xem trang đầu |
+| ĐỔI TÊN một màu xe vẫn cắt liên kết ảnh | `replaceColors` ghi đè theo khoá tự nhiên `(revision, name)`, nên đổi tên = xoá một màu + thêm một màu khác, và `vehicle_product_media.color_id` về null qua `ON DELETE SET NULL`. Sửa thật là cho `VehicleColorInput` mang `id` — đổi hợp đồng và đổi cả màn quản trị, nên chưa làm cùng lượt vá xoá-rồi-chèn |
 
 ## Nợ đã trả
 

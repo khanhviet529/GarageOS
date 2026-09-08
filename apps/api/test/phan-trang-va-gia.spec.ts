@@ -512,3 +512,48 @@ describe('🔒 Phân trang danh sách lead', () => {
     await pool.query(`DELETE FROM sales_lead WHERE full_name = $1`, [ten]);
   });
 });
+
+describe('🔒 Phân trang catalog QUẢN TRỊ', () => {
+  test('PT-T07 — trang hai của catalog admin thật sự là trang hai', async () => {
+    /*
+     * ⚠️ `MarketingService.listProducts` NHẬN `cursor`, TRẢ `nextCursor`, và
+     *    KHÔNG dùng `cursor` trong câu SQL. Mọi trang đều là trang một.
+     *
+     *    Cùng đúng một lỗi đã ghi ở đầu file này cho `listProducts` bản CÔNG
+     *    KHAI — bản quản trị được viết sau, chép khuôn, và chép luôn cả lỗi.
+     *
+     * 💡 Một API trả `nextCursor` là đang NÓI RẰNG phân trang hoạt động. Bài
+     *    kiểm không đi hết một vòng thì không kiểm được lời nói đó — và đây là
+     *    lần thứ hai cùng một câu, ở cùng một dự án.
+     */
+    for (const h of ['q1', 'q2', 'q3']) {
+      await dungXeDaDang(h, [
+        { name: 'Bản tiêu chuẩn', powertrain: 'ICE', displayPrice: 500_000_000, sortOrder: 0 },
+      ]);
+    }
+
+    const daThay: string[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 60; i += 1) {
+      const q: string = cursor === null
+        ? '/api/v1/marketing/vehicle-products?limit=1'
+        : `/api/v1/marketing/vehicle-products?limit=1&cursor=${encodeURIComponent(cursor)}`;
+      const r = await goi('GET', q);
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      for (const it of r.body.items as { slug: string }[]) daThay.push(it.slug);
+      cursor = r.body.nextCursor as string | null;
+      if (cursor === null) break;
+    }
+
+    assert.equal(cursor, null, 'đi 60 vòng vẫn chưa hết — con trỏ không tiến');
+    const trung = daThay.length - new Set(daThay).size;
+    assert.equal(
+      trung,
+      0,
+      `có ${trung} xe lặp lại giữa các trang — nhiều khả năng cursor không được dùng trong SQL`,
+    );
+    for (const h of ['q1', 'q2', 'q3']) {
+      assert.ok(daThay.includes(`pt-${h}-${uniq}`), `đi hết phân trang mà vẫn sót xe pt-${h}-${uniq}`);
+    }
+  });
+});

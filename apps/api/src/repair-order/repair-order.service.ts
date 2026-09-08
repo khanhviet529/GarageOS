@@ -440,6 +440,7 @@ export class RepairOrderService {
 
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT ro.id, ro.code, ro.status, ro.customer_complaint, ro.received_at,
+                ro.promised_at,
                 v.plate_number, v.powertrain, c.display_name
            FROM repair_order ro
            JOIN vehicle  v ON v.id = ro.vehicle_id
@@ -459,6 +460,7 @@ export class RepairOrderService {
         customerName: r.display_name as string,
         customerComplaint: r.customer_complaint as string,
         receivedAt: (r.received_at as Date).toISOString(),
+        promisedAt: r.promised_at === null ? null : (r.promised_at as Date).toISOString(),
       }));
     });
   }

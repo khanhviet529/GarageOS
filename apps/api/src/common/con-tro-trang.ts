@@ -55,3 +55,30 @@ export function ghepConTro(row: Record<string, unknown>): string {
   }
   return `${moc}_${row.id as string}`;
 }
+
+/**
+ * Tách con trỏ thành mốc thời gian (CHUỖI) và id.
+ *
+ * 🔒 Mốc ở lại dạng chuỗi và đi thẳng vào `$::timestamptz`. KHÔNG dựng `Date`:
+ *    driver `pg` tuần tự hoá `Date` bằng `toISOString()`, nên một `new Date()`
+ *    ở giữa đường cắt lại đúng ba chữ số mà `MOC_CON_TRO` vừa giữ được.
+ *
+ * `lastIndexOf('_')`: uuid không chứa `_`, nên cắt từ phải luôn lấy đúng phần
+ * id kể cả khi khuôn dạng mốc đổi.
+ *
+ * Kiểm hợp lệ bằng biểu thức thay vì `Date.parse`: chuỗi này do chính máy chủ
+ * sinh ra, nên đòi đúng khuôn dạng là hợp lý — và nó chặn luôn mọi thứ lạ đi
+ * vào một tham số kiểu ngày.
+ */
+const MAU_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
+const MAU_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function tachConTro(cursor?: string): { moc: string; id: string } | null {
+  if (cursor === undefined || cursor === '') return null;
+  const cat = cursor.lastIndexOf('_');
+  if (cat <= 0) return null;
+  const moc = cursor.slice(0, cat);
+  const id = cursor.slice(cat + 1);
+  if (!MAU_MOC.test(moc) || !MAU_UUID.test(id)) return null;
+  return { moc, id };
+}

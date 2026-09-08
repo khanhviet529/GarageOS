@@ -484,6 +484,11 @@ const KICH_BAN: KichBan[] = [
       }, v),
   },
   {
+    quyen: 'org:branchRead',
+    ten: 'Xem danh sách chi nhánh',
+    goi: (v) => call('GET', '/api/v1/marketing/branches', undefined, v),
+  },
+  {
     quyen: 'marketing:experienceRead',
     ten: 'Xem trải nghiệm xe',
     goi: (v) =>

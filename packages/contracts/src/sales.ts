@@ -175,6 +175,15 @@ export const LeadView = z.object({
   id: z.string().uuid(),
   reference: z.string(),
   branchId: z.string().uuid(),
+  /**
+   * Tên chi nhánh khách chọn.
+   *
+   * 🔒 Kèm sẵn thay vì để giao diện tự tra: danh sách lead là màn hình đọc
+   *    nhiều, và bắt nó gọi thêm một lượt `/branches` rồi ghép tay là mở đường
+   *    cho hai thứ — N+1 lượt gọi, và một bảng tra cứu thiếu khoá thì hiện ra
+   *    một ô trống chứ không báo lỗi.
+   */
+  branchName: z.string(),
   fullName: z.string(),
   phoneNormalized: z.string(),
   email: z.string().nullable(),

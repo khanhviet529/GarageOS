@@ -13,7 +13,8 @@ import {
   type ChiPhiSoHuuView,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
-import { MOC_CON_TRO, ghepConTro } from '../common/con-tro-trang';
+import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
+import { urlMediaCongKhai } from '../common/media-url';
 import type { PublicTenantContext } from './tenant-context.service';
 import { ShowroomService } from '../showroom/showroom.service';
 
@@ -112,7 +113,7 @@ export class PublicLandingService {
      * lead, để con số tư vấn đọc lại đúng bằng con số khách đã nhìn thấy.
      */
     const limit = Math.min(Math.max(opts.limit, 1), 50);
-    const moc = phanTichCursor(opts.cursor);
+    const moc = tachConTro(opts.cursor);
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
       const { rows } = await tx.query<Record<string, unknown>>(
         `SELECT p.id, p.slug, r.name, r.make_name, r.model_name, r.summary,
@@ -163,7 +164,7 @@ export class PublicLandingService {
                 ))
           ORDER BY p.created_at DESC, p.id
           LIMIT $2 + 1`,
-        [opts.powertrain ?? null, limit, moc?.createdAt ?? null, moc?.id ?? null],
+        [opts.powertrain ?? null, limit, moc?.moc ?? null, moc?.id ?? null],
       );
 
       /*
@@ -647,9 +648,7 @@ export class PublicLandingService {
   }
 
   private publicUrl(storageKey: string): string {
-    const origin = (process.env['PUBLIC_MEDIA_ORIGIN'] ?? 'http://localhost:3001/media')
-      .replace(/\/+$/, '');
-    return `${origin}/${storageKey}`;
+    return urlMediaCongKhai(storageKey);
   }
 
   /* ===================================================================== */
@@ -834,32 +833,11 @@ export type BocGiaView =
  * Cursor sai định dạng thì coi như không có — dữ liệu này đến từ URL công khai,
  * và một chuỗi hỏng không đáng để đổ lỗi 500 vào mặt khách.
  */
-/**
- * 🔒 Mốc thời gian giữ nguyên CHUỖI, không dựng lại thành `Date`.
- *
- * Bản trước làm `new Date(...)` rồi đưa đối tượng đó xuống làm tham số. Driver
- * `pg` tuần tự hoá `Date` bằng `toISOString()`, mà hàm đó cắt ở mili giây —
- * nên dù chuỗi con trỏ có đủ sáu chữ số micro giây, ba chữ số cuối vẫn rụng
- * ngay trước khi câu lệnh chạy. Chi tiết hậu quả: `common/con-tro-trang.ts`.
- *
- * Giữ chuỗi và để `$::timestamptz` ép kiểu ở phía Postgres thì không có chỗ nào
- * cắt bớt. Kiểm hợp lệ bằng biểu thức thay vì bằng `Date.parse` — chuỗi ở đây
- * do chính máy chủ sinh ra, nên đòi đúng khuôn dạng đó là hợp lý, và nó chặn
- * luôn mọi thứ lạ đi vào một tham số kiểu ngày.
+/*
+ * Việc tách con trỏ nằm ở `common/con-tro-trang.ts` — MỘT bản cho cả ba nơi
+ * phân trang. Ba bản sao là ba cơ hội để một bản dựng lại `Date` rồi cắt mất
+ * micro giây, đúng như bản ở đây từng làm.
  */
-const MAU_MOC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
-
-function phanTichCursor(cursor?: string): { createdAt: string; id: string } | null {
-  if (cursor === undefined || cursor === '') return null;
-  const cat = cursor.lastIndexOf('_');
-  if (cat <= 0) return null;
-  const createdAt = cursor.slice(0, cat);
-  const id = cursor.slice(cat + 1);
-  if (!MAU_MOC.test(createdAt)) return null;
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
-  return { createdAt, id };
-}
-
 /** kind đi kèm version — lấy từ config (schema versioned) để tránh enum drift */
 function stableKeyKind(config: Record<string, unknown>): ExperienceManifest['kind'] {
   const kind = config['kind'];

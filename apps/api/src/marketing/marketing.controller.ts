@@ -213,6 +213,18 @@ export class MarketingController {
     return this.svc.publishSiteProfile(actor, draftId);
   }
 
+  /**
+   * Danh bạ chi nhánh — bảng tra cứu cho mọi màn hiện tên thay cho uuid, và cho
+   * màn khai khả năng giao xe (phải chọn được chi nhánh CHƯA có khai báo).
+   */
+  @Get('branches')
+  listBranches(
+    @Actor() actor: ActorContext,
+  ): Promise<{ id: string; code: string; name: string; isActive: boolean }[]> {
+    assertCan(actor, 'org:branchRead');
+    return this.svc.listBranches(actor);
+  }
+
   @Get('branch-public-profiles')
   listBranchProfiles(@Actor() actor: ActorContext): Promise<Record<string, unknown>[]> {
     assertCan(actor, 'marketing:seoRead');
