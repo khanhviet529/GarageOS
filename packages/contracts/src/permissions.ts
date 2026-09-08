@@ -284,6 +284,17 @@ export const ACTION_ROLES = {
   'marketing:faqRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:faqWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:faqPublish': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Bài viết trên landing — SRS-LS-EXP-001 §4.10.
+   *
+   * Cùng ba bậc, và ở đây khoảng cách giữa viết và công bố là rõ nhất: một bài
+   * viết là văn bản dài, có quan điểm, đứng dưới tên thương hiệu. Đó chính là
+   * loại nội dung cần người thứ hai đọc lại trước khi nó ra tên miền của khách.
+   */
+  'marketing:articleRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:articleWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:articlePublish': ['MARKETING_PUBLISHER', 'OWNER'],
   'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
   'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
   'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
@@ -415,6 +426,9 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'marketing:faqRead': 'xem câu hỏi thường gặp',
   'marketing:faqWrite': 'sửa câu hỏi thường gặp',
   'marketing:faqPublish': 'công bố câu hỏi thường gặp',
+  'marketing:articleRead': 'xem bài viết',
+  'marketing:articleWrite': 'soạn và sửa bài viết',
+  'marketing:articlePublish': 'công bố bài viết',
   'sales:leadRead': 'xem lead được gán',
   'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
   'sales:leadAssign': 'gán lead cho tư vấn',

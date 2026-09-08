@@ -132,3 +132,90 @@ export const PublicFaqItem = z.object({
   topic: z.string().nullable(),
 });
 export type PublicFaqItem = z.infer<typeof PublicFaqItem>;
+
+/* ================================= Bài viết ================================= */
+
+export const ArticleCategoryInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(140),
+  displayOrder: z.number().int().min(0).max(10_000).default(0),
+});
+export type ArticleCategoryInput = z.infer<typeof ArticleCategoryInput>;
+export const ArticleCategoryUpdateInput = ArticleCategoryInput.extend({
+  version: z.number().int().nonnegative(),
+});
+export type ArticleCategoryUpdateInput = z.infer<typeof ArticleCategoryUpdateInput>;
+
+/**
+ * Tạo bài mới — chỉ những gì cần để có một bản NHÁP đầu tiên.
+ *
+ * 🔒 Không nhận `featured` ở đây. Bài nổi bật là CHỖ tràn viền ở đầu trang Tin
+ *    tức — một chỗ duy nhất mỗi tenant, enforce bằng partial unique index
+ *    (0077). Cho phép đặt lúc tạo nghĩa là lần tạo thứ hai sẽ lỗi ở tầng DB với
+ *    một thông điệp không ai đọc được. Đặt nổi bật là một thao tác riêng, có
+ *    endpoint riêng, và nó gỡ bài cũ trước.
+ */
+export const ArticleCreateInput = z.object({
+  slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(160),
+  title: z.string().trim().min(1).max(200),
+  categoryId: z.string().uuid().nullable().optional(),
+});
+export type ArticleCreateInput = z.infer<typeof ArticleCreateInput>;
+
+/** Sửa bản NHÁP. Bản đã publish là bất biến (INV-LS-07) — sửa là tạo nháp mới. */
+export const ArticleDraftInput = z.object({
+  title: z.string().trim().min(1).max(200),
+  excerpt: z.string().trim().max(500).nullable().optional(),
+  bodyDocument: RichTextDocumentV1,
+  seoTitle: z.string().trim().max(160).nullable().optional(),
+  seoDescription: z.string().trim().max(300).nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  coverMediaId: z.string().uuid().nullable().optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(12).default([]),
+});
+export type ArticleDraftInput = z.infer<typeof ArticleDraftInput>;
+
+export const ArticleRow = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  categoryId: z.string().uuid().nullable(),
+  categoryName: z.string().nullable(),
+  coverUrl: z.string().nullable(),
+  featured: z.boolean(),
+  /** Có bản nháp đang chờ = có thay đổi chưa công bố. */
+  hasDraft: z.boolean(),
+  published: z.boolean(),
+  publishedAt: z.string().nullable(),
+  tags: z.array(z.string()),
+  version: z.number().int(),
+});
+export type ArticleRow = z.infer<typeof ArticleRow>;
+
+export const ArticleDraftView = ArticleDraftInput.extend({
+  articleId: z.string().uuid(),
+  slug: z.string(),
+  revisionId: z.string().uuid(),
+  revisionNumber: z.number().int(),
+  version: z.number().int(),
+});
+export type ArticleDraftView = z.infer<typeof ArticleDraftView>;
+
+export const PublicArticleSummary = z.object({
+  slug: z.string(),
+  title: z.string(),
+  excerpt: z.string().nullable(),
+  categoryName: z.string().nullable(),
+  coverUrl: z.string().nullable(),
+  publishedAt: z.string().nullable(),
+  featured: z.boolean(),
+});
+export type PublicArticleSummary = z.infer<typeof PublicArticleSummary>;
+
+export const PublicArticleDetail = PublicArticleSummary.extend({
+  bodyDocument: RichTextDocumentV1,
+  seoTitle: z.string().nullable(),
+  seoDescription: z.string().nullable(),
+  tags: z.array(z.string()),
+});
+export type PublicArticleDetail = z.infer<typeof PublicArticleDetail>;

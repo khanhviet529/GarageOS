@@ -18,12 +18,13 @@ import { SalesModule } from './sales/sales.module';
 import { PublicLandingModule } from './public-landing/public-landing.module';
 import { MediaModule } from './media/media.module';
 import { LandingPageModule } from './landing-page/landing-page.module';
+import { ArticleModule } from './article/article.module';
 import { CatalogCmsModule } from './catalog-cms/catalog-cms.module';
 import { ShowroomModule } from './showroom/showroom.module';
 import { HealthController } from './health/health.controller';
 
 @Module({
-  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, AiModule, InvoiceModule, PublicTrackingModule, MarketingModule, SalesModule, PublicLandingModule, MediaModule, LandingPageModule, CatalogCmsModule, ShowroomModule],
+  imports: [DbModule, AuthModule, VehicleModule, RepairOrderModule, CatalogModule, QuotationModule, StockModule, AssignmentModule, WarrantyModule, CancellationModule, ReportsModule, AiModule, InvoiceModule, PublicTrackingModule, MarketingModule, SalesModule, PublicLandingModule, MediaModule, LandingPageModule, CatalogCmsModule, ShowroomModule, ArticleModule],
   controllers: [HealthController],
 })
 export class AppModule {}

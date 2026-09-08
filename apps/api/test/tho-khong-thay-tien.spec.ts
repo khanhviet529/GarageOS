@@ -295,6 +295,8 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       // Câu hỏi thường gặp: nội dung trang web, không có số tiền nào. Vai bị cấm
       // đã có bài riêng canh ở `ma-tran-quyen.spec.ts`.
       'faq-items', 'faq',
+      // Bài viết: nội dung trang web. Vai bị cấm có bài riêng ở `ma-tran-quyen`.
+      'articles', 'articles/:id/draft', 'articles/:slug', 'article-categories',
     ]);
 
     const thieu: string[] = [];

@@ -8,6 +8,8 @@ import {
   type PublicProductDetail,
   type PublicProductSummary,
   FaqSurface,
+  type PublicArticleDetail,
+  type PublicArticleSummary,
   type PublicFaqItem,
   type PublicTestimonial,
 } from '@garageos/contracts';
@@ -18,6 +20,7 @@ import { SalesService } from '../sales/sales.service';
 import { TenantContextService, type TenantResolution } from './tenant-context.service';
 import { PublicLandingService } from './public-landing.service';
 import { LandingPageService } from '../landing-page/landing-page.service';
+import { ArticleService } from '../article/article.service';
 
 /**
  * Public API cho landing — SRS Phase 1 mục 11.1.
@@ -32,6 +35,7 @@ export class PublicLandingController {
     @Inject(SalesService) private readonly sales: SalesService,
     @Inject(TenantContextService) private readonly tenantCtx: TenantContextService,
     @Inject(LandingPageService) private readonly landingPages: LandingPageService,
+    @Inject(ArticleService) private readonly articles_: ArticleService,
   ) {}
 
   @Get('site')
@@ -90,6 +94,33 @@ export class PublicLandingController {
     res.json({ items: await this.svc.faq(this.requireContext(resolution), mat.data) } as {
       items: PublicFaqItem[];
     });
+  }
+
+  @Get('articles')
+  async articles(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('limit') limitRaw?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const limit = Number(limitRaw ?? 12);
+    const items: PublicArticleSummary[] = await this.articles_.publicList(
+      this.requireContext(r).tenantId,
+      Number.isFinite(limit) ? limit : 12,
+    );
+    res.json({ items });
+  }
+
+  @Get('articles/:slug')
+  async article(@Req() req: Request, @Res() res: Response, @Param('slug') slug: string): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const detail: PublicArticleDetail = await this.articles_.publicDetail(
+      this.requireContext(r).tenantId,
+      slug,
+    );
+    res.json(detail);
   }
 
   @Get('vehicle-products')

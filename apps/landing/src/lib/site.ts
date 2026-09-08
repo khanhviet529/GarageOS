@@ -1,5 +1,10 @@
 import { requestHost, fetchPublic, httpStatusForPublicApiError } from '@/lib/api';
-import type { PublicSiteView, PublicFaqItem, FaqSurface } from '@garageos/contracts';
+import type {
+  PublicSiteView,
+  PublicFaqItem,
+  FaqSurface,
+  PublicArticleSummary,
+} from '@garageos/contracts';
 
 /**
  * Nạp site profile published theo host của request — mỗi trang gọi một lần.
@@ -76,6 +81,17 @@ export async function loadFaq(surface: FaqSurface): Promise<PublicFaqItem[]> {
   try {
     const host = await requestHost();
     const kq = await fetchPublic<{ items: PublicFaqItem[] }>(host, `/faq?surface=${surface}`);
+    return kq.items;
+  } catch {
+    return [];
+  }
+}
+
+/** Danh sách bài viết đã công bố. Hỏng thì trả rỗng — xem `loadFaq`. */
+export async function loadArticles(limit = 12): Promise<PublicArticleSummary[]> {
+  try {
+    const host = await requestHost();
+    const kq = await fetchPublic<{ items: PublicArticleSummary[] }>(host, `/articles?limit=${limit}`);
     return kq.items;
   } catch {
     return [];

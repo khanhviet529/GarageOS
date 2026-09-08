@@ -267,6 +267,7 @@ async function main(): Promise<void> {
     vehicle_experience_version, vehicle_experience,
     vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
     vehicle_color, onroad_fee_schedule,
+    article_tag, article_revision, article, article_category,
     faq_placement, faq_item,
     testimonial, vehicle_variant_revision, vehicle_variant,
     vehicle_product_revision, vehicle_product, vehicle_product_category,
@@ -1915,6 +1916,102 @@ async function main(): Promise<void> {
       await db.query(
         `INSERT INTO faq_placement (tenant_id, faq_item_id, surface) VALUES ($1,$2,$3::faq_surface)`,
         [TENANT_A, rows[0]!.id, s],
+      );
+    }
+  }
+
+  /*
+   * Bài viết — ba bài, ba trạng thái khác nhau. Ba trạng thái đó là toàn bộ lý
+   * do seed này tồn tại: một bộ dữ liệu mà mọi bài đều đã publish thì không thử
+   * được điều kiện lọc nào cả.
+   *
+   *   1. đã publish và NỔI BẬT   → khối tràn viền đầu trang Tin tức
+   *   2. đã publish, thường      → lưới bài
+   *   3. mới tạo, chỉ có NHÁP    → KHÔNG được lọt ra landing
+   */
+  console.log('Tạo chuyên mục và bài viết...');
+  const chuyenMuc: Record<string, string> = {};
+  for (const [i, c] of [
+    { ten: 'Kinh nghiệm mua xe', slug: 'kinh-nghiem-mua-xe' },
+    { ten: 'Xe điện', slug: 'xe-dien' },
+  ].entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO article_category (tenant_id, name, slug, display_order, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$5) RETURNING id`,
+      [TENANT_A, c.ten, c.slug, i, publisherId],
+    );
+    chuyenMuc[c.slug] = rows[0]!.id;
+  }
+
+  const doanVan = (chu: string): string =>
+    JSON.stringify({
+      type: 'doc',
+      schemaVersion: 1,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: chu }] }],
+    });
+
+  const BAI_SEED = [
+    {
+      slug: 'chi-phi-thuc-te-khi-nuoi-mot-chiec-xe-dien',
+      tieuDe: 'Chi phí thực tế khi nuôi một chiếc xe điện',
+      tomTat: 'Tiền điện, tiền bảo dưỡng và những khoản không ai nói trước khi bạn ký hợp đồng.',
+      than: 'Xe điện rẻ hơn ở phần nhiên liệu và đắt hơn ở phần bảo hiểm. Bài này bóc từng khoản theo số liệu xưởng.',
+      chuyenMuc: 'xe-dien',
+      the: ['chi phí', 'xe điện'],
+      dang: true,
+      noiBat: true,
+    },
+    {
+      slug: 'sau-dieu-can-kiem-truoc-khi-nhan-xe',
+      tieuDe: 'Sáu điều cần kiểm trước khi nhận xe',
+      tomTat: 'Danh sách kiểm tra rút ra từ những lỗi khách hay phát hiện muộn.',
+      than: 'Nhận xe là lần cuối bạn có quyền từ chối mà không mất gì. Sáu mục dưới đây mất mười lăm phút.',
+      chuyenMuc: 'kinh-nghiem-mua-xe',
+      the: ['nhận xe'],
+      dang: true,
+      noiBat: false,
+    },
+    {
+      slug: 'bao-duong-mua-mua',
+      tieuDe: 'Bảo dưỡng mùa mưa',
+      tomTat: null,
+      than: 'Bản nháp — chưa duyệt.',
+      chuyenMuc: 'kinh-nghiem-mua-xe',
+      the: [],
+      dang: false,
+      noiBat: false,
+    },
+  ];
+
+  for (const b of BAI_SEED) {
+    const { rows: bai } = await db.query<{ id: string }>(
+      `INSERT INTO article (tenant_id, slug, category_id, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$4) RETURNING id`,
+      [TENANT_A, b.slug, chuyenMuc[b.chuyenMuc], publisherId],
+    );
+    const baiId = bai[0]!.id;
+    const { rows: rev } = await db.query<{ id: string }>(
+      `INSERT INTO article_revision
+         (tenant_id, article_id, revision_number, status, title, excerpt, body_document,
+          content_hash, created_by, updated_by)
+       VALUES ($1,$2,1,'DRAFT',$3,$4,$5::jsonb,$6,$7,$7) RETURNING id`,
+      [TENANT_A, baiId, b.tieuDe, b.tomTat, doanVan(b.than), `seed-${b.slug}`, publisherId],
+    );
+    await db.query('UPDATE article SET draft_revision_id = $2 WHERE id = $1', [baiId, rev[0]!.id]);
+    for (const t of b.the) {
+      await db.query('INSERT INTO article_tag (tenant_id, article_id, tag) VALUES ($1,$2,$3)', [
+        TENANT_A, baiId, t,
+      ]);
+    }
+    if (b.dang) {
+      await db.query(
+        `UPDATE article_revision SET status='PUBLISHED', published_at=now(), published_by=$2 WHERE id=$1`,
+        [rev[0]!.id, publisherId],
+      );
+      await db.query(
+        `UPDATE article SET published_revision_id=$2, draft_revision_id=NULL,
+                            published_at=now(), featured=$3 WHERE id=$1`,
+        [baiId, rev[0]!.id, b.noiBat],
       );
     }
   }

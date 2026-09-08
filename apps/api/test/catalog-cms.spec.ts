@@ -208,3 +208,149 @@ describe('🔒 Câu hỏi thường gặp — công bố và bề mặt là HAI 
     assert.deepEqual(rows.map((r) => r.v).sort(), [...FaqSurface.options].sort());
   });
 });
+
+describe('🔒 Bài viết — nháp không lọt ra, và chỉ MỘT bài nổi bật', () => {
+  async function congKhai(duong: string): Promise<{ status: number; body: any }> {
+    const r = await fetch(`${API}${duong}`, {
+      headers: {
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }
+
+  test('landing chỉ thấy bài ĐÃ ĐĂNG, bài nổi bật đứng đầu', async () => {
+    const r = await congKhai('/api/v1/public/articles');
+    assert.equal(r.status, 200);
+    const slugs = (r.body.items as { slug: string; featured: boolean }[]);
+
+    assert.ok(slugs.some((b) => b.slug === 'chi-phi-thuc-te-khi-nuoi-mot-chiec-xe-dien'));
+    assert.equal(
+      slugs.some((b) => b.slug === 'bao-duong-mua-mua'),
+      false,
+      'bài chỉ có bản NHÁP lọt ra landing — nội dung chưa duyệt trên trang thật',
+    );
+    assert.equal(slugs[0]?.featured, true, 'bài nổi bật phải đứng đầu danh sách');
+  });
+
+  test('🔒 truy cập THẲNG bài chưa đăng trả 404, không trả nội dung nháp', async () => {
+    const r = await congKhai('/api/v1/public/articles/bao-duong-mua-mua');
+    assert.equal(r.status, 404, 'slug của bài nháp không được trả nội dung');
+  });
+
+  test('🔒 đúng MỘT bài nổi bật — đặt bài thứ hai thì bài thứ nhất tự nhường', async () => {
+    /*
+     * `uq_article_one_featured` là partial unique index (0077): hai dòng
+     * `featured = true` cùng tenant là lỗi ở tầng database. Service gỡ bài cũ
+     * TRƯỚC trong cùng transaction, nên thao tác "đổi bài nổi bật" làm được bằng
+     * một lần bấm thay vì hai.
+     */
+    const ds = await api('GET', '/api/v1/marketing/articles', publisher);
+    assert.equal(ds.status, 200, JSON.stringify(ds.body));
+    const items = ds.body.items as { id: string; slug: string; featured: boolean }[];
+    const cu = items.find((a) => a.featured);
+    const khac = items.find((a) => !a.featured && a.slug === 'sau-dieu-can-kiem-truoc-khi-nhan-xe');
+    assert.ok(cu !== undefined && khac !== undefined, 'seed phải có một bài nổi bật và một bài thường');
+
+    const doi = await api('POST', `/api/v1/marketing/articles/${khac.id}/featured?on=true`, publisher);
+    assert.equal(doi.status, 201, JSON.stringify(doi.body));
+
+    const sau = await api('GET', '/api/v1/marketing/articles', publisher);
+    const noiBat = (sau.body.items as { id: string; featured: boolean }[]).filter((a) => a.featured);
+    assert.deepEqual(noiBat.map((a) => a.id), [khac.id], 'phải còn đúng một bài nổi bật, và là bài mới');
+
+    // Trả seed về trạng thái cũ để bài kiểm khác không phụ thuộc thứ tự chạy
+    await api('POST', `/api/v1/marketing/articles/${cu.id}/featured?on=true`, publisher);
+  });
+
+  test('vòng soạn → đăng: biên tập viên soạn, chỉ người có quyền mới đăng', async () => {
+    const slug = `bai-thu-${uniq}`.replace(/[^a-z0-9-]/g, '-');
+    const tao = await api('POST', '/api/v1/marketing/articles', editor, {
+      slug,
+      title: 'Bài thử tự động',
+    });
+    assert.equal(tao.status, 201, JSON.stringify(tao.body));
+    const id = tao.body.id as string;
+
+    // Bài mới LUÔN có sẵn một bản nháp — không có trạng thái "bài không sửa được"
+    const nhap = await api('GET', `/api/v1/marketing/articles/${id}/draft`, editor);
+    assert.equal(nhap.status, 200, JSON.stringify(nhap.body));
+    assert.equal(nhap.body.revisionNumber, 1);
+
+    const sua = await api('PATCH', `/api/v1/marketing/articles/${id}/draft`, editor, {
+      title: 'Bài thử tự động',
+      excerpt: 'Tóm tắt thử.',
+      bodyDocument: {
+        type: 'doc',
+        schemaVersion: 1,
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nội dung thử.' }] }],
+      },
+      tags: ['thử'],
+      version: nhap.body.version,
+    });
+    assert.equal(sua.status, 200, JSON.stringify(sua.body));
+
+    // Chưa đăng thì landing không thấy
+    assert.equal((await congKhai(`/api/v1/public/articles/${slug}`)).status, 404);
+
+    // 🔒 Biên tập viên KHÔNG đăng được
+    assert.equal(
+      (await api('POST', `/api/v1/marketing/articles/${id}/publish`, editor)).status,
+      403,
+      'biên tập viên không được tự đăng bài',
+    );
+
+    assert.equal((await api('POST', `/api/v1/marketing/articles/${id}/publish`, publisher)).status, 201);
+    const daDang = await congKhai(`/api/v1/public/articles/${slug}`);
+    assert.equal(daDang.status, 200);
+    assert.equal(daDang.body.excerpt, 'Tóm tắt thử.');
+    assert.deepEqual(daDang.body.tags, ['thử']);
+
+    /*
+     * 🔒 Sửa bài ĐÃ ĐĂNG không đổi thứ khách đang đọc, cho tới khi đăng lại.
+     *
+     * Mở bản nháp lần này CHÉP từ bản đang hiện — đó là chỗ dễ sai nhất của mọi
+     * vòng nháp/duyệt: chép nhầm hoặc trỏ nhầm con trỏ là bản nháp ghi đè thẳng
+     * lên bản công khai.
+     */
+    const nhap2 = await api('GET', `/api/v1/marketing/articles/${id}/draft`, editor);
+    assert.equal(nhap2.body.revisionNumber, 2, 'phải tạo bản sửa số 2 từ bản đã đăng');
+    await api('PATCH', `/api/v1/marketing/articles/${id}/draft`, editor, {
+      title: 'Bài thử tự động',
+      excerpt: 'Tóm tắt ĐÃ SỬA.',
+      bodyDocument: nhap2.body.bodyDocument,
+      tags: ['thử'],
+      version: nhap2.body.version,
+    });
+    const vanCu = await congKhai(`/api/v1/public/articles/${slug}`);
+    assert.equal(vanCu.body.excerpt, 'Tóm tắt thử.', 'bản nháp đã ghi đè lên bản công khai');
+
+    await api('POST', `/api/v1/marketing/articles/${id}/publish`, publisher);
+    const moi = await congKhai(`/api/v1/public/articles/${slug}`);
+    assert.equal(moi.body.excerpt, 'Tóm tắt ĐÃ SỬA.');
+  });
+
+  test('🔒 INV-LS-10 — khối ngoài danh sách bị từ chối trước khi chạm database', async () => {
+    const ds = await api('GET', '/api/v1/marketing/articles', editor);
+    const id = (ds.body.items as { id: string }[])[0]!.id;
+    const nhap = await api('GET', `/api/v1/marketing/articles/${id}/draft`, editor);
+    const xau = await api('PATCH', `/api/v1/marketing/articles/${id}/draft`, editor, {
+      title: 'Thử chèn mã',
+      bodyDocument: {
+        type: 'doc',
+        schemaVersion: 1,
+        content: [{ type: 'html', html: '<script>alert(1)</script>' }],
+      },
+      tags: [],
+      version: nhap.body.version,
+    });
+    assert.equal(xau.status, 400, 'khối `html` phải bị Zod từ chối');
+  });
+
+  test('🔒 tenant khác không thấy bài của tenant này', async () => {
+    const cuaB = await api('GET', '/api/v1/marketing/articles', ownerB);
+    const slugs = (cuaB.body.items as { slug: string }[]).map((a) => a.slug);
+    assert.equal(slugs.includes('sau-dieu-can-kiem-truoc-khi-nhan-xe'), false, 'RLS phải chặn — INV-T-01');
+  });
+});
