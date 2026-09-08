@@ -70,7 +70,7 @@ export const NAVIGATION: NavGroup[] = [
       { href: '/settings/banks', label: 'Ngân hàng liên kết', hint: 'Mẫu ưu đãi trả góp', icon: Landmark, permission: 'showroom:feeScheduleRead' },
       { href: '/settings/appearance', label: 'Giao diện', hint: 'Màu và phông của landing', icon: Palette, permission: 'marketing:experienceRead' },
       { href: '/settings/business', label: 'Thông tin doanh nghiệp', hint: 'Tên, địa chỉ, chi nhánh', icon: Building2, permission: 'marketing:experienceRead' },
-      { href: '/settings/users', label: 'Người dùng & quyền', hint: 'Vai trò và quyền xuất bản', icon: BadgePercent, permission: 'marketing:experienceRead' },
+      { href: '/settings/users', label: 'Người dùng & quyền', hint: 'Vai trò và quyền xuất bản', icon: BadgePercent, permission: 'org:userRead' },
     ],
   },
 ];

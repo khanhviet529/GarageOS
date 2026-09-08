@@ -442,6 +442,17 @@ const KICH_BAN: KichBan[] = [
     goi: (v) => call('POST', `/api/v1/marketing/testimonials/${UUID_GIA}/publish`, undefined, v),
   },
   {
+    quyen: 'org:userRead',
+    ten: 'Xem danh sách người dùng',
+    goi: (v) => call('GET', '/api/v1/admin/users', undefined, v),
+  },
+  {
+    quyen: 'org:userRoleWrite',
+    ten: 'Gán vai cho người dùng',
+    goi: (v) =>
+      call('PUT', `/api/v1/admin/users/${UUID_GIA}/roles`, { roles: ['TECHNICIAN'], version: 0 }, v),
+  },
+  {
     quyen: 'marketing:leadFormRead',
     ten: 'Xem cấu hình biểu mẫu',
     goi: (v) => call('GET', '/api/v1/marketing/lead-form', undefined, v),

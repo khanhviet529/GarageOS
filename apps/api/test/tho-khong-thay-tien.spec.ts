@@ -301,6 +301,8 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'navigation', 'redirects', 'redirect',
       // Biểu mẫu: câu chữ và công tắc hiển thị, không có số tiền nào.
       'lead-form', 'lead-form/consent-versions',
+      // Người dùng và vai: không có số tiền nào; vai bị cấm có bài riêng ở đây.
+      'users',
     ]);
 
     const thieu: string[] = [];

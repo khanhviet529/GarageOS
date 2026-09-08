@@ -595,3 +595,120 @@ describe('🔒 Biểu mẫu — câu đồng ý là BẰNG CHỨNG, không phả
     assert.equal(sua.status, 403, 'câu đồng ý là văn bản pháp lý — sửa nó không giống sửa một tiêu đề');
   });
 });
+
+
+describe('🔒 Gán vai — chống LEO THANG và chống TỰ KHOÁ', () => {
+  let owner = '';
+
+  before(async () => {
+    owner = await login('0901000001');
+  });
+
+  after(async () => {
+    /* Trả seed về nguyên trạng để bài khác không phụ thuộc thứ tự chạy. */
+    await admin.query(
+      `UPDATE app_user SET roles = '{OWNER}' WHERE tenant_id = $1 AND phone = '0901000001'`,
+      [TENANT_A],
+    );
+    await admin.query(
+      `UPDATE app_user SET roles = '{SALES_MANAGER}' WHERE tenant_id = $1 AND phone = '0901000013'`,
+      [TENANT_A],
+    );
+  });
+
+  test('danh sách người dùng KHÔNG chứa mật khẩu băm', async () => {
+    const r = await api('GET', '/api/v1/admin/users', owner);
+    assert.equal(r.status, 200);
+    const tho = JSON.stringify(r.body);
+    assert.equal(
+      /passwordHash|password_hash|\$2[aby]\$/.test(tho),
+      false,
+      'băm mật khẩu lọt ra API',
+    );
+    assert.ok((r.body.items as { roles: string[] }[]).some((u) => u.roles.includes('OWNER')));
+  });
+
+  test('🔒 chỉ CHỦ gán được vai — quản lý chi nhánh đọc được nhưng không gán được', async () => {
+    /*
+     * Quyền gán vai là quyền tự cho mình mọi quyền còn lại: một BRANCH_MANAGER
+     * gán được vai thì trong hai bước họ thành OWNER, và ma trận quyền trở thành
+     * trang trí. Đây là quyền duy nhất trong hệ có tính chất đó, nên nó là quyền
+     * duy nhất chỉ có một vai.
+     */
+    const quanLy = await login('0901000002');
+    assert.equal((await api('GET', '/api/v1/admin/users', quanLy)).status, 200);
+
+    const ds = await api('GET', '/api/v1/admin/users', owner);
+    const ai = (ds.body.items as { id: string; phone: string; version: number }[])
+      .find((u) => u.phone === '0901000004')!;
+    const leo = await api('PUT', `/api/v1/admin/users/${ai.id}/roles`, quanLy, {
+      roles: ['OWNER'],
+      version: ai.version,
+    });
+    assert.equal(leo.status, 403, 'quản lý chi nhánh không được gán vai');
+  });
+
+  test('🔒 không tự đổi vai của CHÍNH MÌNH', async () => {
+    const ds = await api('GET', '/api/v1/admin/users', owner);
+    const chinhMinh = (ds.body.items as { id: string; phone: string; version: number }[])
+      .find((u) => u.phone === '0901000001')!;
+    const r = await api('PUT', `/api/v1/admin/users/${chinhMinh.id}/roles`, owner, {
+      roles: ['SERVICE_ADVISOR'],
+      version: chinhMinh.version,
+    });
+    assert.equal(r.status, 400, 'tự gỡ vai của mình là tự khoá mình khỏi màn này');
+  });
+
+  /*
+   * ⚠️ KHÔNG có bài kiểm cho hàng rào "còn ít nhất một chủ", và đó là chủ ý.
+   *
+   * Với luật hiện tại nhánh đó KHÔNG với tới được qua API: chỉ OWNER có quyền
+   * gán vai, hàng rào tự-sửa-mình buộc người bấm khác người bị sửa, nên sau khi
+   * gỡ vai của người kia thì người bấm vẫn là một chủ đang hoạt động.
+   *
+   * Viết một bài "kiểm" nó sẽ phải đi vòng qua chính hai điều kiện đó — tức là
+   * kiểm một tình huống không tồn tại, rồi báo xanh. Hàng rào ở lại vì nó đúng
+   * độc lập với hai điều kiện trên; lý do đầy đủ ghi tại chỗ trong
+   * user-admin.controller.ts.
+   */
+
+  test('gán thêm vai cho người khác thì có hiệu lực ngay', async () => {
+    const ds = await api('GET', '/api/v1/admin/users', owner);
+    const ai = (ds.body.items as { id: string; phone: string; roles: string[]; version: number }[])
+      .find((u) => u.phone === '0901000013')!;
+    const r = await api('PUT', `/api/v1/admin/users/${ai.id}/roles`, owner, {
+      roles: ['SALES_MANAGER', 'MARKETING_PUBLISHER'],
+      version: ai.version,
+    });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+
+    const sau = await api('GET', '/api/v1/admin/users', owner);
+    const moi = (sau.body.items as { phone: string; roles: string[] }[])
+      .find((u) => u.phone === '0901000013')!;
+    assert.deepEqual([...moi.roles].sort(), ['MARKETING_PUBLISHER', 'SALES_MANAGER']);
+
+    /* Vai mới có hiệu lực THẬT, không chỉ đổi trong bảng: đăng nhập lại và làm
+       một việc mà vai cũ không làm được. */
+    const tokenMoi = await login('0901000013');
+    const congBo = await api('GET', '/api/v1/marketing/faq-items', tokenMoi);
+    assert.equal(congBo.status, 200, 'vai MARKETING_PUBLISHER mới gán chưa có hiệu lực');
+  });
+
+  test('🔒 version lệch thì từ chối, không ghi đè thay đổi của người khác', async () => {
+    const ds = await api('GET', '/api/v1/admin/users', owner);
+    const ai = (ds.body.items as { id: string; phone: string; version: number }[])
+      .find((u) => u.phone === '0901000004')!;
+    const r = await api('PUT', `/api/v1/admin/users/${ai.id}/roles`, owner, {
+      roles: ['TECHNICIAN'],
+      version: ai.version + 5,
+    });
+    assert.equal(r.status, 409);
+  });
+
+  test('🔒 tenant khác không thấy người dùng của tenant này', async () => {
+    const r = await api('GET', '/api/v1/admin/users', ownerB);
+    assert.equal(r.status, 200);
+    const dt = (r.body.items as { phone: string }[]).map((u) => u.phone);
+    assert.equal(dt.includes('0901000001'), false, 'RLS phải chặn — INV-T-01');
+  });
+});

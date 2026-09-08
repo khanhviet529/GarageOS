@@ -320,6 +320,23 @@ export const ACTION_ROLES = {
    */
   'marketing:leadFormRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:leadFormWrite': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Người dùng và vai.
+   *
+   * 🔒 GÁN VAI chỉ CHỦ doanh nghiệp, không ai khác — kể cả quản lý chi nhánh.
+   *
+   *    Quyền gán vai là quyền tự cho mình mọi quyền còn lại. Một
+   *    `BRANCH_MANAGER` gán được vai thì trong hai bước họ thành `OWNER`, và ma
+   *    trận quyền phía trên trở thành trang trí. Đây là quyền duy nhất trong
+   *    toàn hệ có tính chất đó, nên nó là quyền duy nhất chỉ có một vai.
+   *
+   * ĐỌC thì rộng hơn: biết ai làm gì trong xưởng là việc bình thường của quản
+   * lý, và danh sách này không có mật khẩu lẫn dữ liệu cá nhân nào ngoài những
+   * gì đồng nghiệp vốn đã biết.
+   */
+  'org:userRead': ['BRANCH_MANAGER', 'SALES_MANAGER', 'OWNER'],
+  'org:userRoleWrite': ['OWNER'],
   'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
   'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
   'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
@@ -458,6 +475,8 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'marketing:navigationWrite': 'sửa menu và chuyển hướng',
   'marketing:leadFormRead': 'xem cấu hình biểu mẫu',
   'marketing:leadFormWrite': 'sửa biểu mẫu và câu đồng ý',
+  'org:userRead': 'xem danh sách người dùng',
+  'org:userRoleWrite': 'gán vai cho người dùng',
   'sales:leadRead': 'xem lead được gán',
   'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
   'sales:leadAssign': 'gán lead cho tư vấn',

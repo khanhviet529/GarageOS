@@ -13,6 +13,7 @@ export const queryKeys = {
   redirects: () => ['redirects'] as const,
   leadForm: () => ['lead-form'] as const,
   consentVersions: () => ['lead-form', 'consent-versions'] as const,
+  adminUsers: () => ['admin-users'] as const,
   product: (id: string) => ['products', id] as const,
   landingPages: () => ['landing-pages'] as const,
   landingPage: (id: string) => ['landing-pages', id] as const,

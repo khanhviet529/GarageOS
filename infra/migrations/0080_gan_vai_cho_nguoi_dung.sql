@@ -1,0 +1,22 @@
+-- =============================================================================
+-- 0080_gan_vai_cho_nguoi_dung — mở đúng một cột: `app_user.roles`
+--
+-- Bất biến: INV-T-01 (cô lập tenant)
+--
+-- Màn *Người dùng & quyền* cần gán vai. Cột `roles` cho tới nay KHÔNG nằm trong
+-- `GRANT UPDATE` của `garageos_app` — tài khoản và vai chỉ đặt được lúc tạo
+-- (INSERT) hoặc bằng tay qua `psql`.
+--
+-- 🔒 Chỉ mở `roles`. KHÔNG mở `phone`, `password_hash` và `tenant_id`:
+--
+--    · `phone` là danh tính đăng nhập. Đổi được số của người khác là chiếm được
+--      tài khoản của họ mà không cần biết mật khẩu.
+--    · `password_hash` chỉ được đổi qua luồng đổi mật khẩu, nơi có kiểm mật
+--      khẩu cũ. Một endpoint quản trị ghi thẳng vào cột này là một cửa hậu.
+--    · `tenant_id` là ranh giới doanh nghiệp (INV-T-01).
+--
+-- Bốn cột đã cấp từ trước (`is_active`, `email`, `full_name`, `version`) giữ
+-- nguyên.
+-- =============================================================================
+
+GRANT UPDATE (roles) ON app_user TO garageos_app;

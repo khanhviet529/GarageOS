@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Role } from './roles.js';
 
 const url = z.string().url().max(500);
 const mark = z.discriminatedUnion('type', [z.object({ type: z.literal('bold') }), z.object({ type: z.literal('italic') }), z.object({ type: z.literal('link'), attrs: z.object({ href: url }) })]);
@@ -337,3 +338,31 @@ export const PublicLeadForm = z.object({
   consentBody: z.string(),
 });
 export type PublicLeadForm = z.infer<typeof PublicLeadForm>;
+
+/* ============================ Người dùng và vai ============================= */
+
+export const AdminUserRow = z.object({
+  id: z.string().uuid(),
+  fullName: z.string(),
+  phone: z.string(),
+  email: z.string().nullable(),
+  roles: z.array(Role),
+  isActive: z.boolean(),
+  branchNames: z.array(z.string()),
+  version: z.number().int(),
+});
+export type AdminUserRow = z.infer<typeof AdminUserRow>;
+
+/**
+ * Gán vai.
+ *
+ * 🔒 Màn này chỉ ĐỌC và GÁN vai — nó không định nghĩa lại quyền. Ma trận quyền
+ *    là dữ liệu của hệ thống, nằm ở `ACTION_ROLES` và được service kiểm bằng
+ *    `assertCan`. Cho phép giao diện sửa ma trận nghĩa là để một lần bấm nhầm mở
+ *    được đường vào mà không có test nào canh.
+ */
+export const UserRolesInput = z.object({
+  roles: z.array(Role).min(1).max(6),
+  version: z.number().int().nonnegative(),
+});
+export type UserRolesInput = z.infer<typeof UserRolesInput>;

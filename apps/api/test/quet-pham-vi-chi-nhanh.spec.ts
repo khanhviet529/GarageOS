@@ -568,6 +568,7 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       'api/v1/marketing/vehicle-products/:id/experiences': 'experience marketing có phạm vi tenant',
       'api/v1/marketing/site-profile': 'hồ sơ landing là dữ liệu tenant',
       'api/v1/marketing/branch-public-profiles': 'cấu hình public profile không phải dữ liệu vận hành chi nhánh',
+      'api/v1/admin/users': 'danh bạ người dùng của tenant — không phải dữ liệu của một chi nhánh',
       'api/v1/marketing/lead-form': 'cấu hình biểu mẫu — một biểu mẫu cho cả tenant',
       'api/v1/marketing/lead-form/consent-versions': 'lịch sử câu đồng ý, phạm vi tenant',
       'api/v1/public/lead-form': 'cấu hình biểu mẫu công khai, tenant lấy từ hostname',
