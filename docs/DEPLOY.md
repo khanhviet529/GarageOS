@@ -1,17 +1,66 @@
 # Triển khai
 
-> ⚠️ **Trạng thái: deploy-ready, CHƯA deploy.** Mọi cấu hình đã sẵn sàng; bước
-> cuối cần tài khoản nhà cung cấp.
+> ⚠️ **Trạng thái: deploy-ready cho API + landing. `web` và `sales-admin` còn
+> một chỗ chặn thật** — xem mục [Cookie và hai tên miền](#-chặn-cookie-samesitelax-và-deploy-khác-tên-miền).
 
-## Kiến trúc triển khai
+## Bản đồ triển khai
 
-| Thành phần | Nền tảng đề xuất | Gói miễn phí đủ dùng? |
+| Thành phần | Nền tảng | Miễn phí? |
 |---|---|---|
-| API (NestJS) | Railway / Fly.io | ✅ |
-| Web (Next.js) | Vercel | ✅ |
-| PostgreSQL 16 | Neon / Supabase | ✅ |
-| Redis | Upstash | ✅ |
-| Lưu file | Cloudflare R2 | ✅ |
+| PostgreSQL 16 | Neon | ✅ 0,5 GB, tự ngủ khi rảnh |
+| API (NestJS) | Render (free) hoặc Railway (~$5/tháng) | ⚠️ xem bên dưới |
+| `apps/landing` — trang bán xe công khai | Vercel | ✅ |
+| `apps/sales-admin` — quản trị catalog và lead | Vercel | ✅ |
+| `apps/web` — nhân viên xưởng | Vercel | ✅ |
+| Redis | Upstash | ✅ 10k lệnh/ngày |
+| Lưu file + backup | Cloudflare R2 | ✅ 10 GB |
+
+Hai điều cần biết trước khi mở tài khoản:
+
+- **Railway đã bỏ gói miễn phí** (chỉ còn credit dùng thử). `render.yaml` ở gốc
+  repo là lối free; đánh đổi là service **ngủ sau ~15 phút** không có request và
+  request kế tiếp chờ 30–60 giây. Cả hai dùng chung `Dockerfile`, nên đổi nền
+  tảng không đụng tới mã nguồn.
+- **Gói Vercel Hobby theo điều khoản là phi thương mại.** Chạy thử, demo, nội bộ
+  thì được; bán xe thật cho khách thì phải lên gói trả phí hoặc tự host.
+
+---
+
+## 🔒 CHẶN: cookie `SameSite=Lax` và deploy khác tên miền
+
+Đây là chỗ dễ mất nửa ngày nhất, và nó **không** hiện ra như một lỗi.
+
+`apps/api/src/auth/cookies.ts` đặt cookie phiên với `SameSite=Lax`. Đó là lớp
+chống CSRF **chính**, chặn ngay ở tầng trình duyệt; lớp thứ hai là kiểm `Origin`
+cho mọi thao tác ghi (`kiemTraNguonGhi`).
+
+Hệ quả khi front-end và API ở **hai tên miền khác nhau** — đúng kịch bản
+`*.vercel.app` + `*.onrender.com`:
+
+> Trình duyệt **không gửi** cookie `gos_at` kèm request cross-site. Người dùng
+> đăng nhập, API trả 200 và `Set-Cookie`, rồi mọi lời gọi sau đó nhận 401. Màn
+> hình không nói gì về cookie — nó chỉ đá về trang đăng nhập.
+
+Ảnh hưởng **`web` và `sales-admin`**. `landing` KHÔNG bị: nó vốn gọi API qua một
+proxy same-origin (`apps/landing/src/app/api/public/[...duong]/route.ts`) và
+không dùng cookie phiên.
+
+### Hai cách xử lý
+
+| | Cách A — proxy same-origin | Cách B — `SameSite=None` |
+|---|---|---|
+| Làm gì | Mỗi app thêm một route chuyển tiếp `/api/v1/*` sang API, giống `landing` đang làm | Thêm biến `COOKIE_SAMESITE=none` cho API |
+| Bảo mật | Giữ nguyên hai lớp chống CSRF | **Mất lớp trình duyệt**, chỉ còn kiểm `Origin` |
+| Chi phí | ~40 dòng mỗi app, thêm một hop qua Vercel | Một dòng cấu hình |
+| Ghi chú | Cookie ở lại same-site, không phải đổi gì ở API | Bắt buộc kèm `Secure` (đã có ở production) |
+
+**Khuyến nghị: cách A.** Hai lớp là chủ ý của thiết kế, và `landing` đã chứng
+minh khuôn proxy này chạy được trong chính repo này. Cách B đổi một thuộc tính
+bảo mật để lấy 15 phút công.
+
+Chưa làm cách nào thì **deploy `landing` trước** — nó chạy đầy đủ ngay hôm nay.
+
+---
 
 ## 🔒 Kiểm tra BẮT BUỘC trước khi chọn nhà cung cấp PostgreSQL
 
@@ -23,8 +72,8 @@ CREATE EXTENSION IF NOT EXISTS btree_gist;  -- exclusion constraint (INV-W-01/02
 CREATE EXTENSION IF NOT EXISTS pg_trgm;     -- tìm biển số gần đúng (BC-01)
 ```
 
-Chạy thử ba lệnh trên trước khi cam kết với nhà cung cấp. Thiếu `btree_gist` thì
-**không chống trùng khoang/thợ được** và mất một nhóm bất biến.
+Chạy thử ba lệnh trên **trước khi cam kết** với nhà cung cấp. Thiếu `btree_gist`
+thì không chống trùng khoang/thợ được và mất một nhóm bất biến.
 
 ## 🔒 Hai vai trò database — không được gộp
 
@@ -32,8 +81,8 @@ Chạy thử ba lệnh trên trước khi cam kết với nhà cung cấp. Thi�
 
 | Biến môi trường | Vai trò | Dùng để |
 |---|---|---|
-| `DATABASE_ADMIN_URL` | Chủ sở hữu schema | **Chỉ** chạy migration |
-| `DATABASE_URL` | Role thường | Ứng dụng kết nối |
+| `DATABASE_ADMIN_URL` | Chủ sở hữu schema | **Chỉ** chạy migration và khởi tạo tenant |
+| `DATABASE_URL` | Role thường (`garageos_app`) | Ứng dụng kết nối |
 
 ⚠️ **Role của `DATABASE_URL` KHÔNG được là superuser và KHÔNG được có
 `BYPASSRLS`.** Superuser bỏ qua Row-Level Security kể cả khi bảng đã bật
@@ -43,118 +92,209 @@ lỗi, chỉ là mọi tenant đọc và ghi được dữ liệu của nhau.
 Ứng dụng tự kiểm tra điều này lúc khởi động (`TenantAwareDb.assertNotPrivileged`)
 và **từ chối khởi động** nếu sai.
 
-Kiểm tra thủ công:
-
 ```sql
 SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;
 -- Kỳ vọng: rolsuper = f, rolbypassrls = f
 ```
 
-## Biến môi trường
+---
 
-Xem [`.env.example`](../.env.example). Bắt buộc đổi trong production:
+## Thứ tự triển khai
 
-| Biến | Ghi chú |
-|---|---|
-| `JWT_ACCESS_SECRET` | 🔒 Chuỗi ngẫu nhiên ≥ 32 byte |
-| `JWT_REFRESH_SECRET` | 🔒 Khác secret ở trên |
-| `DATABASE_URL` | Role thường |
-| `DATABASE_ADMIN_URL` | Chỉ đặt ở môi trường chạy migration, **không** đặt ở runtime API |
-| `COOKIE_SECURE` | 🔒 **`true`** — cookie phiên chỉ đi qua HTTPS. Để `false` là gửi cookie đăng nhập qua kết nối không mã hoá |
-| `WEB_ORIGIN` | 🔒 Danh sách nguồn được phép, phân tách bằng dấu phẩy. Vừa là CORS, vừa là lớp chống CSRF cho thao tác ghi bằng cookie — sai giá trị thì hoặc web không gọi được API, hoặc mở cửa cho trang lạ |
+Mỗi bước phụ thuộc bước trước. Đảo thứ tự là phải làm lại: URL API bị đóng cứng
+vào bundle của front-end (`NEXT_PUBLIC_*`), nên deploy front-end trước API là
+build lại lần nữa.
 
-## Các bước
-
-```bash
-# 1. Tạo database, bật extension (xem mục trên)
-# 2. Tạo role ứng dụng — migration 0001 đã tự tạo garageos_app,
-#    nhưng phải ĐỔI MẬT KHẨU trong production:
-ALTER ROLE garageos_app PASSWORD '<mật khẩu mạnh>';
-
-# 3. Chạy migration bằng DATABASE_ADMIN_URL
-pnpm db:migrate
-
-# 4. Deploy API (Docker) và Web
-
-# 5. Kiểm chứng sau deploy — BẮT BUỘC
-#    Đăng nhập bằng tenant A, thử truy cập ID của tenant B -> phải nhận 404
+```
+1. Neon (kiểm extension)  →  2. Bí mật  →  3. Migration  →  4. Khởi tạo tenant
+        →  5. API  →  6. landing  →  7. sales-admin + web  →  8. R2 + backup
 ```
 
-## Kiểm chứng sau khi deploy
+### 1. Neon
 
-| # | Kiểm tra | Kỳ vọng |
-|---|---|---|
-| 1 | `GET /health` | 200 |
-| 2 | Role ứng dụng không đặc quyền | API khởi động được (nó tự kiểm tra) |
-| 3 | Đăng nhập tenant A, gọi ID của tenant B | **404**, không phải 403 |
-| 4 | Ba extension đã bật | Truy vấn `pg_extension` |
+Tạo project, chạy ba `CREATE EXTENSION` ở trên. Lấy hai connection string:
 
-## Chưa làm
+- **owner** (Neon cấp sẵn, ví dụ `neondb_owner`) → `DATABASE_ADMIN_URL`
+- **`garageos_app`** → `DATABASE_URL`. Role này do **migration 0001 tự tạo**, nên
+  chưa tồn tại lúc này. Sau bước 3 quay lại đặt mật khẩu:
 
-| Việc | Khi nào |
+```sql
+ALTER ROLE garageos_app PASSWORD '<mật khẩu mạnh>';
+```
+
+⚠️ Role owner của Neon cần quyền `CREATEROLE` để migration 0001 chạy được:
+`SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user;`
+
+### 2. Sinh bí mật
+
+```bash
+openssl rand -base64 48   # JWT_ACCESS_SECRET
+openssl rand -base64 48   # JWT_REFRESH_SECRET   (phải KHÁC cái trên)
+openssl rand -base64 32   # EDGE_SIGNING_SECRET
+```
+
+🔒 `JWT_ACCESS_SECRET` là thứ **duy nhất** giữ cho cô lập tenant có nghĩa: ai
+biết nó thì tự ký được token với `tid` của bất kỳ garage nào, và RLS sẽ mở cửa
+đúng như thiết kế vì token hoàn toàn hợp lệ.
+
+### 3. Migration
+
+Đặt `DATABASE_ADMIN_URL` làm **secret của GitHub Environment `production`**, rồi
+chạy tay workflow **Production migration**. Không đặt biến này ở bất kỳ service
+runtime nào.
+
+### 4. Khởi tạo tenant — bước dễ quên nhất
+
+Sau migration, database có đủ bảng và **không có một dòng dữ liệu nào**: không
+đăng nhập được, và không có màn hình nào tạo được tài khoản đầu tiên.
+
+🔒 **KHÔNG chạy `pnpm db:seed` trên production.** Nó `TRUNCATE` toàn bộ bảng rồi
+dựng 13 tài khoản demo với mật khẩu `demo1234`.
+
+Dùng script riêng — nó không xoá gì, không tạo dữ liệu mẫu, và từ chối chạy nếu
+database đã có tenant:
+
+```bash
+DATABASE_ADMIN_URL='postgresql://...' \
+TENANT_NAME="Garage Thành Công" \
+TENANT_TAX_CODE=0101234567 \
+BRANCH_CODE=HN01 \
+BRANCH_NAME="Chi nhánh Hà Nội" \
+OWNER_PHONE=0901234567 \
+OWNER_NAME="Nguyễn Văn A" \
+OWNER_PASSWORD='<mật khẩu mạnh, ≥ 12 ký tự>' \
+pnpm khoi-tao:tenant -- --thu    # bỏ "-- --thu" để ghi thật
+```
+
+`--thu` kiểm mọi thứ, in ra sẽ tạo gì, rồi rollback. Chạy nó trước.
+
+Một tenant = **một doanh nghiệp**, không phải một gara. Các gara khác là `branch`
+trong cùng tenant, thêm bằng giao diện sau khi đăng nhập. Vai `OWNER` (*chủ
+chuỗi*) có phạm vi toàn tenant và thấy mọi chi nhánh.
+
+⚠️ Không có "siêu quản trị" nhìn xuyên tenant — cô lập bằng RLS không có cửa
+sau. Tách mỗi gara thành một tenant riêng nghĩa là **không ai gộp báo cáo lại
+được**, kể cả chủ.
+
+### 5. API
+
+**Render (free):** New → Blueprint, trỏ vào repo. `render.yaml` khai sẵn Docker,
+health check và region Singapore. Render sẽ hỏi các biến `sync: false`:
+
+| Biến | Giá trị |
 |---|---|
-| Sao lưu tự động + **kiểm tra khôi phục hằng tháng** | Trước khi có dữ liệu thật |
-| Quan trắc (log, trace, cảnh báo) | Giai đoạn 2 |
-| Tích hợp hoá đơn điện tử thật | Khi có khách hàng — xem [ADR-0005](adr/0005-einvoice-adapter.md) |
+| `DATABASE_URL` | role `garageos_app` — **không** phải owner |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | từ bước 2 |
+| `EDGE_SIGNING_SECRET` | từ bước 2, **phải trùng** giá trị đặt trên Vercel cho landing |
+| `WEB_ORIGIN` | danh sách HTTPS đầy đủ của cả ba front-end, phân tách bằng dấu phẩy |
+| `PUBLIC_MEDIA_ORIGIN` | `https://<api>/media` cho tới khi chuyển sang R2 |
 
-## Baseline production đã chọn
+**Railway (~$5/tháng, không ngủ):** kết nối repo, để **Root Directory là
+repository root** — Railway tự nhận `Dockerfile` và `railway.toml`. Đặt cùng bộ
+biến trên, thêm `COOKIE_SECURE=true`, `TRUST_PROXY_HOPS=1`, `NODE_ENV=production`
+(trên Render `render.yaml` đã khai sẵn ba biến này).
 
-| Thành phần | Nền tảng | Cấu hình trong repo |
+🔒 Cả hai: **không** đặt `DATABASE_ADMIN_URL` ở service API.
+
+### 6. landing — Vercel
+
+| Thiết lập | Giá trị |
+|---|---|
+| Root Directory | `apps/landing` |
+| Install Command | `cd ../.. && pnpm install --frozen-lockfile` |
+| Build Command | `cd ../.. && pnpm --filter @garageos/landing build` |
+
+Biến môi trường:
+
+| Biến | Giá trị | Vì sao |
 |---|---|---|
-| API | Railway | `Dockerfile`, `railway.toml`, health check `/health` |
-| Web | Vercel | Root Directory `apps/web`, build bằng pnpm workspace |
-| PostgreSQL | Neon | Hai role tách biệt, migration chạy qua GitHub Actions thủ công |
-| Redis | Upstash | Sẵn sàng cho rate-limit/job khi chuyển sang nhiều instance |
-| Backup | Cloudflare R2 | Workflow backup hằng ngày, giữ 30 ngày bằng lifecycle rule |
-| Theo dõi | Railway + GitHub Actions | Health check của Railway và probe `/health` mỗi 5 phút |
+| `LANDING_INTERNAL_API` | `https://<api>` | SSR và proxy gọi API bằng URL này |
+| `EDGE_SIGNING_SECRET` | **trùng hệt** giá trị ở API | ký `X-GarageOS-Original-Host` |
+| `NEXT_PUBLIC_PUBLIC_API_ORIGIN` | **để trống** | trình duyệt gọi same-origin qua proxy |
 
-### Tạo service API trên Railway
+⚠️ Sai `EDGE_SIGNING_SECRET` thì **mọi** trang landing trả 404 `SITE_NOT_FOUND`,
+không có log nào nói thiếu cấu hình. Đây là lỗi đã gặp thật ở máy dev.
 
-1. Kết nối repository, để **Root Directory là repository root**. Railway tự nhận
-   `Dockerfile` và `railway.toml`.
-2. Đặt các biến runtime: `DATABASE_URL` (role `garageos_app`),
-   `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `COOKIE_SECURE=true`,
-   `WEB_ORIGIN=https://<ten-mien-web>`, `NODE_ENV=production`.
-   Railway tự cấp `PORT`; API đã đọc biến này.
-3. **Không** đặt `DATABASE_ADMIN_URL` trong service API. Chỉ đặt nó trong GitHub
-   Environment `production` để workflow migration dùng một lần.
-4. Sinh public domain Railway, rồi dùng URL đó làm `NEXT_PUBLIC_API_URL` trên
-   Vercel. Vì biến `NEXT_PUBLIC_*` được đóng vào bundle, phải redeploy web sau
-   khi đổi URL API.
+🔒 Đừng bao giờ đặt `EDGE_HOST_TRUST=host` ở nơi người ngoài truy cập được —
+lúc đó bất kỳ ai cũng chọn được tenant bằng một header và ghi lead vào tenant
+đó. Xem `docs/reviews/2026-08-14-luong-tenant-public-landing.md`.
 
-Trên Vercel, đặt **Root Directory** là `apps/web`, rồi dùng Install Command
-`cd ../.. && pnpm install --frozen-lockfile` và Build Command
-`cd ../.. && pnpm --filter @garageos/web build`. Đặt
-`NEXT_PUBLIC_API_URL=https://<ten-mien-api>` ở Production và redeploy sau mỗi
-lần đổi biến. API sẽ từ chối chạy production nếu `COOKIE_SECURE` không là
-`true` hoặc `WEB_ORIGIN` không phải một danh sách HTTPS tường minh.
+**Nạp hostname vào `site_domain`** — thiếu bước này landing cũng 404:
 
-### PostgreSQL, backup và khôi phục
+```jsonc
+// domain-manifest.json
+{
+  "schemaVersion": 1,
+  "tenantId": "<uuid tenant từ bước 4>",
+  "hostname": "ten-du-an.vercel.app",
+  "status": "ACTIVE",
+  "isPrimary": true
+}
+```
 
-Trên Neon, chạy ba `CREATE EXTENSION` ở đầu tài liệu này, rồi chạy workflow
-**Production migration** thủ công. Tạo hai role đúng như migration 0001; URL
-runtime phải là role `garageos_app`, còn `DATABASE_ADMIN_URL` chỉ là owner.
+```bash
+DATABASE_ADMIN_URL='postgresql://...' pnpm site-domain:apply -- --manifest domain-manifest.json
+```
 
-Tạo bucket R2 riêng cho backup, bật lifecycle xoá bản sao sau 30 ngày và đặt
-các GitHub configuration sau trong Environment `production`:
+Đổi sang tên miền thật sau này thì chạy lại với hostname mới — script upsert
+theo `(tenant_id, hostname)` và swap primary nguyên tử.
+
+### 7. sales-admin và web — Vercel
+
+⚠️ **Đọc mục [Cookie và hai tên miền](#-chặn-cookie-samesitelax-và-deploy-khác-tên-miền)
+trước.** Chưa xử lý thì hai app này deploy được nhưng **không đăng nhập được**.
+
+| App | Root Directory | Build Command | Biến |
+|---|---|---|---|
+| `sales-admin` | `apps/sales-admin` | `cd ../.. && pnpm --filter @garageos/sales-admin build` | `NEXT_PUBLIC_ADMIN_API_ORIGIN` |
+| `web` | `apps/web` | `cd ../.. && pnpm --filter @garageos/web build` | `NEXT_PUBLIC_API_URL` |
+
+Install Command của cả hai: `cd ../.. && pnpm install --frozen-lockfile`.
+
+`NEXT_PUBLIC_*` được đóng vào bundle → **redeploy sau mỗi lần đổi**.
+
+Sau khi có domain của cả ba app, cập nhật `WEB_ORIGIN` ở API cho đủ và deploy
+lại API. Sai giá trị này thì hoặc front-end không gọi được API, hoặc mở cửa cho
+trang lạ — nó vừa là CORS vừa là allow-list chống CSRF.
+
+### 8. R2, backup và theo dõi
+
+Tạo bucket R2 riêng cho backup, bật lifecycle xoá sau 30 ngày, rồi đặt trong
+GitHub Environment `production`:
 
 | Loại | Tên |
 |---|---|
 | Secret | `DATABASE_BACKUP_URL`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY` |
 | Variable | `BACKUP_R2_BUCKET`, `R2_ENDPOINT_URL`, `PRODUCTION_API_URL` |
 
-`DATABASE_BACKUP_URL` có quyền **chỉ đọc dữ liệu cần dump**, không dùng role
-owner hay role API. Workflow backup hằng ngày tạo bản dump PostgreSQL dạng
-custom; mỗi tháng phải thực hành khôi phục vào một Neon branch/database rỗng
-và ghi lại thời gian khôi phục.
+`DATABASE_BACKUP_URL` chỉ cần quyền **đọc** dữ liệu cần dump — không dùng role
+owner hay role API. Workflow **Production health probe** gọi `/health` mỗi 5
+phút; nó là hàng rào bổ sung, không thay thế dịch vụ alert 24×7.
 
-### Theo dõi và release
+🔒 Mỗi tháng thực hành khôi phục vào một Neon branch rỗng và ghi lại thời gian.
+Một bản backup chưa từng khôi phục thử không phải là một bản backup.
 
-- Railway gọi `/health` sau deploy; endpoint này kiểm cả kết nối PostgreSQL.
-- Workflow **Production health probe** gọi endpoint đó mỗi 5 phút. Nó là hàng
-  rào bổ sung, không thay thế dịch vụ uptime/alert 24×7; khi có khách thật hãy
-  thêm alert nhận pager/email ở Railway hoặc một dịch vụ chuyên dụng.
-- GitHub Actions không tự chạy migration khi deploy. Chạy CI xanh → chạy
-  workflow migration → deploy API → health xanh → deploy web.
-- Chỉ scale API quá một replica sau khi chuyển rate limit hiện tại sang Redis;
-  hiện nó chủ ý chạy trong bộ nhớ tiến trình.
+---
+
+## Kiểm chứng sau khi deploy
+
+| # | Kiểm tra | Kỳ vọng |
+|---|---|---|
+| 1 | `GET /health` | `{"status":"ok","db":"ok","role":"garageos_app"}` |
+| 2 | Ba extension đã bật | truy vấn `pg_extension` |
+| 3 | Đăng nhập bằng tài khoản ở bước 4 | 200, nhận cookie |
+| 4 | Đăng nhập tenant A, gọi ID của tenant B | **404**, không phải 403 |
+| 5 | Mở landing | 200, không phải `SITE_NOT_FOUND` |
+| 6 | Gửi thử một lead từ landing | hiện trong sales-admin |
+
+---
+
+## Chưa làm
+
+| Việc | Khi nào |
+|---|---|
+| Proxy same-origin cho `web`/`sales-admin` (hoặc `COOKIE_SAMESITE`) | **Trước khi dùng hai app này trên production** |
+| Sao lưu tự động + kiểm tra khôi phục hằng tháng | Trước khi có dữ liệu thật |
+| Chuyển rate limit sang Redis | Trước khi scale API quá một replica — hiện nó chủ ý chạy trong bộ nhớ tiến trình |
+| Quan trắc (log, trace, cảnh báo) | Giai đoạn 2 |
+| Tích hợp hoá đơn điện tử thật | Khi có khách hàng — xem [ADR-0005](adr/0005-einvoice-adapter.md) |

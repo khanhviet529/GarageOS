@@ -1,9 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { timingSafeEqual, scryptSync, randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { Pool, PoolClient } from 'pg';
 import { Inject } from '@nestjs/common';
 import { ErrorCode, type LoginInput, type LoginOutput, type Role } from '@garageos/contracts';
+/*
+ * 🔒 Định dạng mật khẩu ở `@garageos/domain`, không còn một bản riêng ở đây.
+ *
+ * Bản cũ nằm ngay trong file này, mang chú thích "khớp infra/seed.ts" — nghĩa
+ * là hai nửa của một định dạng (bên ghi và bên đọc) được giữ đồng bộ bằng trí
+ * nhớ. Đổi `64` thành số khác ở một bên thì không lỗi cú pháp, không lỗi kiểu,
+ * không lỗi lúc chạy: chỉ là không ai đăng nhập được nữa, và câu người dùng
+ * thấy là "sai mật khẩu".
+ */
+import { khopMatKhau } from '@garageos/domain';
 import { BusinessError } from '../common/errors';
 import { APP_POOL } from '../db/db.module';
 
@@ -70,7 +80,7 @@ export class AuthService {
     };
 
     if (user === undefined || !user.is_active) return invalid();
-    if (!verifyPassword(input.password, user.password_hash)) return invalid();
+    if (!khopMatKhau(input.password, user.password_hash)) return invalid();
 
     const branchIds = await this.loadBranchIds(user.tenant_id, user.id);
 
@@ -327,16 +337,3 @@ function requireSecret(name: string): string {
   return v;
 }
 
-/** Định dạng: scrypt$<salt>$<hash> — khớp infra/seed.ts */
-export function verifyPassword(plain: string, stored: string): boolean {
-  const parts = stored.split('$');
-  if (parts.length !== 3 || parts[0] !== 'scrypt') return false;
-  const salt = parts[1];
-  const expected = parts[2];
-  if (salt === undefined || expected === undefined) return false;
-  const actual = scryptSync(plain, salt, 64).toString('hex');
-  const a = Buffer.from(actual, 'hex');
-  const b = Buffer.from(expected, 'hex');
-  // 🔒 So sánh thời gian hằng định — chống timing attack
-  return a.length === b.length && timingSafeEqual(a, b);
-}

@@ -1,0 +1,56 @@
+# Blueprint cho Render — lối deploy MIỄN PHÍ của API.
+#
+# Song song với `railway.toml`; hai file cùng dùng một `Dockerfile`, nên đổi nền
+# tảng là đổi chỗ trỏ DNS chứ không phải sửa mã nguồn.
+#
+# ⚠️ Gói `free` NGỦ sau ~15 phút không có request. Request kế tiếp phải chờ
+#    container khởi động lại — thường 30–60 giây. Chấp nhận được cho bản chạy
+#    thử và demo; với landing bán xe có khách thật thì khách đầu tiên trong ngày
+#    sẽ nhìn một trang trắng khá lâu. Lúc đó đổi `plan` sang `starter`, hoặc
+#    chuyển sang Railway theo `docs/DEPLOY.md`.
+#
+# 🔒 KHÔNG khai `DATABASE_ADMIN_URL` ở đây. Migration chạy bằng workflow
+#    `Production migration` trên GitHub, một lần, có chủ đích. API không bao giờ
+#    được cầm quyền chủ schema — xem `docs/DEPLOY.md`.
+services:
+  - type: web
+    name: garageos-api
+    runtime: docker
+    plan: free
+    region: singapore # gần Việt Nam nhất trong các region của Render
+    dockerfilePath: ./Dockerfile
+    dockerContext: . # phải là repository root: API import workspace packages
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render tự cấp PORT; `apps/api/src/main.ts` đã đọc biến này.
+      #
+      # Những biến dưới đây KHÔNG có giá trị ở đây có chủ ý: `sync: false` bắt
+      # Render hỏi lúc tạo service, và giữ bí mật ra khỏi git.
+      - key: DATABASE_URL # role garageos_app — KHÔNG phải owner
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: EDGE_SIGNING_SECRET # phải TRÙNG giá trị đặt trên Vercel cho landing
+        sync: false
+      - key: WEB_ORIGIN # danh sách HTTPS đầy đủ của cả ba front-end
+        sync: false
+      - key: PUBLIC_MEDIA_ORIGIN
+        sync: false
+      - key: COOKIE_SECURE
+        value: 'true'
+      # Render đứng sau một proxy → đúng một hop.
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      # 🔒 `signed` là mặc định của mã nguồn; khai tường minh để ai đọc file này
+      #    thấy ngay ranh giới tin cậy, thay vì phải nhớ mặc định là gì.
+      - key: EDGE_HOST_TRUST
+        value: signed
+      # ⚠️ Trả mã OTP thẳng trong response. Bật ở production nghĩa là ai có link
+      #    tra cứu cũng tự duyệt được báo giá thay khách.
+      - key: OTP_DEV_ECHO
+        value: 'false'
