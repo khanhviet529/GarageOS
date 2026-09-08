@@ -11,6 +11,11 @@ import {
   type PublicTestimonial,
   type PublicSiteView,
   type ChiPhiSoHuuView,
+  type PublicFaqItem,
+  type FaqSurface,
+  type PublicNavItem,
+  type NavPlacement,
+  type PublicLeadForm,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
@@ -31,6 +36,107 @@ export class PublicLandingService {
     @Inject(TenantAwareDb) private readonly db: TenantAwareDb,
     @Inject(ShowroomService) private readonly showroom: ShowroomService,
   ) {}
+
+  /**
+   * Câu hỏi thường gặp đang CÔNG BỐ ở một bề mặt.
+   *
+   * Lọc bằng SQL chứ không lọc ở tầng trên: `status = 'PUBLISHED'` và
+   * `placement.enabled` là HAI điều kiện độc lập, và bỏ sót một trong hai là
+   * đẩy nội dung chưa duyệt ra trang công khai.
+   */
+  async faq(ctx: PublicTenantContext, surface: FaqSurface): Promise<PublicFaqItem[]> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicFaqItem>(
+      `SELECT f.id, f.question, f.answer, f.topic
+         FROM faq_item f
+         JOIN faq_placement p ON p.faq_item_id = f.id AND p.enabled
+        WHERE f.status = 'PUBLISHED' AND p.surface = $1::faq_surface
+        ORDER BY f.display_order, f.created_at`,
+      [surface],
+    )).rows);
+  }
+
+  /**
+   * Menu công khai.
+   *
+   * 🔒 Mục trỏ tới trang CHƯA CÓ phải tự ẩn — SRS-LS-EXP-001 §4.10: "link gãy
+   *    trên trang bán hàng đắt hơn một mục menu thiếu".
+   *
+   *    Ở lát cắt này landing chỉ có bốn trang có mã, nên "trang có thật" là một
+   *    danh sách hữu hạn kiểm được ở tầng gọi. Điều kiện `visible` là chốt của
+   *    người dùng; điều kiện "trang có thật" là chốt của hệ thống, và hai chốt
+   *    đó không thay nhau được.
+   */
+  async navigation(ctx: PublicTenantContext, placement: NavPlacement): Promise<PublicNavItem[]> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT label, path, external_url, column_index
+           FROM site_navigation
+          WHERE visible AND placement = $1::nav_placement
+          ORDER BY column_index, display_order, label`,
+        [placement],
+      );
+      return rows.map((r) => ({
+        label: r.label as string,
+        href: (r.path ?? r.external_url) as string,
+        columnIndex: Number(r.column_index),
+        external: r.path === null,
+      }));
+    });
+  }
+
+  /**
+   * Tra một đường dẫn trong bảng chuyển hướng. `null` = không có.
+   *
+   * 🔒 So khớp CHÍNH XÁC, không tiền tố và không mẫu. Chuyển hướng theo tiền tố
+   *    ("mọi thứ dưới /blog") nghe tiện, nhưng nó bắt landing phải quét cả bảng
+   *    ở mỗi lượt 404 và nó biến một dòng cấu hình thành một quy tắc mà người
+   *    nhập không đoán được phạm vi. Cần nhiều đích thì nhập nhiều dòng.
+   */
+  async redirectFor(
+    tenantId: string,
+    path: string,
+  ): Promise<{ to: string; statusCode: number } | null> {
+    return this.db.withTenantId(tenantId, null, async (tx) => {
+      const { rows } = await tx.query<{ to_path: string; status_code: number }>(
+        'SELECT to_path, status_code FROM site_redirect WHERE from_path = $1',
+        [path],
+      );
+      const r = rows[0];
+      return r === undefined ? null : { to: r.to_path, statusCode: Number(r.status_code) };
+    });
+  }
+
+  /**
+   * Cấu hình biểu mẫu cho landing.
+   *
+   * 🔒 Chưa khai phiên bản câu đồng ý nào thì dùng câu MẶC ĐỊNH, không trả rỗng.
+   *    Một ô tick không có chữ bên cạnh là một ô khách không biết mình đang đồng
+   *    ý điều gì — và chữ ký đó không có giá trị pháp lý nào.
+   */
+  async leadForm(ctx: PublicTenantContext): Promise<PublicLeadForm> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT f.success_title, f.success_body, f.show_message_field, f.show_branch_field,
+                c.body AS consent_body
+           FROM lead_form f
+           LEFT JOIN LATERAL (
+             SELECT body FROM lead_form_consent_version v
+              WHERE v.form_id = f.id AND v.effective_from <= now()
+              ORDER BY v.effective_from DESC LIMIT 1
+           ) c ON true
+          WHERE f.code = 'LANDING' LIMIT 1`,
+      );
+      const r = rows[0];
+      return {
+        successTitle: (r?.success_title ?? 'Đã nhận yêu cầu') as string,
+        successBody: (r?.success_body ?? 'Showroom sẽ liên hệ trong giờ làm việc.') as string,
+        showMessageField: (r?.show_message_field ?? true) as boolean,
+        showBranchField: (r?.show_branch_field ?? true) as boolean,
+        consentBody: (r?.consent_body ??
+          'Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp') as string,
+      };
+    });
+  }
 
   async testimonials(ctx: PublicTenantContext): Promise<PublicTestimonial[]> {
     return this.db.withTenantId(ctx.tenantId, null, async (tx) => (await tx.query<PublicTestimonial>(

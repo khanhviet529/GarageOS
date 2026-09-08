@@ -226,3 +226,42 @@ export interface FinancingQuote {
   totalPaid: bigint;
   totalInterest: bigint;
 }
+
+/* ==================== Thư viện chương trình trả góp (§4.3) =================== */
+
+/**
+ * Mẫu chương trình trả góp dùng chung cả tenant.
+ *
+ * 🔒 Mẫu là NGUỒN ĐỂ CHÉP, không phải nguồn để đọc lúc hiển thị. Cho trang xe
+ *    đọc thẳng lãi suất từ mẫu sẽ vi phạm `INV-LS-13`: sửa lãi suất trong thư
+ *    viện đổi con số trên mọi trang đã xuất bản, không qua một lần publish nào.
+ *    Với con số khách in ra mang tới ngân hàng thì đó là hỏng, không phải tiện.
+ *
+ * Chi tiết đánh đổi ghi ở đầu migration 0081.
+ */
+export const FinancingTemplateInput = FinancingProgramInput.extend({
+  isActive: z.boolean().default(true),
+});
+export type FinancingTemplateInput = z.infer<typeof FinancingTemplateInput>;
+
+export const FinancingTemplateRow = FinancingTemplateInput.extend({
+  id: z.string().uuid(),
+  version: z.number().int(),
+  /** Số mẫu xe đang dùng bản chép của mẫu này. */
+  usedByCount: z.number().int(),
+  /** Trong số đó, bao nhiêu bản chép đã LỆCH so với mẫu hiện tại. */
+  driftCount: z.number().int(),
+});
+export type FinancingTemplateRow = z.infer<typeof FinancingTemplateRow>;
+
+/** Một mẫu xe đang chào bản chép đã lệch so với thư viện. */
+export const FinancingDriftRow = z.object({
+  productId: z.string().uuid(),
+  productSlug: z.string(),
+  revisionId: z.string().uuid(),
+  /** `true` khi bản lệch nằm ở bản ĐÃ PUBLISH — tức là khách đang thấy số cũ. */
+  published: z.boolean(),
+  templateId: z.string().uuid(),
+  bankName: z.string(),
+});
+export type FinancingDriftRow = z.infer<typeof FinancingDriftRow>;

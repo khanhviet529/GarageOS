@@ -273,6 +273,70 @@ export const ACTION_ROLES = {
   'marketing:reviewRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:reviewWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:reviewPublish': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Câu hỏi thường gặp — SRS-LS-EXP-001 §4.10.
+   *
+   * Ba bậc, cùng khuôn với đánh giá và trang landing: viết KHÁC công bố. Đó là
+   * toàn bộ lý do có hai vai marketing. Câu trả lời cho "bảo hành bao lâu" là
+   * một lời hứa với khách, không phải một dòng ghi chú nội bộ.
+   */
+  'marketing:faqRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:faqWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:faqPublish': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Bài viết trên landing — SRS-LS-EXP-001 §4.10.
+   *
+   * Cùng ba bậc, và ở đây khoảng cách giữa viết và công bố là rõ nhất: một bài
+   * viết là văn bản dài, có quan điểm, đứng dưới tên thương hiệu. Đó chính là
+   * loại nội dung cần người thứ hai đọc lại trước khi nó ra tên miền của khách.
+   */
+  'marketing:articleRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:articleWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:articlePublish': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Điều hướng và chuyển hướng — SRS-LS-EXP-001 §4.10.
+   *
+   * HAI bậc, không ba, và khác với nội dung có chủ ý: menu không có bản nháp.
+   * Một mục menu là một dòng chữ và một đường dẫn — không có gì để "đọc lại
+   * trước khi đăng", và bắt nó qua vòng duyệt sẽ khiến việc sửa một lỗi chính
+   * tả trong menu mất hai người.
+   *
+   * 🔒 Đổi lại, cả hai quyền đều hẹp hơn quyền soạn nội dung: sai một dòng
+   *    chuyển hướng là gãy đường vào của cả một nhóm URL đã được đánh chỉ mục.
+   */
+  'marketing:navigationRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:navigationWrite': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Biểu mẫu thu nhu cầu khách — SRS-LS-EXP-001 §4.10.
+   *
+   * 🔒 Quyền GHI chỉ cho publisher và chủ, hẹp hơn quyền soạn nội dung. Câu đồng
+   *    ý liên hệ là văn bản PHÁP LÝ (NĐ 13/2023): nó quyết định showroom được
+   *    phép làm gì với số điện thoại khách vừa để lại. Sửa nó không giống sửa
+   *    một tiêu đề.
+   */
+  'marketing:leadFormRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:leadFormWrite': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Người dùng và vai.
+   *
+   * 🔒 GÁN VAI chỉ CHỦ doanh nghiệp, không ai khác — kể cả quản lý chi nhánh.
+   *
+   *    Quyền gán vai là quyền tự cho mình mọi quyền còn lại. Một
+   *    `BRANCH_MANAGER` gán được vai thì trong hai bước họ thành `OWNER`, và ma
+   *    trận quyền phía trên trở thành trang trí. Đây là quyền duy nhất trong
+   *    toàn hệ có tính chất đó, nên nó là quyền duy nhất chỉ có một vai.
+   *
+   * ĐỌC thì rộng hơn: biết ai làm gì trong xưởng là việc bình thường của quản
+   * lý, và danh sách này không có mật khẩu lẫn dữ liệu cá nhân nào ngoài những
+   * gì đồng nghiệp vốn đã biết.
+   */
+  'org:userRead': ['BRANCH_MANAGER', 'SALES_MANAGER', 'OWNER'],
+  'org:userRoleWrite': ['OWNER'],
   'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
   'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
   'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
@@ -401,6 +465,18 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'marketing:reviewRead': 'xem testimonial',
   'marketing:reviewWrite': 'soạn testimonial',
   'marketing:reviewPublish': 'publish hoặc ẩn testimonial',
+  'marketing:faqRead': 'xem câu hỏi thường gặp',
+  'marketing:faqWrite': 'sửa câu hỏi thường gặp',
+  'marketing:faqPublish': 'công bố câu hỏi thường gặp',
+  'marketing:articleRead': 'xem bài viết',
+  'marketing:articleWrite': 'soạn và sửa bài viết',
+  'marketing:articlePublish': 'công bố bài viết',
+  'marketing:navigationRead': 'xem menu và chuyển hướng',
+  'marketing:navigationWrite': 'sửa menu và chuyển hướng',
+  'marketing:leadFormRead': 'xem cấu hình biểu mẫu',
+  'marketing:leadFormWrite': 'sửa biểu mẫu và câu đồng ý',
+  'org:userRead': 'xem danh sách người dùng',
+  'org:userRoleWrite': 'gán vai cho người dùng',
   'sales:leadRead': 'xem lead được gán',
   'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
   'sales:leadAssign': 'gán lead cho tư vấn',

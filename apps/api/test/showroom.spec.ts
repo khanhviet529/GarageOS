@@ -489,3 +489,153 @@ describe('Màu xe — sửa danh sách màu KHÔNG được làm rụng ảnh', 
     assert.equal(anh[0]!.color_id, mauGiuId);
   });
 });
+
+describe('Thư viện trả góp — mẫu là nguồn để CHÉP, không phải nguồn đọc lúc hiển thị', () => {
+  /*
+   * 🔒 Đánh đổi trung tâm của lát cắt này (migration 0081):
+   *
+   * Cho `financing_program` trỏ tới mẫu và đọc lãi suất từ mẫu lúc render sẽ vi
+   * phạm INV-LS-13 — sửa lãi suất trong thư viện đổi con số trên MỌI trang xe đã
+   * xuất bản, không qua một lần publish nào, không ai duyệt. Với con số khách in
+   * ra mang tới ngân hàng thì đó là hỏng, không phải tiện.
+   *
+   * Nên mẫu được CHÉP, và cái giá của việc chép là bản chép lệch dần. Bài kiểm
+   * dưới đây canh đúng cái giá đó: lệch phải NHÌN THẤY ĐƯỢC.
+   */
+
+  test('seed có ba mẫu, và VIB đang lệch so với bản chép trên mẫu xe', async () => {
+    const r = await api('GET', '/api/v1/showroom/financing-templates', publisher);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const items = r.body.items as { bankName: string; usedByCount: number; driftCount: number }[];
+    assert.deepEqual(items.map((t) => t.bankName).sort(), ['Techcombank', 'VIB', 'VPBank']);
+
+    const vib = items.find((t) => t.bankName === 'VIB')!;
+    assert.equal(vib.usedByCount, 1);
+    assert.equal(vib.driftCount, 1, 'mẫu VIB đã đổi lãi suất, bản chép trên mẫu xe vẫn là bản cũ');
+
+    const tcb = items.find((t) => t.bankName === 'Techcombank')!;
+    assert.equal(tcb.driftCount, 0, 'Techcombank khớp mẫu, không được báo lệch');
+  });
+
+  test('🔒 báo lệch nói rõ bản lệch đang HIỆN CHO KHÁCH hay chỉ ở nháp', async () => {
+    const r = await api('GET', '/api/v1/showroom/financing-drift', publisher);
+    assert.equal(r.status, 200);
+    const items = r.body.items as { bankName: string; published: boolean; productSlug: string }[];
+    const vib = items.find((t) => t.bankName === 'VIB');
+    assert.ok(vib !== undefined, 'bản chép lệch phải xuất hiện trong báo lệch');
+    assert.equal(vib.published, true, 'bản lệch nằm ở revision đã publish — khách đang thấy số cũ');
+    assert.equal(vib.productSlug, 'aurora-e1');
+  });
+
+  test('🔒 sửa mẫu KHÔNG đổi con số trên trang xe đã xuất bản', async () => {
+    /*
+     * Đây là bài kiểm giữ INV-LS-13 khỏi bị phá bởi chính tính năng này. Nếu ai
+     * đó sau này đổi sang "đọc thẳng từ mẫu", bài này đỏ.
+     */
+    const truoc = await fetch(
+      `${API}/api/v1/public/vehicle-products/aurora-e1/gia-lan-banh?provinceCode=01`,
+      { headers: hostHeaders() },
+    );
+    const bodyTruoc = (await truoc.json()) as { financing: { bankName: string }[] };
+    const soTruoc = JSON.stringify(bodyTruoc.financing);
+
+    const ds = await api('GET', '/api/v1/showroom/financing-templates', publisher);
+    const tcb = (ds.body.items as { id: string; bankName: string; version: number }[])
+      .find((t) => t.bankName === 'Techcombank')!;
+
+    const sua = await api('PATCH', `/api/v1/showroom/financing-templates/${tcb.id}`, publisher, {
+      bankName: 'Techcombank',
+      bankLogoMediaId: null,
+      minDownPaymentBp: 2000,
+      promoRateBp: 999,
+      promoMonths: 12,
+      standardRateBp: 1499,
+      allowedTermsMonths: [36, 48, 60, 84],
+      downPaymentOptionsBp: [2000, 3000, 4000, 5000],
+      rateUpdatedAt: '2026-09-08',
+      displayOrder: 0,
+      isActive: true,
+    });
+    assert.equal(sua.status, 200, JSON.stringify(sua.body));
+
+    const sau = await fetch(
+      `${API}/api/v1/public/vehicle-products/aurora-e1/gia-lan-banh?provinceCode=01`,
+      { headers: hostHeaders() },
+    );
+    const bodySau = (await sau.json()) as { financing: { bankName: string }[] };
+    assert.equal(
+      JSON.stringify(bodySau.financing),
+      soTruoc,
+      'sửa mẫu đã đổi con số trên trang đã xuất bản — vi phạm INV-LS-13',
+    );
+
+    // Nhưng LỆCH thì phải hiện ra ngay
+    const lech = await api('GET', '/api/v1/showroom/financing-drift', publisher);
+    assert.ok(
+      (lech.body.items as { bankName: string }[]).some((t) => t.bankName === 'Techcombank'),
+      'sửa mẫu mà không báo lệch thì bản chép cũ trôi đi không ai biết',
+    );
+
+    /*
+     * Trả mẫu về đúng số của seed.
+     *
+     * ⚠️ Bỏ bước này thì bài kiểm ĐẦU của nhóm đỏ ở lượt chạy thứ hai: nó đòi
+     *    Techcombank có `driftCount = 0`, mà lượt trước đã làm nó lệch. Bài kiểm
+     *    xanh-ở-lượt-đầu-đỏ-ở-lượt-sau là bài kiểm không dùng được, và cách hỏng
+     *    đó chỉ lộ ra khi chạy cả bộ chứ không phải khi chạy riêng một file.
+     */
+    await api('PATCH', `/api/v1/showroom/financing-templates/${tcb.id}`, publisher, {
+      bankName: 'Techcombank',
+      bankLogoMediaId: null,
+      minDownPaymentBp: 2000,
+      promoRateBp: 750,
+      promoMonths: 12,
+      standardRateBp: 1050,
+      allowedTermsMonths: [36, 48, 60, 84],
+      downPaymentOptionsBp: [2000, 3000, 4000, 5000],
+      rateUpdatedAt: '2026-08-28',
+      displayOrder: 0,
+      isActive: true,
+    });
+  });
+
+  test('🔒 áp mẫu vào bản ĐÃ PUBLISH bị từ chối, kèm câu tiếng Việt', async () => {
+    const ds = await api('GET', '/api/v1/showroom/financing-templates', publisher);
+    const tcb = (ds.body.items as { id: string; bankName: string }[])
+      .find((t) => t.bankName === 'Techcombank')!;
+    const r = await api(
+      'POST',
+      `/api/v1/showroom/revisions/${revisionId}/financing/from-template/${tcb.id}`,
+      publisher,
+    );
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(String(r.body.error.message), /bản NHÁP|bất biến/i);
+  });
+
+  test('🔒 xoá mẫu khỏi thư viện KHÔNG gỡ chương trình khỏi mẫu xe đang chào', async () => {
+    const tao = await api('POST', '/api/v1/showroom/financing-templates', publisher, {
+      bankName: `Ngân hàng thử ${Date.now().toString().slice(-6)}`,
+      bankLogoMediaId: null,
+      minDownPaymentBp: 2000, promoRateBp: 700, promoMonths: 6, standardRateBp: 1000,
+      allowedTermsMonths: [36], downPaymentOptionsBp: [2000],
+      rateUpdatedAt: '2026-09-01', displayOrder: 50, isActive: true,
+    });
+    assert.equal(tao.status, 201, JSON.stringify(tao.body));
+
+    const truoc = await admin.query<{ n: string }>('SELECT count(*) AS n FROM financing_program');
+    assert.equal((await api('DELETE', `/api/v1/showroom/financing-templates/${tao.body.id}`, publisher)).status, 200);
+    const sau = await admin.query<{ n: string }>('SELECT count(*) AS n FROM financing_program');
+    assert.equal(sau.rows[0]!.n, truoc.rows[0]!.n, 'xoá mẫu đã kéo theo chương trình của mẫu xe');
+  });
+
+  test('🔒 biên tập viên nội dung KHÔNG sửa được lãi suất — cùng khuôn với biểu phí', async () => {
+    const r = await api('POST', '/api/v1/showroom/financing-templates', editor, {
+      bankName: 'Không được phép',
+      bankLogoMediaId: null,
+      minDownPaymentBp: 2000, promoRateBp: 700, promoMonths: 6, standardRateBp: 1000,
+      allowedTermsMonths: [36], downPaymentOptionsBp: [2000],
+      rateUpdatedAt: '2026-09-01', displayOrder: 0, isActive: true,
+    });
+    assert.equal(r.status, 403);
+  });
+});

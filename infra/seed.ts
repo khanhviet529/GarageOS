@@ -267,6 +267,11 @@ async function main(): Promise<void> {
     vehicle_experience_version, vehicle_experience,
     vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
     vehicle_color, onroad_fee_schedule,
+    financing_program_template,
+    lead_form_consent_version, lead_form,
+    site_redirect, site_navigation,
+    article_tag, article_revision, article, article_category,
+    faq_placement, faq_item,
     testimonial, vehicle_variant_revision, vehicle_variant,
     vehicle_product_revision, vehicle_product, vehicle_product_category,
     media_publication, media_rendition, media_asset,
@@ -1810,16 +1815,44 @@ async function main(): Promise<void> {
        ($1,$2,'QUA_TANG','Tặng gói bảo dưỡng 3 năm','Chương trình đã kết thúc',NULL,false,now() - interval '90 days', now() - interval '30 days',3)`,
     [TENANT_A, revisionId],
   );
+  /*
+   * Thư viện mẫu trả góp (0081) — nguồn để CHÉP, khai một lần cho cả tenant.
+   *
+   * Ba bản chép dưới đây trỏ về mẫu qua `template_id`, và VIB cố ý được chép với
+   * lãi suất KHÁC mẫu: đó là ca "bản chép đã lệch so với thư viện" mà màn Ngân
+   * hàng liên kết sinh ra để phát hiện. Một bộ dữ liệu mà mọi bản chép đều khớp
+   * thì không thử được gì.
+   */
+  const MAU_TRA_GOP = [
+    { ten: 'Techcombank', dpMin: 2000, uuDai: 750, thang: 12, chuan: 1050, ky: '{36,48,60,84}', dp: '{2000,3000,4000,5000}', ngay: '2026-08-28' },
+    { ten: 'VPBank', dpMin: 2000, uuDai: 790, thang: 12, chuan: 1080, ky: '{36,48,60}', dp: '{2000,3000,4000}', ngay: '2026-08-28' },
+    { ten: 'VIB', dpMin: 3000, uuDai: 800, thang: 6, chuan: 1100, ky: '{36,48,60}', dp: '{3000,4000,5000}', ngay: '2026-09-05' },
+  ];
+  const mauId: Record<string, string> = {};
+  for (const [i, m] of MAU_TRA_GOP.entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO financing_program_template
+         (tenant_id, bank_name, min_down_payment_bp, promo_rate_bp, promo_months,
+          standard_rate_bp, allowed_terms_months, down_payment_options_bp,
+          rate_updated_at, display_order, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::int[],$8::int[],$9::date,$10,$11,$11) RETURNING id`,
+      [TENANT_A, m.ten, m.dpMin, m.uuDai, m.thang, m.chuan, m.ky, m.dp, m.ngay, i, publisherId],
+    );
+    mauId[m.ten] = rows[0]!.id;
+  }
+
   await db.query(
     `INSERT INTO financing_program
-       (tenant_id, product_revision_id, bank_name, min_down_payment_bp, promo_rate_bp,
+       (tenant_id, product_revision_id, template_id, bank_name, min_down_payment_bp, promo_rate_bp,
         promo_months, standard_rate_bp, allowed_terms_months, down_payment_options_bp,
         rate_updated_at, display_order)
      VALUES
-       ($1,$2,'Techcombank',2000,750,12,1050,'{36,48,60,84}','{2000,3000,4000,5000}','2026-08-28',0),
-       ($1,$2,'VPBank',2000,790,12,1080,'{36,48,60}','{2000,3000,4000}','2026-08-28',1),
-       ($1,$2,'VIB',3000,820,6,1120,'{36,48,60}','{3000,4000,5000}','2026-08-20',2)`,
-    [TENANT_A, revisionId],
+       ($1,$2,$3,'Techcombank',2000,750,12,1050,'{36,48,60,84}','{2000,3000,4000,5000}','2026-08-28',0),
+       ($1,$2,$4,'VPBank',2000,790,12,1080,'{36,48,60}','{2000,3000,4000}','2026-08-28',1),
+       -- ⚠️ Lệch có chủ ý: mẫu VIB đã đổi sang 8,00 %/11,00 % ngày 05/09, bản chép
+       --    trên mẫu xe vẫn là 8,20 %/11,20 % của ngày 20/08.
+       ($1,$2,$5,'VIB',3000,820,6,1120,'{36,48,60}','{3000,4000,5000}','2026-08-20',2)`,
+    [TENANT_A, revisionId, mauId['Techcombank'], mauId['VPBank'], mauId['VIB']],
   );
 
   /*
@@ -1842,6 +1875,240 @@ async function main(): Promise<void> {
       [TENANT_A, productId, b.id, tt.status, tt.min, tt.max, publisherId],
     );
   }
+
+  /*
+   * Câu hỏi thường gặp — bốn câu này TRƯỚC ĐÂY là mảng hằng trong
+   * `apps/landing/src/app/lien-he/page.tsx`. Chuyển nguyên văn vào dữ liệu để
+   * trang Liên hệ trông y như cũ sau khi đổi nguồn, và để có ca thử thật cho
+   * `faq_placement`.
+   *
+   * Câu thứ năm cố ý để nháp và câu thứ sáu cố ý chỉ gắn bề mặt VEHICLE: bài
+   * kiểm cần một câu KHÔNG được lọt ra `CONTACT` vì trạng thái, và một câu
+   * không lọt ra vì bề mặt. Hai lý do khác nhau, hai đường rò khác nhau.
+   */
+  console.log('Tạo câu hỏi thường gặp...');
+  const FAQ_SEED: {
+    hoi: string;
+    dap: string;
+    chuDe: string;
+    trangThai: 'DRAFT' | 'PUBLISHED';
+    beMat: string[];
+  }[] = [
+    {
+      hoi: 'Lái thử có mất phí không?',
+      dap: 'Không. Lái thử miễn phí, không cần đặt cọc và không ràng buộc mua.',
+      chuDe: 'Lái thử',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT', 'HOME'],
+    },
+    {
+      hoi: 'Giá lăn bánh trên trang có đúng không?',
+      dap: 'Là số ước tính theo biểu phí đang hiệu lực, hiện kèm ngày hiệu lực ngay cạnh con số. Showroom xác nhận lại khi ký hợp đồng.',
+      chuDe: 'Giá và chi phí',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT', 'VEHICLE'],
+    },
+    {
+      hoi: 'Có hỗ trợ trả góp không?',
+      dap: 'Có. Khoản trả góp trên trang là con số tham khảo; ngân hàng xét hồ sơ và quyết định điều kiện vay riêng.',
+      chuDe: 'Giá và chi phí',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT', 'VEHICLE'],
+    },
+    {
+      hoi: 'Mua xe ở đây có bắt buộc bảo dưỡng ở đây không?',
+      dap: 'Không bắt buộc. Nhưng xe mua tại đây được tạo hồ sơ sẵn trong hệ thống xưởng, nên lần bảo dưỡng đầu không phải khai lại từ đầu.',
+      chuDe: 'Sau khi mua',
+      trangThai: 'PUBLISHED',
+      beMat: ['CONTACT'],
+    },
+    {
+      hoi: 'Xe điện sạc ở đâu?',
+      dap: 'Bản nháp — chưa duyệt nội dung.',
+      chuDe: 'Xe điện',
+      trangThai: 'DRAFT',
+      beMat: ['CONTACT'],
+    },
+    {
+      hoi: 'Pin xe điện bảo hành bao lâu?',
+      dap: 'Tám năm hoặc 160.000 km, tuỳ điều kiện nào đến trước.',
+      chuDe: 'Xe điện',
+      trangThai: 'PUBLISHED',
+      beMat: ['VEHICLE'],
+    },
+  ];
+  for (const [i, c] of FAQ_SEED.entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO faq_item (tenant_id, question, answer, topic, display_order, status, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6::testimonial_status,$7,$7) RETURNING id`,
+      [TENANT_A, c.hoi, c.dap, c.chuDe, i, c.trangThai, publisherId],
+    );
+    for (const s of c.beMat) {
+      await db.query(
+        `INSERT INTO faq_placement (tenant_id, faq_item_id, surface) VALUES ($1,$2,$3::faq_surface)`,
+        [TENANT_A, rows[0]!.id, s],
+      );
+    }
+  }
+
+  /*
+   * Bài viết — ba bài, ba trạng thái khác nhau. Ba trạng thái đó là toàn bộ lý
+   * do seed này tồn tại: một bộ dữ liệu mà mọi bài đều đã publish thì không thử
+   * được điều kiện lọc nào cả.
+   *
+   *   1. đã publish và NỔI BẬT   → khối tràn viền đầu trang Tin tức
+   *   2. đã publish, thường      → lưới bài
+   *   3. mới tạo, chỉ có NHÁP    → KHÔNG được lọt ra landing
+   */
+  console.log('Tạo chuyên mục và bài viết...');
+  const chuyenMuc: Record<string, string> = {};
+  for (const [i, c] of [
+    { ten: 'Kinh nghiệm mua xe', slug: 'kinh-nghiem-mua-xe' },
+    { ten: 'Xe điện', slug: 'xe-dien' },
+  ].entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO article_category (tenant_id, name, slug, display_order, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$5) RETURNING id`,
+      [TENANT_A, c.ten, c.slug, i, publisherId],
+    );
+    chuyenMuc[c.slug] = rows[0]!.id;
+  }
+
+  const doanVan = (chu: string): string =>
+    JSON.stringify({
+      type: 'doc',
+      schemaVersion: 1,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: chu }] }],
+    });
+
+  const BAI_SEED = [
+    {
+      slug: 'chi-phi-thuc-te-khi-nuoi-mot-chiec-xe-dien',
+      tieuDe: 'Chi phí thực tế khi nuôi một chiếc xe điện',
+      tomTat: 'Tiền điện, tiền bảo dưỡng và những khoản không ai nói trước khi bạn ký hợp đồng.',
+      than: 'Xe điện rẻ hơn ở phần nhiên liệu và đắt hơn ở phần bảo hiểm. Bài này bóc từng khoản theo số liệu xưởng.',
+      chuyenMuc: 'xe-dien',
+      the: ['chi phí', 'xe điện'],
+      dang: true,
+      noiBat: true,
+    },
+    {
+      slug: 'sau-dieu-can-kiem-truoc-khi-nhan-xe',
+      tieuDe: 'Sáu điều cần kiểm trước khi nhận xe',
+      tomTat: 'Danh sách kiểm tra rút ra từ những lỗi khách hay phát hiện muộn.',
+      than: 'Nhận xe là lần cuối bạn có quyền từ chối mà không mất gì. Sáu mục dưới đây mất mười lăm phút.',
+      chuyenMuc: 'kinh-nghiem-mua-xe',
+      the: ['nhận xe'],
+      dang: true,
+      noiBat: false,
+    },
+    {
+      slug: 'bao-duong-mua-mua',
+      tieuDe: 'Bảo dưỡng mùa mưa',
+      tomTat: null,
+      than: 'Bản nháp — chưa duyệt.',
+      chuyenMuc: 'kinh-nghiem-mua-xe',
+      the: [],
+      dang: false,
+      noiBat: false,
+    },
+  ];
+
+  for (const b of BAI_SEED) {
+    const { rows: bai } = await db.query<{ id: string }>(
+      `INSERT INTO article (tenant_id, slug, category_id, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$4) RETURNING id`,
+      [TENANT_A, b.slug, chuyenMuc[b.chuyenMuc], publisherId],
+    );
+    const baiId = bai[0]!.id;
+    const { rows: rev } = await db.query<{ id: string }>(
+      `INSERT INTO article_revision
+         (tenant_id, article_id, revision_number, status, title, excerpt, body_document,
+          content_hash, created_by, updated_by)
+       VALUES ($1,$2,1,'DRAFT',$3,$4,$5::jsonb,$6,$7,$7) RETURNING id`,
+      [TENANT_A, baiId, b.tieuDe, b.tomTat, doanVan(b.than), `seed-${b.slug}`, publisherId],
+    );
+    await db.query('UPDATE article SET draft_revision_id = $2 WHERE id = $1', [baiId, rev[0]!.id]);
+    for (const t of b.the) {
+      await db.query('INSERT INTO article_tag (tenant_id, article_id, tag) VALUES ($1,$2,$3)', [
+        TENANT_A, baiId, t,
+      ]);
+    }
+    if (b.dang) {
+      await db.query(
+        `UPDATE article_revision SET status='PUBLISHED', published_at=now(), published_by=$2 WHERE id=$1`,
+        [rev[0]!.id, publisherId],
+      );
+      await db.query(
+        `UPDATE article SET published_revision_id=$2, draft_revision_id=NULL,
+                            published_at=now(), featured=$3 WHERE id=$1`,
+        [baiId, rev[0]!.id, b.noiBat],
+      );
+    }
+  }
+
+  /*
+   * Điều hướng — bộ mặc định, khớp ĐÚNG mảng `MAC_DINH` trong `site-header.tsx`
+   * và `site-footer.tsx`. Khớp là điều kiện để đổi nguồn dữ liệu mà người dùng
+   * không thấy gì đổi; lệch là một lỗi hiển thị chỉ hiện ra sau khi seed chạy.
+   */
+  console.log('Tạo menu và chuyển hướng...');
+  const MENU: { vt: 'HEADER' | 'FOOTER'; cot: number; nhan: string; duong: string }[] = [
+    { vt: 'HEADER', cot: 0, nhan: 'Xe đang bán', duong: '/xe' },
+    { vt: 'HEADER', cot: 0, nhan: 'Giá lăn bánh', duong: '/#gia-lan-banh' },
+    { vt: 'HEADER', cot: 0, nhan: 'Tin tức', duong: '/tin-tuc' },
+    { vt: 'HEADER', cot: 0, nhan: 'Liên hệ', duong: '/lien-he' },
+    { vt: 'FOOTER', cot: 0, nhan: 'Xe đang bán', duong: '/xe' },
+    { vt: 'FOOTER', cot: 0, nhan: 'Giá lăn bánh', duong: '/#gia-lan-banh' },
+    { vt: 'FOOTER', cot: 0, nhan: 'Đăng ký lái thử', duong: '/lien-he?nhu-cau=lai-thu' },
+    { vt: 'FOOTER', cot: 1, nhan: 'Tin tức', duong: '/tin-tuc' },
+    { vt: 'FOOTER', cot: 1, nhan: 'Gửi yêu cầu tư vấn', duong: '/lien-he' },
+    { vt: 'FOOTER', cot: 1, nhan: 'Hệ thống showroom', duong: '/#chi-nhanh' },
+  ];
+  for (const [i, m] of MENU.entries()) {
+    await db.query(
+      `INSERT INTO site_navigation
+         (tenant_id, placement, column_index, label, path, display_order, created_by, updated_by)
+       VALUES ($1,$2::nav_placement,$3,$4,$5,$6,$7,$7)`,
+      [TENANT_A, m.vt, m.cot, m.nhan, m.duong, i, publisherId],
+    );
+  }
+
+  /*
+   * Một chuyển hướng thật để bài kiểm có gì để thử: `/tin-tuc-cu` là đường dẫn
+   * của bản trang cũ. Đây đúng ca dùng mà bảng này sinh ra — đổi cấu trúc URL mà
+   * không bỏ rơi link đã có ngoài internet.
+   */
+  await db.query(
+    `INSERT INTO site_redirect (tenant_id, from_path, to_path, status_code, note, created_by, updated_by)
+     VALUES ($1,'/tin-tuc-cu','/tin-tuc',301,'Đường dẫn của bản trang trước',$2,$2)`,
+    [TENANT_A, publisherId],
+  );
+
+  /*
+   * Biểu mẫu và câu đồng ý.
+   *
+   * 🔒 Phiên bản `2026-08-1` trùng ĐÚNG hằng số `LEAD_CONSENT_VERSION` trong
+   *    `sales.service.ts`, và câu chữ trùng đúng chuỗi từng nằm trong JSX của
+   *    `lead-form.tsx`. Trùng là điều kiện để lead cũ và lead mới cùng trỏ về một
+   *    nội dung đọc lại được; lệch là tạo ra đúng cái lỗ mà 0079 sinh ra để bịt.
+   */
+  console.log('Tạo biểu mẫu và câu đồng ý...');
+  const { rows: bm } = await db.query<{ id: string }>(
+    `INSERT INTO lead_form (tenant_id, code, created_by, updated_by)
+     VALUES ($1,'LANDING',$2,$2) RETURNING id`,
+    [TENANT_A, publisherId],
+  );
+  await db.query(
+    `INSERT INTO lead_form_consent_version (tenant_id, form_id, version, body, effective_from, created_by)
+     VALUES ($1,$2,'2026-08-1',$3, now() - interval '30 days', $4)`,
+    [
+      TENANT_A,
+      bm[0]!.id,
+      'Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp',
+      publisherId,
+    ],
+  );
 
   await db.query('COMMIT');
 

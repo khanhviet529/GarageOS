@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { PublicSiteView, ExperienceSelection } from '@garageos/contracts';
+import type { PublicSiteView, ExperienceSelection, PublicLeadForm } from '@garageos/contracts';
 import { browserApiOrigin } from '@/lib/api-client';
 
 interface LeadFormProps {
@@ -28,6 +28,17 @@ interface LeadFormProps {
   productLabel?: string;
   variants?: { id: string; name: string; displayPrice: number | null }[];
   experienceSelection?: ExperienceSelection;
+  /**
+   * Cấu hình biểu mẫu từ máy chủ (`lead_form`, migration 0079).
+   *
+   * 🔒 CÂU ĐỒNG Ý là phần quan trọng nhất ở đây. Trước 0079 nó là một chuỗi
+   *    trong JSX, còn `sales_lead.consent_version` được ghi bằng một hằng số
+   *    trong service — hệ thống lưu "khách đồng ý phiên bản 2026-08-1" mà không
+   *    lưu ở đâu phiên bản đó nói gì. NĐ 13/2023 đòi chứng minh được điều đó.
+   *
+   * Không truyền thì dùng mặc định, để mọi chỗ đang gọi `LeadForm` không gãy.
+   */
+  cauHinh?: PublicLeadForm | null;
 }
 
 interface ApiErrorBody {
@@ -45,6 +56,13 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
   const { site, productId, variantId, productLabel, variants, experienceSelection } = props;
   const intentMacDinh = props.intentMacDinh ?? 'REQUEST_QUOTE';
   const lopForm = props.nenGiay === true ? 'lead-form lead-form--giay' : 'lead-form';
+  const cauHinh: PublicLeadForm = props.cauHinh ?? {
+    successTitle: 'Cảm ơn bạn đã gửi yêu cầu!',
+    successBody: 'Nhân viên tư vấn sẽ liên hệ trong thời gian sớm nhất.',
+    showMessageField: true,
+    showBranchField: true,
+    consentBody: 'Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp',
+  };
   const [state, setState] = useState<'idle' | 'submitting'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState<string | null>(null);
@@ -108,10 +126,14 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
   if (reference !== null) {
     return (
       <div className="success" role="status">
-        <strong>Cảm ơn bạn đã gửi yêu cầu!</strong>
+        <strong>{cauHinh.successTitle}</strong>
         <p>
-          Mã tham chiếu của bạn: <strong>{reference}</strong>.
-          Nhân viên tư vấn sẽ liên hệ trong thời gian sớm nhất.
+          {/*
+            🔒 MÃ THAM CHIẾU luôn hiện, không phụ thuộc câu chữ cấu hình được.
+               Nó là thứ duy nhất khách cầm được sau khi gửi; để nó vào phần văn
+               bản tự do là cho phép xoá mất nó bằng một lần sửa nội dung.
+          */}
+          Mã tham chiếu của bạn: <strong>{reference}</strong>. {cauHinh.successBody}
         </p>
       </div>
     );
@@ -171,25 +193,37 @@ export function LeadForm(props: LeadFormProps): React.ReactElement {
         </label>
       )}
 
-      {branches.length > 0 && (
-        <label htmlFor="branchId">
-          Chi nhánh mong muốn *
-          <select id="branchId" name="branchId" required defaultValue={branches[0]?.id}>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+      {branches.length > 0 &&
+        (cauHinh.showBranchField ? (
+          <label htmlFor="branchId">
+            Chi nhánh mong muốn *
+            <select id="branchId" name="branchId" required defaultValue={branches[0]?.id}>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          /*
+           * 🔒 Tắt ô chọn KHÔNG có nghĩa là không gửi chi nhánh.
+           *
+           * `LeadCreateInput.branchId` là bắt buộc, và mọi lead phải thuộc về một
+           * chi nhánh — phạm vi dữ liệu của tư vấn viên dựa vào đó. Tắt ô chỉ là
+           * "đừng hỏi khách" (showroom một điểm bán), không phải "để trống".
+           */
+          <input type="hidden" name="branchId" value={branches[0]?.id ?? ''} />
+        ))}
+
+      {cauHinh.showMessageField && (
+        <label htmlFor="message">
+          Lời nhắn (tuỳ chọn)
+          <textarea id="message" name="message" rows={3} maxLength={2000} />
         </label>
       )}
 
-      <label htmlFor="message">
-        Lời nhắn (tuỳ chọn)
-        <textarea id="message" name="message" rows={3} maxLength={2000} />
-      </label>
-
       <label className="dong-y">
         <input type="checkbox" name="consent" required />
-        <span>Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp *</span>
+        <span>{cauHinh.consentBody} *</span>
       </label>
 
       {error !== null && (

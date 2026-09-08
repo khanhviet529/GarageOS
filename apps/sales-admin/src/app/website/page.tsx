@@ -170,12 +170,14 @@ export default function WebsitePages(): React.ReactElement {
             <CardHeader>
               <CardTitle>Menu đầu trang và chân trang</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col items-start gap-3">
               <p className="text-xs text-text-muted">
-                Bộ thiết kế có khối sắp xếp menu đầu trang, ba cột chân trang và bảng chuyển hướng. Ba khối
-                đó cần một mô hình dữ liệu điều hướng riêng — hiện chưa có endpoint nào cho chúng, nên màn
-                này chưa dựng thay vì hiện một danh sách không lưu được. Xem báo cáo cuối.
+                Sắp xếp mục menu đầu trang, hai cột liên kết ở chân trang, và bảng chuyển hướng URL khi
+                đổi đường dẫn một trang.
               </p>
+              <Button variant="secondary" size="sm" asChild>
+                <Link href="/website/navigation">Mở Menu &amp; chuyển hướng</Link>
+              </Button>
             </CardContent>
           </Card>
         </div>

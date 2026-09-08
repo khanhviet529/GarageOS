@@ -1,5 +1,13 @@
 import { requestHost, fetchPublic, httpStatusForPublicApiError } from '@/lib/api';
-import type { PublicSiteView } from '@garageos/contracts';
+import type {
+  PublicSiteView,
+  PublicFaqItem,
+  FaqSurface,
+  PublicArticleSummary,
+  PublicNavItem,
+  NavPlacement,
+  PublicLeadForm,
+} from '@garageos/contracts';
 
 /**
  * Nạp site profile published theo host của request — mỗi trang gọi một lần.
@@ -63,4 +71,65 @@ export function formatPriceParts(amount: number | null): GiaTach {
 export function formatPrice(amount: number | null): string {
   const { so, kyHieu } = formatPriceParts(amount);
   return kyHieu === null ? so : `${so} ${kyHieu}`;
+}
+
+/**
+ * Câu hỏi thường gặp của MỘT bề mặt.
+ *
+ * ⚠️ Hỏng thì trả mảng RỖNG, không ném lỗi. Khối FAQ là nội dung phụ trợ; một
+ *    lượt gọi hỏng không được kéo cả trang Liên hệ xuống 500 — người đang cần
+ *    số điện thoại showroom vẫn phải thấy số điện thoại showroom.
+ */
+export async function loadFaq(surface: FaqSurface): Promise<PublicFaqItem[]> {
+  try {
+    const host = await requestHost();
+    const kq = await fetchPublic<{ items: PublicFaqItem[] }>(host, `/faq?surface=${surface}`);
+    return kq.items;
+  } catch {
+    return [];
+  }
+}
+
+/** Danh sách bài viết đã công bố. Hỏng thì trả rỗng — xem `loadFaq`. */
+export async function loadArticles(limit = 12): Promise<PublicArticleSummary[]> {
+  try {
+    const host = await requestHost();
+    const kq = await fetchPublic<{ items: PublicArticleSummary[] }>(host, `/articles?limit=${limit}`);
+    return kq.items;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Menu của một vị trí. Rỗng = tenant chưa cấu hình → chỗ gọi dùng menu mặc định.
+ *
+ * ⚠️ Trả rỗng cũng là kết quả của LỖI mạng, và hai trường hợp đó không phân biệt
+ *    được ở đây. Đó là lý do chỗ gọi phải có menu mặc định thay vì vẽ một thanh
+ *    điều hướng trống: một trang bán xe không có menu là một trang không đi đâu
+ *    được.
+ */
+export async function loadNav(placement: NavPlacement): Promise<PublicNavItem[]> {
+  try {
+    const host = await requestHost();
+    const kq = await fetchPublic<{ items: PublicNavItem[] }>(host, `/navigation?placement=${placement}`);
+    return kq.items;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Cấu hình biểu mẫu. Hỏng thì trả `null` → `LeadForm` dùng mặc định của nó.
+ *
+ * 🔒 Không bao giờ để biểu mẫu KHÔNG render vì lượt gọi này hỏng: form thu nhu
+ *    cầu là đường chuyển đổi chính của trang bán xe.
+ */
+export async function loadLeadForm(): Promise<PublicLeadForm | null> {
+  try {
+    const host = await requestHost();
+    return await fetchPublic<PublicLeadForm>(host, '/lead-form');
+  } catch {
+    return null;
+  }
 }

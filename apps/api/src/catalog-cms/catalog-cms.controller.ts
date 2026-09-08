@@ -2,9 +2,11 @@ import {
   Body, Controller, Delete, Get, Inject, Param, Patch, Post, UseGuards,
 } from '@nestjs/common';
 import {
-  CategoryInput, CategoryUpdateInput, ErrorCode, TestimonialInput,
-  TestimonialUpdateInput, type ActorContext,
+  CategoryInput, CategoryUpdateInput, ErrorCode, FaqItemInput, FaqItemUpdateInput,
+  TestimonialInput, TestimonialUpdateInput,
+  type ActorContext, type FaqItemRow, type FaqSurface,
 } from '@garageos/contracts';
+import type { PoolClient } from 'pg';
 import { TenantAwareDb } from '@garageos/db';
 import { JwtGuard } from '../auth/jwt.guard';
 import { Actor } from '../common/actor.decorator';
@@ -124,6 +126,143 @@ export class CatalogCmsController {
   hide(@Actor() actor: ActorContext, @Param('id') id: string): Promise<{ status: 'HIDDEN' }> {
     assertCan(actor, 'marketing:reviewPublish');
     return this.status(actor, id, 'HIDDEN', 'PUBLISHED');
+  }
+
+  /* ========================= Câu hỏi thường gặp ========================== */
+
+  @Get('faq-items')
+  async faqItems(@Actor() actor: ActorContext): Promise<{ items: FaqItemRow[] }> {
+    assertCan(actor, 'marketing:faqRead');
+    return this.db.withTenant(actor, async (tx) => ({
+      items: (await tx.query<FaqItemRow>(
+        `SELECT f.id, f.question, f.answer, f.topic, f.display_order AS "displayOrder",
+                f.status, f.version,
+                COALESCE(
+                  (SELECT array_agg(p.surface::text ORDER BY p.surface)
+                     FROM faq_placement p WHERE p.faq_item_id = f.id AND p.enabled),
+                  '{}'
+                ) AS surfaces
+           FROM faq_item f
+          ORDER BY f.display_order, f.created_at`,
+      )).rows,
+    }));
+  }
+
+  @Post('faq-items')
+  async createFaqItem(
+    @Actor() actor: ActorContext,
+    @Body(new ZodPipe(FaqItemInput)) input: FaqItemInput,
+  ): Promise<{ id: string }> {
+    assertCan(actor, 'marketing:faqWrite');
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO faq_item (tenant_id, question, answer, topic, display_order, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$6) RETURNING id`,
+        [actor.tenantId, input.question, input.answer, input.topic ?? null, input.displayOrder, actor.userId],
+      );
+      const id = rows[0]!.id;
+      await this.datViTri(tx, actor, id, input.surfaces);
+      return { id };
+    });
+  }
+
+  @Patch('faq-items/:id')
+  async updateFaqItem(
+    @Actor() actor: ActorContext,
+    @Param('id') id: string,
+    @Body(new ZodPipe(FaqItemUpdateInput)) input: FaqItemUpdateInput,
+  ): Promise<{ item: Record<string, unknown> }> {
+    assertCan(actor, 'marketing:faqWrite');
+    return this.db.withTenant(actor, async (tx) => {
+      /*
+       * 🔒 Sửa được cả khi ĐANG PUBLISHED, khác với testimonial.
+       *
+       * Testimonial là lời của NGƯỜI KHÁC: sửa nội dung đã công bố là sửa lời
+       * của họ, nên phải gỡ xuống trước. Câu hỏi thường gặp là lời của chính
+       * xưởng — và một câu trả lời SAI đang hiện trên trang thì thứ cần nhất là
+       * sửa được ngay, không phải một quy trình.
+       *
+       * Đổi lại, `version` vẫn phải khớp: hai người sửa cùng lúc thì một người
+       * nhận lỗi, không phải mất bài.
+       */
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `UPDATE faq_item SET question=$2, answer=$3, topic=$4, display_order=$5, updated_by=$6
+          WHERE id=$1 AND version=$7 RETURNING id, version`,
+        [id, input.question, input.answer, input.topic ?? null, input.displayOrder, actor.userId, input.version],
+      );
+      if (rows[0] === undefined) {
+        throw new BusinessError(ErrorCode.STALE_VERSION, 'Câu hỏi đã thay đổi, hãy tải lại.');
+      }
+      await this.datViTri(tx, actor, id, input.surfaces);
+      return { item: rows[0] };
+    });
+  }
+
+  @Delete('faq-items/:id')
+  async deleteFaqItem(@Actor() actor: ActorContext, @Param('id') id: string): Promise<{ deleted: true }> {
+    assertCan(actor, 'marketing:faqWrite');
+    return this.db.withTenant(actor, async (tx) => {
+      const { rowCount } = await tx.query('DELETE FROM faq_item WHERE id=$1', [id]);
+      if (rowCount === 0) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy câu hỏi.');
+      return { deleted: true };
+    });
+  }
+
+  @Post('faq-items/:id/publish')
+  publishFaq(@Actor() actor: ActorContext, @Param('id') id: string): Promise<{ status: 'PUBLISHED' }> {
+    assertCan(actor, 'marketing:faqPublish');
+    return this.trangThaiFaq(actor, id, 'PUBLISHED', ['DRAFT', 'HIDDEN']);
+  }
+
+  @Post('faq-items/:id/hide')
+  hideFaq(@Actor() actor: ActorContext, @Param('id') id: string): Promise<{ status: 'HIDDEN' }> {
+    assertCan(actor, 'marketing:faqPublish');
+    return this.trangThaiFaq(actor, id, 'HIDDEN', ['PUBLISHED']);
+  }
+
+  private async trangThaiFaq<T extends 'PUBLISHED' | 'HIDDEN'>(
+    actor: ActorContext,
+    id: string,
+    status: T,
+    tu: ('DRAFT' | 'PUBLISHED' | 'HIDDEN')[],
+  ): Promise<{ status: T }> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ status: T }>(
+        'UPDATE faq_item SET status=$2, updated_by=$3 WHERE id=$1 AND status = ANY($4) RETURNING status',
+        [id, status, actor.userId, tu],
+      );
+      if (rows[0] === undefined) {
+        throw new BusinessError(ErrorCode.INVALID_STATE_TRANSITION, 'Chuyển trạng thái câu hỏi không hợp lệ.');
+      }
+      return { status: rows[0].status };
+    });
+  }
+
+  /**
+   * Đặt lại TOÀN BỘ vị trí hiện của một câu hỏi.
+   *
+   * 🔒 Xoá-rồi-chèn ở đây là an toàn, khác với màu xe (0072): không bảng nào trỏ
+   *    tới `faq_placement`, khoá chính của nó là `(faq_item_id, surface)` chứ
+   *    không phải một uuid sinh ra, nên không có `id` nào để mất.
+   */
+  private async datViTri(
+    tx: PoolClient,
+    actor: ActorContext,
+    faqItemId: string,
+    surfaces: FaqSurface[],
+  ): Promise<void> {
+    await tx.query(
+      `DELETE FROM faq_placement WHERE faq_item_id = $1 AND surface <> ALL($2::faq_surface[])`,
+      [faqItemId, surfaces],
+    );
+    for (const s of surfaces) {
+      await tx.query(
+        `INSERT INTO faq_placement (tenant_id, faq_item_id, surface, enabled)
+         VALUES ($1,$2,$3::faq_surface,true)
+         ON CONFLICT (faq_item_id, surface) DO UPDATE SET enabled = true`,
+        [actor.tenantId, faqItemId, s],
+      );
+    }
   }
 
   private async status<T extends 'PUBLISHED' | 'HIDDEN'>(actor: ActorContext, id: string, status: T, from: 'DRAFT' | 'PUBLISHED'): Promise<{ status: T }> {

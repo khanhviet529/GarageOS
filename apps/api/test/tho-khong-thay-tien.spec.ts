@@ -182,6 +182,9 @@ before(async () => {
     '/api/v1/marketing/categories',
     '/api/v1/marketing/testimonials',
     '/api/v1/showroom/fee-schedules',
+    // Thư viện trả góp: bề mặt QUẢN TRỊ đầy lãi suất — phải nằm trong bài quét.
+    '/api/v1/showroom/financing-templates',
+    '/api/v1/showroom/financing-drift',
     ...(xe[0] === undefined
       ? []
       : [
@@ -292,6 +295,17 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'vehicle-products/:slug/gia-lan-banh',
       'landing-page', 'landing-page-preview',
       'site-profile', 'branch-public-profiles', 'branches', 'site', 'leads', 'leads/:id',
+      // Câu hỏi thường gặp: nội dung trang web, không có số tiền nào. Vai bị cấm
+      // đã có bài riêng canh ở `ma-tran-quyen.spec.ts`.
+      'faq-items', 'faq',
+      // Bài viết: nội dung trang web. Vai bị cấm có bài riêng ở `ma-tran-quyen`.
+      'articles', 'articles/:id/draft', 'articles/:slug', 'article-categories',
+      // Menu và chuyển hướng: nhãn chữ và đường dẫn, không có số tiền nào.
+      'navigation', 'redirects', 'redirect',
+      // Biểu mẫu: câu chữ và công tắc hiển thị, không có số tiền nào.
+      'lead-form', 'lead-form/consent-versions',
+      // Người dùng và vai: không có số tiền nào; vai bị cấm có bài riêng ở đây.
+      'users',
     ]);
 
     const thieu: string[] = [];

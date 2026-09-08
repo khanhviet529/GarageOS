@@ -1,0 +1,164 @@
+/*
+ * Trang Tin tức — DES-LS-002, bản dựng 1440 × 2802.
+ *
+ * Bố cục: đầu trang · bài nổi bật tràn viền · lưới bài · chân trang.
+ * Không có khối "đăng ký nhận tin": chưa có mô hình dữ liệu cho nó, và một ô
+ * nhập email không lưu vào đâu là cách chắc chắn nhất để mất lòng tin.
+ */
+
+.dau {
+  padding: var(--s-9) 0 var(--s-7);
+  background: var(--ink-0);
+}
+.dau h1 {
+  max-width: 18ch;
+  margin-top: var(--s-3);
+  font-size: var(--fs-title-xl);
+  letter-spacing: var(--ls-title);
+  line-height: var(--lh-title);
+}
+
+/* ── Bài nổi bật ─────────────────────────────────────────────────────────
+ * Một chỗ, không phải một danh sách — `uq_article_one_featured` (0077) giữ
+ * đúng một dòng `featured` mỗi tenant, nên bố cục này không bao giờ phải xử lý
+ * trường hợp "hai bài cùng nổi bật".
+ */
+.noiBat {
+  display: block;
+  padding: var(--s-8) 0;
+  border-block: 1px solid var(--line);
+  background: var(--ink-1);
+  color: inherit;
+  text-decoration: none;
+}
+.noiBatTrong {
+  display: grid;
+  gap: var(--s-7);
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.noiBatAnh {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--r-lg);
+  background: var(--photo);
+}
+.noiBatAnh img { width: 100%; height: 100%; object-fit: cover; }
+.noiBat h2 {
+  margin-top: var(--s-3);
+  font-size: var(--fs-title);
+  letter-spacing: var(--ls-title);
+  line-height: var(--lh-title);
+}
+.noiBat p { max-width: 46ch; margin-top: var(--s-4); color: var(--text-muted); }
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: baseline;
+  margin-top: var(--s-4);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-lg);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+}
+
+/* ── Lưới bài ────────────────────────────────────────────────────────────── */
+.luoi {
+  display: grid;
+  gap: var(--s-7) var(--s-6);
+  padding: var(--s-8) 0 var(--s-9);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.the { color: inherit; text-decoration: none; }
+.theAnh {
+  overflow: hidden;
+  aspect-ratio: 3 / 2;
+  border-radius: var(--r-md);
+  background: var(--photo);
+}
+.theAnh img { width: 100%; height: 100%; object-fit: cover; }
+.the h3 {
+  margin-top: var(--s-4);
+  font-size: var(--fs-title-sm);
+  letter-spacing: var(--ls-title);
+  line-height: var(--lh-title);
+}
+.the p { margin-top: var(--s-2); color: var(--text-muted); font-size: var(--fs-sm); }
+.the:hover h3 { color: var(--brand); }
+
+.rong {
+  padding: var(--s-9) 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ── Trang chi tiết ──────────────────────────────────────────────────────── */
+.baiDau { padding: var(--s-9) 0 var(--s-6); background: var(--ink-0); }
+.baiDau h1 {
+  max-width: 24ch;
+  margin-top: var(--s-3);
+  font-size: var(--fs-title-xl);
+  letter-spacing: var(--ls-title);
+  line-height: var(--lh-title);
+}
+.baiTomTat { max-width: 52ch; margin-top: var(--s-4); color: var(--text-muted); font-size: var(--fs-lead); }
+
+.baiAnh {
+  overflow: hidden;
+  aspect-ratio: 21 / 9;
+  border-radius: var(--r-lg);
+  background: var(--photo);
+}
+.baiAnh img { width: 100%; height: 100%; object-fit: cover; }
+
+/*
+ * Thân bài trên KHỐI GIẤY: văn bản dài đọc trên nền tối là thứ người ta bỏ dở.
+ * Cả khối vì thế dùng đủ bộ `--paper-*`, không trộn với token nền tối.
+ */
+.than {
+  padding: var(--s-8) 0 var(--s-9);
+  background: var(--paper-0);
+  color: var(--paper-ink);
+}
+.thanTrong { max-width: var(--measure); }
+.thanTrong > * + * { margin-top: var(--s-4); }
+.thanTrong h2 { margin-top: var(--s-7); font-size: var(--fs-title-sm); letter-spacing: var(--ls-title); }
+.thanTrong h3 { margin-top: var(--s-6); font-size: var(--fs-lead); font-weight: 600; }
+.thanTrong p { line-height: var(--lh-body); }
+.thanTrong a { color: var(--paper-action); text-underline-offset: 3px; }
+.thanTrong ul, .thanTrong ol { padding-left: 1.4em; }
+.thanTrong li + li { margin-top: var(--s-2); }
+.thanTrong li p + p { margin-top: var(--s-2); }
+.thanTrong blockquote {
+  padding-left: var(--s-5);
+  border-left: 3px solid var(--paper-line-strong);
+  color: var(--paper-muted);
+  font-size: var(--fs-lead);
+}
+
+.the2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-7);
+}
+.the2 span {
+  padding: 4px 10px;
+  border: 1px solid var(--paper-line-strong);
+  border-radius: var(--r-full);
+  color: var(--paper-muted);
+  font-size: var(--fs-xs);
+}
+
+@media (max-width: 1100px) {
+  .luoi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .noiBatTrong { grid-template-columns: 1fr; }
+  .luoi { grid-template-columns: 1fr; gap: var(--s-6); }
+  .dau h1, .baiDau h1 { font-size: var(--fs-title); }
+}

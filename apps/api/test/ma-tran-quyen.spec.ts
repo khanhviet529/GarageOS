@@ -442,6 +442,79 @@ const KICH_BAN: KichBan[] = [
     goi: (v) => call('POST', `/api/v1/marketing/testimonials/${UUID_GIA}/publish`, undefined, v),
   },
   {
+    quyen: 'org:userRead',
+    ten: 'Xem danh sách người dùng',
+    goi: (v) => call('GET', '/api/v1/admin/users', undefined, v),
+  },
+  {
+    quyen: 'org:userRoleWrite',
+    ten: 'Gán vai cho người dùng',
+    goi: (v) =>
+      call('PUT', `/api/v1/admin/users/${UUID_GIA}/roles`, { roles: ['TECHNICIAN'], version: 0 }, v),
+  },
+  {
+    quyen: 'marketing:leadFormRead',
+    ten: 'Xem cấu hình biểu mẫu',
+    goi: (v) => call('GET', '/api/v1/marketing/lead-form', undefined, v),
+  },
+  {
+    quyen: 'marketing:leadFormWrite',
+    ten: 'Sửa biểu mẫu và câu đồng ý',
+    goi: (v) =>
+      call('PUT', '/api/v1/marketing/lead-form', {
+        successTitle: 'Thử quyền', successBody: '', showMessageField: true, showBranchField: true,
+      }, v),
+  },
+  {
+    quyen: 'marketing:navigationRead',
+    ten: 'Xem menu và chuyển hướng',
+    goi: (v) => call('GET', '/api/v1/marketing/navigation', undefined, v),
+  },
+  {
+    quyen: 'marketing:navigationWrite',
+    ten: 'Sửa menu',
+    goi: (v) =>
+      call('POST', '/api/v1/marketing/navigation', {
+        placement: 'HEADER', columnIndex: 0, label: 'Thử quyền', path: '/xe',
+        displayOrder: 0, visible: false,
+      }, v),
+  },
+  {
+    quyen: 'marketing:articleRead',
+    ten: 'Xem bài viết',
+    goi: (v) => call('GET', '/api/v1/marketing/articles', undefined, v),
+  },
+  {
+    quyen: 'marketing:articleWrite',
+    ten: 'Soạn bài viết',
+    goi: (v) =>
+      call('POST', '/api/v1/marketing/articles', { slug: 'bai-thu-ma-tran-quyen', title: 'Bài thử quyền' }, v),
+  },
+  {
+    quyen: 'marketing:articlePublish',
+    ten: 'Đăng bài viết',
+    goi: (v) => call('POST', `/api/v1/marketing/articles/${UUID_GIA}/publish`, undefined, v),
+  },
+  {
+    quyen: 'marketing:faqRead',
+    ten: 'Xem câu hỏi thường gặp',
+    goi: (v) => call('GET', '/api/v1/marketing/faq-items', undefined, v),
+  },
+  {
+    quyen: 'marketing:faqWrite',
+    ten: 'Sửa câu hỏi thường gặp',
+    goi: (v) =>
+      call('PATCH', `/api/v1/marketing/faq-items/${UUID_GIA}`, {
+        question: 'Câu hỏi thử?', answer: 'Trả lời thử.', topic: null, displayOrder: 0,
+        surfaces: [], version: 0,
+      }, v),
+  },
+  {
+    quyen: 'marketing:faqPublish',
+    ten: 'Công bố câu hỏi thường gặp',
+    goi: (v) => call('POST', `/api/v1/marketing/faq-items/${UUID_GIA}/publish`, undefined, v),
+  },
+  {
     quyen: 'showroom:feeScheduleRead',
     ten: 'Xem biểu phí lăn bánh',
     goi: (v) => call('GET', '/api/v1/showroom/fee-schedules', undefined, v),
