@@ -86,8 +86,15 @@ test.describe('Sales Admin', () => {
     await dangNhap(page, '0901000011'); // MARKETING_PUBLISHER
     await page.goto(`${ADMIN}/vehicles`);
 
-    // Loại `/vehicles/new` — đó là nút "tạo xe mới", không phải một dòng xe.
-    const xe = page.locator('a[href^="/vehicles/"]:not([href="/vehicles/new"])').first();
+    /*
+     * ⚠️ Mốc vào ĐÚNG `aurora-e1`, không phải "xe đầu tiên trong danh sách".
+     *
+     * Bài này khẳng định bản nháp mang theo MÀU, mà seed chỉ khai màu cho
+     * `aurora-e1`. Lấy xe đầu tiên thì kết quả phụ thuộc thứ tự sắp xếp: ở máy
+     * này ra aurora và xanh, trên CI ra `meridian-x5` — xe không có màu nào —
+     * rồi bài đỏ vì một lý do không liên quan đến thứ nó kiểm.
+     */
+    const xe = page.getByRole('link', { name: /aurora/i }).first();
     await expect(xe).toBeVisible();
     await xe.click();
     await expect(page).toHaveURL(/\/vehicles\/[0-9a-f-]{36}$/);
