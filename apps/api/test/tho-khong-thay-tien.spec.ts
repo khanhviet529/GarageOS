@@ -299,6 +299,8 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'articles', 'articles/:id/draft', 'articles/:slug', 'article-categories',
       // Menu và chuyển hướng: nhãn chữ và đường dẫn, không có số tiền nào.
       'navigation', 'redirects', 'redirect',
+      // Biểu mẫu: câu chữ và công tắc hiển thị, không có số tiền nào.
+      'lead-form', 'lead-form/consent-versions',
     ]);
 
     const thieu: string[] = [];

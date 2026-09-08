@@ -58,7 +58,7 @@ export const NAVIGATION: NavGroup[] = [
       { href: '/website/news', label: 'Tin tức', hint: 'Bài viết trên landing', icon: Newspaper, permission: 'marketing:articleRead' },
       { href: '/website/faq', label: 'Câu hỏi', hint: 'Câu hỏi thường gặp', icon: HelpCircle, permission: 'marketing:faqRead' },
       { href: '/website/navigation', label: 'Menu & chuyển hướng', hint: 'Điều hướng và URL cũ', icon: Route, permission: 'marketing:navigationRead' },
-      { href: '/website/forms', label: 'Biểu mẫu', hint: 'Biểu mẫu thu nhu cầu khách', icon: MessageSquareQuote, permission: 'marketing:landingRead' },
+      { href: '/website/forms', label: 'Biểu mẫu', hint: 'Biểu mẫu thu nhu cầu khách', icon: MessageSquareQuote, permission: 'marketing:leadFormRead' },
       { href: '/website/media', label: 'Thư viện ảnh', hint: 'Ảnh và video dùng lại', icon: ImageIcon, permission: 'marketing:mediaRead' },
       { href: '/website/history', label: 'Lịch sử xuất bản', hint: 'Bản đã đẩy ra công khai', icon: CalendarCheck, permission: 'marketing:landingRead' },
     ],

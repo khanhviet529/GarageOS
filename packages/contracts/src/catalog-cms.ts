@@ -288,3 +288,52 @@ export const RedirectRow = RedirectInput.extend({
   version: z.number().int(),
 });
 export type RedirectRow = z.infer<typeof RedirectRow>;
+
+/* ================================ Biểu mẫu ================================== */
+
+export const LeadFormInput = z.object({
+  successTitle: z.string().trim().min(1).max(120),
+  successBody: z.string().trim().max(400),
+  showMessageField: z.boolean().default(true),
+  showBranchField: z.boolean().default(true),
+});
+export type LeadFormInput = z.infer<typeof LeadFormInput>;
+
+export const LeadFormView = LeadFormInput.extend({
+  id: z.string().uuid(),
+  code: z.string(),
+  version: z.number().int(),
+  /** Phiên bản câu đồng ý đang hiệu lực. Null = chưa khai phiên bản nào. */
+  consentVersion: z.string().nullable(),
+  consentBody: z.string().nullable(),
+});
+export type LeadFormView = z.infer<typeof LeadFormView>;
+
+/**
+ * Thêm một phiên bản câu đồng ý.
+ *
+ * 🔒 Chỉ THÊM, không sửa và không xoá — `lead_form_consent_version` là bảng
+ *    chỉ-thêm (0079). Một dòng ở đó là bằng chứng "ngày đó khách đồng ý với câu
+ *    này"; sửa được nó thì nó không còn là bằng chứng.
+ */
+export const ConsentVersionInput = z.object({
+  version: z.string().trim().min(1).max(40),
+  body: z.string().trim().min(1).max(1_000),
+});
+export type ConsentVersionInput = z.infer<typeof ConsentVersionInput>;
+
+export const ConsentVersionRow = ConsentVersionInput.extend({
+  id: z.string().uuid(),
+  effectiveFrom: z.string(),
+});
+export type ConsentVersionRow = z.infer<typeof ConsentVersionRow>;
+
+/** Cấu hình biểu mẫu mà landing cần để vẽ — không có id, không có version. */
+export const PublicLeadForm = z.object({
+  successTitle: z.string(),
+  successBody: z.string(),
+  showMessageField: z.boolean(),
+  showBranchField: z.boolean(),
+  consentBody: z.string(),
+});
+export type PublicLeadForm = z.infer<typeof PublicLeadForm>;

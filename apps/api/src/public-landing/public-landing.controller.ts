@@ -164,6 +164,13 @@ export class PublicLandingController {
     res.json(kq ?? { to: null, statusCode: null });
   }
 
+  @Get('lead-form')
+  async leadForm(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    res.json(await this.svc.leadForm(this.requireContext(r)));
+  }
+
   @Get('articles')
   async articles(
     @Req() req: Request,

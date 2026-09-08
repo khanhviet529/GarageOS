@@ -6,6 +6,7 @@ import type {
   PublicArticleSummary,
   PublicNavItem,
   NavPlacement,
+  PublicLeadForm,
 } from '@garageos/contracts';
 
 /**
@@ -115,5 +116,20 @@ export async function loadNav(placement: NavPlacement): Promise<PublicNavItem[]>
     return kq.items;
   } catch {
     return [];
+  }
+}
+
+/**
+ * Cấu hình biểu mẫu. Hỏng thì trả `null` → `LeadForm` dùng mặc định của nó.
+ *
+ * 🔒 Không bao giờ để biểu mẫu KHÔNG render vì lượt gọi này hỏng: form thu nhu
+ *    cầu là đường chuyển đổi chính của trang bán xe.
+ */
+export async function loadLeadForm(): Promise<PublicLeadForm | null> {
+  try {
+    const host = await requestHost();
+    return await fetchPublic<PublicLeadForm>(host, '/lead-form');
+  } catch {
+    return null;
   }
 }

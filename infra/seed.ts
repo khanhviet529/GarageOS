@@ -267,6 +267,7 @@ async function main(): Promise<void> {
     vehicle_experience_version, vehicle_experience,
     vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
     vehicle_color, onroad_fee_schedule,
+    lead_form_consent_version, lead_form,
     site_redirect, site_navigation,
     article_tag, article_revision, article, article_category,
     faq_placement, faq_item,
@@ -2053,6 +2054,31 @@ async function main(): Promise<void> {
     `INSERT INTO site_redirect (tenant_id, from_path, to_path, status_code, note, created_by, updated_by)
      VALUES ($1,'/tin-tuc-cu','/tin-tuc',301,'Đường dẫn của bản trang trước',$2,$2)`,
     [TENANT_A, publisherId],
+  );
+
+  /*
+   * Biểu mẫu và câu đồng ý.
+   *
+   * 🔒 Phiên bản `2026-08-1` trùng ĐÚNG hằng số `LEAD_CONSENT_VERSION` trong
+   *    `sales.service.ts`, và câu chữ trùng đúng chuỗi từng nằm trong JSX của
+   *    `lead-form.tsx`. Trùng là điều kiện để lead cũ và lead mới cùng trỏ về một
+   *    nội dung đọc lại được; lệch là tạo ra đúng cái lỗ mà 0079 sinh ra để bịt.
+   */
+  console.log('Tạo biểu mẫu và câu đồng ý...');
+  const { rows: bm } = await db.query<{ id: string }>(
+    `INSERT INTO lead_form (tenant_id, code, created_by, updated_by)
+     VALUES ($1,'LANDING',$2,$2) RETURNING id`,
+    [TENANT_A, publisherId],
+  );
+  await db.query(
+    `INSERT INTO lead_form_consent_version (tenant_id, form_id, version, body, effective_from, created_by)
+     VALUES ($1,$2,'2026-08-1',$3, now() - interval '30 days', $4)`,
+    [
+      TENANT_A,
+      bm[0]!.id,
+      'Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp',
+      publisherId,
+    ],
   );
 
   await db.query('COMMIT');

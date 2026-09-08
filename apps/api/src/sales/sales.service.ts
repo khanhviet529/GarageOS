@@ -29,7 +29,19 @@ import type { PublicTenantContext } from '../public-landing/tenant-context.servi
  * sales. Lead ngoài phạm vi trả 404 như không tồn tại.
  */
 
-/** Phiên bản consent đang hiệu lực — NFR-PRIV-001: lưu cùng version + thời điểm. */
+/**
+ * Phiên bản consent DỰ PHÒNG — NFR-PRIV-001.
+ *
+ * ⚠️ Đây từng là nguồn sự thật duy nhất, và đó là lỗi: hệ thống lưu "khách đã
+ *    đồng ý phiên bản 2026-08-1" mà không lưu ở đâu phiên bản đó NÓI GÌ — câu
+ *    chữ nằm trong JSX của landing. Sửa câu chữ mà quên đổi hằng số thì mọi lead
+ *    cũ lẫn mới cùng mang một nhãn cho hai nội dung khác nhau.
+ *
+ *    Từ 0079, câu chữ và phiên bản sống cùng nhau trong
+ *    `lead_form_consent_version` — một bảng CHỈ-THÊM. Hằng số này chỉ còn dùng
+ *    khi tenant chưa khai phiên bản nào, để một lead vẫn ghi được một nhãn thay
+ *    vì để trống ô bằng chứng.
+ */
 export const LEAD_CONSENT_VERSION = '2026-08-1';
 
 export interface LeadListResult {
@@ -367,7 +379,7 @@ export class SalesService {
           productSnapshot === null ? null : JSON.stringify(productSnapshot),
           experienceSnapshot === null ? null : JSON.stringify(experienceSnapshot),
           input.utmSource ?? null, input.utmMedium ?? null, input.utmCampaign ?? null,
-          LEAD_CONSENT_VERSION, duplicate,
+          await this.phienBanDongY(tx), duplicate,
         ],
       );
       await tx.query(
@@ -635,6 +647,24 @@ export class SalesService {
       contentHash: exp.content_hash,
       optionKeys: selection.optionKeys ?? [],
     };
+  }
+
+  /**
+   * Phiên bản câu đồng ý ĐANG HIỆU LỰC của tenant này.
+   *
+   * 🔒 Đọc trong CÙNG transaction với lượt ghi lead. Đọc trước rồi ghi sau là để
+   *    ngỏ một khe: phiên bản đổi giữa hai lượt và lead ghi nhãn của phiên bản
+   *    khách KHÔNG nhìn thấy.
+   */
+  private async phienBanDongY(tx: PoolClient): Promise<string> {
+    const { rows } = await tx.query<{ version: string }>(
+      `SELECT v.version
+         FROM lead_form_consent_version v
+         JOIN lead_form f ON f.id = v.form_id
+        WHERE v.effective_from <= now()
+        ORDER BY v.effective_from DESC LIMIT 1`,
+    );
+    return rows[0]?.version ?? LEAD_CONSENT_VERSION;
   }
 
   private async findDuplicate(tx: PoolClient, phone: string): Promise<string | null> {

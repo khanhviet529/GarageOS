@@ -15,6 +15,7 @@ import {
   type FaqSurface,
   type PublicNavItem,
   type NavPlacement,
+  type PublicLeadForm,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
@@ -102,6 +103,38 @@ export class PublicLandingService {
       );
       const r = rows[0];
       return r === undefined ? null : { to: r.to_path, statusCode: Number(r.status_code) };
+    });
+  }
+
+  /**
+   * Cấu hình biểu mẫu cho landing.
+   *
+   * 🔒 Chưa khai phiên bản câu đồng ý nào thì dùng câu MẶC ĐỊNH, không trả rỗng.
+   *    Một ô tick không có chữ bên cạnh là một ô khách không biết mình đang đồng
+   *    ý điều gì — và chữ ký đó không có giá trị pháp lý nào.
+   */
+  async leadForm(ctx: PublicTenantContext): Promise<PublicLeadForm> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT f.success_title, f.success_body, f.show_message_field, f.show_branch_field,
+                c.body AS consent_body
+           FROM lead_form f
+           LEFT JOIN LATERAL (
+             SELECT body FROM lead_form_consent_version v
+              WHERE v.form_id = f.id AND v.effective_from <= now()
+              ORDER BY v.effective_from DESC LIMIT 1
+           ) c ON true
+          WHERE f.code = 'LANDING' LIMIT 1`,
+      );
+      const r = rows[0];
+      return {
+        successTitle: (r?.success_title ?? 'Đã nhận yêu cầu') as string,
+        successBody: (r?.success_body ?? 'Showroom sẽ liên hệ trong giờ làm việc.') as string,
+        showMessageField: (r?.show_message_field ?? true) as boolean,
+        showBranchField: (r?.show_branch_field ?? true) as boolean,
+        consentBody: (r?.consent_body ??
+          'Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp') as string,
+      };
     });
   }
 

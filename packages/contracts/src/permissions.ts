@@ -309,6 +309,17 @@ export const ACTION_ROLES = {
    */
   'marketing:navigationRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:navigationWrite': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Biểu mẫu thu nhu cầu khách — SRS-LS-EXP-001 §4.10.
+   *
+   * 🔒 Quyền GHI chỉ cho publisher và chủ, hẹp hơn quyền soạn nội dung. Câu đồng
+   *    ý liên hệ là văn bản PHÁP LÝ (NĐ 13/2023): nó quyết định showroom được
+   *    phép làm gì với số điện thoại khách vừa để lại. Sửa nó không giống sửa
+   *    một tiêu đề.
+   */
+  'marketing:leadFormRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:leadFormWrite': ['MARKETING_PUBLISHER', 'OWNER'],
   'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
   'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
   'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
@@ -445,6 +456,8 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'marketing:articlePublish': 'công bố bài viết',
   'marketing:navigationRead': 'xem menu và chuyển hướng',
   'marketing:navigationWrite': 'sửa menu và chuyển hướng',
+  'marketing:leadFormRead': 'xem cấu hình biểu mẫu',
+  'marketing:leadFormWrite': 'sửa biểu mẫu và câu đồng ý',
   'sales:leadRead': 'xem lead được gán',
   'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
   'sales:leadAssign': 'gán lead cho tư vấn',

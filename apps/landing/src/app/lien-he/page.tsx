@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/icon';
 import css from '@/features/lien-he/lien-he.module.css';
 import { noIndex } from '@/lib/api';
 import { buildMetadata } from '@/lib/seo';
-import { loadFaq, loadSite } from '@/lib/site';
+import { loadFaq, loadLeadForm, loadSite } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +30,7 @@ export default async function ContactPage({
 }: {
   searchParams: Promise<ThamSo>;
 }): Promise<React.ReactElement> {
-  const [site, faq] = await Promise.all([loadSite(), loadFaq('CONTACT')]);
+  const [site, faq, cauHinhForm] = await Promise.all([loadSite(), loadFaq('CONTACT'), loadLeadForm()]);
   const tham = await searchParams;
   const laiThu = tham['nhu-cau'] === 'lai-thu';
   const chiNhanh = site?.publicBranches ?? [];
@@ -61,6 +61,7 @@ export default async function ContactPage({
             <div className={css.hopBieuMau}>
               <LeadForm
                 site={site}
+                cauHinh={cauHinhForm}
                 nenGiay
                 intentMacDinh={laiThu ? 'TEST_DRIVE' : 'REQUEST_QUOTE'}
               />

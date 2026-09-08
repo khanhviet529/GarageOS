@@ -457,3 +457,141 @@ describe('🔒 Điều hướng — mục trỏ tới trang không có thật ph
     assert.equal(r.status, 403);
   });
 });
+
+describe('🔒 Biểu mẫu — câu đồng ý là BẰNG CHỨNG, không phải một dòng chữ giao diện', () => {
+  async function congKhai(duong: string): Promise<{ status: number; body: any }> {
+    const r = await fetch(`${API}${duong}`, {
+      headers: {
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }
+
+  test('landing lấy câu đồng ý từ dữ liệu, không từ chuỗi trong mã', async () => {
+    const r = await congKhai('/api/v1/public/lead-form');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.consentBody, 'Tôi đồng ý để showroom liên hệ tư vấn theo thông tin đã cung cấp');
+    assert.equal(r.body.showMessageField, true);
+  });
+
+  test('🔒 phiên bản câu đồng ý KHÔNG sửa và KHÔNG xoá được, kể cả bằng quyền app', async () => {
+    /*
+     * `lead_form_consent_version` là bảng CHỈ-THÊM (0079) — cùng khuôn với
+     * `audit_log` và `vehicle_price_log` (INV-S-03).
+     *
+     * Kiểm bằng chính role của ứng dụng, không qua API: một endpoint không tồn
+     * tại chỉ chứng minh controller chưa có đường vào, không chứng minh dữ liệu
+     * được bảo vệ. Trigger ở database là thứ canh điều đó.
+     */
+    const { rows } = await admin.query<{ id: string }>(
+      `SELECT v.id FROM lead_form_consent_version v LIMIT 1`,
+    );
+    const id = rows[0]!.id;
+    const tx = await app.connect();
+    try {
+      await tx.query('BEGIN');
+      await tx.query(`SELECT set_config('app.tenant_id', $1, true)`, [TENANT_A]);
+      await assert.rejects(
+        tx.query('UPDATE lead_form_consent_version SET body = $2 WHERE id = $1', [id, 'Sửa trộm']),
+        /bằng chứng|permission denied/i,
+      );
+      await tx.query('ROLLBACK');
+
+      await tx.query('BEGIN');
+      await tx.query(`SELECT set_config('app.tenant_id', $1, true)`, [TENANT_A]);
+      await assert.rejects(
+        tx.query('DELETE FROM lead_form_consent_version WHERE id = $1', [id]),
+        /bằng chứng|permission denied/i,
+      );
+      await tx.query('ROLLBACK');
+    } finally {
+      tx.release();
+    }
+  });
+
+  test('🔒 lead ghi phiên bản câu đồng ý ĐANG HIỆU LỰC, không phải hằng số trong mã', async () => {
+    /*
+     * Trước 0079, `sales_lead.consent_version` luôn là `'2026-08-1'` — một hằng
+     * số trong `sales.service.ts`. Đổi câu chữ mà quên đổi hằng số thì lead cũ
+     * và lead mới cùng mang một nhãn cho hai nội dung khác nhau.
+     *
+     * Bài này thêm một phiên bản mới rồi gửi lead thật, và đòi lead mang nhãn
+     * MỚI. Nếu ai đó khôi phục lại hằng số, bài đỏ.
+     */
+    const pb = `thu-${uniq}`;
+    const them = await api('POST', '/api/v1/marketing/lead-form/consent-versions', publisher, {
+      version: pb,
+      body: `Câu đồng ý thử ${uniq}`,
+    });
+    assert.equal(them.status, 201, JSON.stringify(them.body));
+
+    // Landing thấy ngay câu mới
+    const cong = await congKhai('/api/v1/public/lead-form');
+    assert.equal(cong.body.consentBody, `Câu đồng ý thử ${uniq}`);
+
+    const { rows: br } = await admin.query<{ id: string }>(
+      `SELECT id FROM branch WHERE tenant_id = $1 ORDER BY code LIMIT 1`,
+      [TENANT_A],
+    );
+    const ten = `Khách consent ${uniq}`;
+    const gui = await fetch(`${API}/api/v1/public/leads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+      body: JSON.stringify({
+        fullName: ten,
+        // `uniq` có dấu gạch nối — số điện thoại phải là CHỮ SỐ, lấy riêng.
+        phone: `096${Date.now().toString().slice(-7)}`,
+        branchId: br[0]!.id,
+        intent: 'TEST_DRIVE',
+        consentAccepted: true,
+      }),
+    });
+    assert.equal(gui.status, 201, await gui.text());
+
+    const { rows: lead } = await admin.query<{ consent_version: string }>(
+      'SELECT consent_version FROM sales_lead WHERE full_name = $1',
+      [ten],
+    );
+    assert.equal(
+      lead[0]?.consent_version,
+      pb,
+      'lead vẫn ghi hằng số trong mã thay vì phiên bản đang hiệu lực',
+    );
+
+    await admin.query('DELETE FROM lead_activity WHERE lead_id IN (SELECT id FROM sales_lead WHERE full_name=$1)', [ten]);
+    await admin.query('DELETE FROM sales_lead WHERE full_name = $1', [ten]);
+
+    /*
+     * Dọn phiên bản vừa thêm, bằng role `garageos` chứ không phải role ứng dụng.
+     *
+     * 🔒 Bảng chặn SỬA/XOÁ với `garageos_app` — đó là điều bài kiểm phía trên
+     *    chứng minh. Chủ schema thì vẫn xoá được, và phải thế: migration và bài
+     *    kiểm cần dọn được dữ liệu của chính chúng. Không dọn thì bài kiểm kế
+     *    tiếp thấy một câu đồng ý khác câu seed và đỏ vì lý do không liên quan.
+     */
+    await admin.query('DELETE FROM lead_form_consent_version WHERE version = $1', [pb]);
+  });
+
+  test('🔒 trùng nhãn phiên bản bị từ chối kèm lời giải thích', async () => {
+    const r = await api('POST', '/api/v1/marketing/lead-form/consent-versions', publisher, {
+      version: '2026-08-1',
+      body: 'Câu khác cho cùng một nhãn',
+    });
+    assert.equal(r.status, 409);
+    assert.match(String(r.body.error.message), /không sửa được|đã tồn tại/i);
+  });
+
+  test('🔒 biên tập viên đọc được nhưng KHÔNG sửa được câu đồng ý', async () => {
+    assert.equal((await api('GET', '/api/v1/marketing/lead-form', editor)).status, 200);
+    const sua = await api('PUT', '/api/v1/marketing/lead-form', editor, {
+      successTitle: 'Thử', successBody: '', showMessageField: true, showBranchField: true,
+    });
+    assert.equal(sua.status, 403, 'câu đồng ý là văn bản pháp lý — sửa nó không giống sửa một tiêu đề');
+  });
+});
