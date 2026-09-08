@@ -1,5 +1,6 @@
 import type {
   AvailabilityStatus, FinancingQuote, OnroadFeeScheduleInput, OnroadPriceBreakdown, Powertrain,
+  ProductMediaInput, ProductMediaRow,
   VehicleAvailabilityInput, VehicleColorInput, VehiclePromotionInput,
 } from '@garageos/contracts';
 import { api } from '@/lib/client';
@@ -76,17 +77,35 @@ export const showroomApi = {
 
   availability: (productId: string) => api<{ items: AvailabilityRow[] }>(`${goc}/products/${productId}/availability`),
 
-  setAvailability: (productId: string, input: { rows: VehicleAvailabilityInput[] }) =>
+  /*
+   * ⚠️ Ba hàm dưới đây từng gói dữ liệu vào một PHONG BÌ (`{ items: [...] }`,
+   *    `{ rows: [...] }`) trong khi API nhận thẳng mảng, hoặc nhận thẳng một đối
+   *    tượng. Không hàm nào từng được gọi — tab Màu và tab Ảnh chưa nối, còn tồn
+   *    xe gọi qua đường khác — nên sai lệch nằm im từ lúc viết.
+   *
+   * 💡 Một hàm client không ai gọi là một hàm chưa từng chạy. Nó biên dịch được,
+   *    nên nó trông như đã xong.
+   */
+  setAvailability: (productId: string, input: VehicleAvailabilityInput) =>
     api(`${goc}/products/${productId}/availability`, { method: 'PUT', body: JSON.stringify(input) }),
 
-  colors: (revisionId: string, input: { items: VehicleColorInput[] }) =>
-    api(`${goc}/revisions/${revisionId}/colors`, { method: 'PUT', body: JSON.stringify(input) }),
+  listColors: (revisionId: string) =>
+    api<{ items: (VehicleColorInput & { id: string })[] }>(`${goc}/revisions/${revisionId}/colors`),
+
+  setColors: (revisionId: string, items: VehicleColorInput[]) =>
+    api(`${goc}/revisions/${revisionId}/colors`, { method: 'PUT', body: JSON.stringify(items) }),
 
   listPromotions: (revisionId: string) =>
     api<{ items: (VehiclePromotionInput & { id: string; state: string })[] }>(`${goc}/revisions/${revisionId}/promotions`),
 
-  setPromotions: (revisionId: string, input: { items: VehiclePromotionInput[] }) =>
-    api(`${goc}/revisions/${revisionId}/promotions`, { method: 'PUT', body: JSON.stringify(input) }),
+  setPromotions: (revisionId: string, items: VehiclePromotionInput[]) =>
+    api(`${goc}/revisions/${revisionId}/promotions`, { method: 'PUT', body: JSON.stringify(items) }),
+
+  listMedia: (revisionId: string) =>
+    api<{ items: ProductMediaRow[] }>(`${goc}/revisions/${revisionId}/media`),
+
+  setMedia: (revisionId: string, items: ProductMediaInput[]) =>
+    api(`${goc}/revisions/${revisionId}/media`, { method: 'PUT', body: JSON.stringify(items) }),
 
   feeSchedules: (provinceCode?: string) =>
     api<FeeScheduleRow[]>(`${goc}/fee-schedules${provinceCode === undefined ? '' : `?provinceCode=${encodeURIComponent(provinceCode)}`}`),

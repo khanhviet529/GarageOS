@@ -7,6 +7,7 @@ import {
   OnroadFeeScheduleInput,
   PriceChangeInput,
   VehicleAvailabilityInput,
+  ProductMediaInput,
   VehicleColorInput,
   VehiclePromotionInput,
   type ActorContext,
@@ -19,6 +20,7 @@ import { ZodPipe } from '../common/zod.pipe';
 import { ShowroomService } from './showroom.service';
 
 const ColorList = z.array(VehicleColorInput).max(30);
+const MediaList = z.array(ProductMediaInput).max(60);
 const PromotionList = z.array(VehiclePromotionInput).max(30);
 const FinancingList = z.array(FinancingProgramInput).max(10);
 
@@ -140,10 +142,34 @@ export class ShowroomController {
 
   /* ------------------- Màu, ưu đãi, trả góp (theo revision) --------------- */
 
+  @Get('revisions/:revisionId/colors')
+  async listColors(@Actor() actor: ActorContext, @Param('revisionId') revisionId: string) {
+    assertCan(actor, 'showroom:commerceWrite');
+    return { items: await this.service.listColors(actor, revisionId) };
+  }
+
   @Put('revisions/:revisionId/colors')
   async colors(@Actor() actor: ActorContext, @Param('revisionId') revisionId: string, @Body(new ZodPipe(ColorList)) input: z.infer<typeof ColorList>) {
     assertCan(actor, 'showroom:commerceWrite');
     return this.service.replaceColors(actor, revisionId, input);
+  }
+
+  /**
+   * Ảnh gắn cho một bản sửa — tab *Ảnh & 360°* trong màn Sửa xe.
+   *
+   * Đọc dùng `commerceWrite` chứ không phải một quyền đọc riêng: danh sách này
+   * chỉ có nghĩa trong màn SỬA, và ai mở màn sửa thì đã có quyền ghi.
+   */
+  @Get('revisions/:revisionId/media')
+  async listMedia(@Actor() actor: ActorContext, @Param('revisionId') revisionId: string) {
+    assertCan(actor, 'showroom:commerceWrite');
+    return { items: await this.service.listMedia(actor, revisionId) };
+  }
+
+  @Put('revisions/:revisionId/media')
+  async media(@Actor() actor: ActorContext, @Param('revisionId') revisionId: string, @Body(new ZodPipe(MediaList)) input: z.infer<typeof MediaList>) {
+    assertCan(actor, 'showroom:commerceWrite');
+    return this.service.replaceMedia(actor, revisionId, input);
   }
 
   @Put('revisions/:revisionId/promotions')

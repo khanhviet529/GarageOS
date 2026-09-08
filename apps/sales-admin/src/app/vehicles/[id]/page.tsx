@@ -19,6 +19,8 @@ import { showroomApi, type AvailabilityRow, type PriceLogEntry } from '@/feature
 import { AvailabilitySummary, khoangGiao } from '@/features/showroom/availability-summary';
 import { PriceChangeDialog } from '@/features/showroom/price-change-dialog';
 import { PriceLog } from '@/features/showroom/price-log';
+import { ColorPanel } from '@/features/vehicles/color-panel';
+import { MediaPanel } from '@/features/vehicles/media-panel';
 import { PublishGate, PublishGateNotice } from '@/features/vehicles/publish-gate';
 import { VariantPricePanel } from '@/features/vehicles/variant-price-panel';
 import { TAB_CHAM_TIEN, VEHICLE_TABS, type ProductView, type VehicleTabKey } from '@/features/vehicles/types';
@@ -292,10 +294,7 @@ export default function VehicleEditorPage({
                 <CardTitle>Màu sắc</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-text-muted">
-                  Danh sách màu lưu theo bản sửa (`PUT /showroom/revisions/:id/colors`). Màn quản lý màu
-                  chưa được nối vào bản dựng này — xem báo cáo cuối.
-                </p>
+                <ColorPanel revisionId={draft?.id ?? null} canWrite={canWrite} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -307,10 +306,7 @@ export default function VehicleEditorPage({
                 <CardTitle>Ảnh &amp; 360°</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xs text-text-muted">
-                  Ảnh dùng lại từ Thư viện ảnh. Màn gắn ảnh cho mẫu xe chưa được nối vào bản dựng này —
-                  xem báo cáo cuối.
-                </p>
+                <MediaPanel revisionId={draft?.id ?? null} canWrite={canWrite} />
               </CardContent>
             </Card>
           </TabsContent>

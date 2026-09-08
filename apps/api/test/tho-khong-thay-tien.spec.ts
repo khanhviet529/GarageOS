@@ -184,6 +184,9 @@ before(async () => {
     '/api/v1/showroom/fee-schedules',
     // Thư viện trả góp: bề mặt QUẢN TRỊ đầy lãi suất — phải nằm trong bài quét.
     '/api/v1/showroom/financing-templates',
+    // Màu có PHỤ THU — một số tiền. Thợ không được thấy, nên phải nằm trong bài quét.
+    ...(xe[0] === undefined ? [] : [`/api/v1/showroom/revisions/${xe[0].rev}/colors`]),
+    ...(xe[0] === undefined ? [] : [`/api/v1/showroom/revisions/${xe[0].rev}/media`]),
     '/api/v1/showroom/financing-drift',
     ...(xe[0] === undefined
       ? []
@@ -306,6 +309,8 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'lead-form', 'lead-form/consent-versions',
       // Người dùng và vai: không có số tiền nào; vai bị cấm có bài riêng ở đây.
       'users',
+      // Danh sách tư vấn viên nhận lead: chỉ id và họ tên.
+      'assignable-advisors',
     ]);
 
     const thieu: string[] = [];

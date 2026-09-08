@@ -10,6 +10,8 @@ import {
   type Powertrain,
   type PriceChangeInput,
   type VehicleAvailabilityInput,
+  type ProductMediaInput,
+  type ProductMediaRow,
   type VehicleColorInput,
   type VehiclePromotionInput,
 } from '@garageos/contracts';
@@ -23,6 +25,7 @@ import {
   type KetQuaTraGop,
 } from '@garageos/domain';
 import { BusinessError } from '../common/errors';
+import { urlMediaCongKhai } from '../common/media-url';
 
 /**
  * Catalog thương mại — SRS-LS-EXP-001 §4.
@@ -264,6 +267,120 @@ export class ShowroomService {
    * hai bảng đó (kiểm bằng `pg_constraint`), nên `id` của chúng không mang ý
    * nghĩa gì ra ngoài.
    */
+  async listColors(
+    actor: ActorContext,
+    revisionId: string,
+  ): Promise<(VehicleColorInput & { id: string })[]> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT id, name, hex_code, kind, surcharge_amount, display_order
+           FROM vehicle_color WHERE product_revision_id = $1
+          ORDER BY display_order, name`,
+        [revisionId],
+      );
+      return rows.map((r) => ({
+        id: r.id as string,
+        name: r.name as string,
+        hexCode: r.hex_code as string,
+        kind: r.kind as VehicleColorInput['kind'],
+        /*
+         * 🔒 Phụ thu là TIỀN, và nó về đây dưới dạng chuỗi từ `bigint`.
+         *    `Number()` ở đây an toàn vì phụ thu màu là con số tám chữ số, nhưng
+         *    hợp đồng khai `amount` nên vẫn đi qua đúng cửa đó chứ không tự chế
+         *    một quy tắc riêng cho một cột.
+         */
+        surchargeAmount: Number(r.surcharge_amount),
+        displayOrder: Number(r.display_order),
+      }));
+    });
+  }
+
+  /* ============================ Ảnh của bản sửa ============================ */
+
+  async listMedia(actor: ActorContext, revisionId: string): Promise<ProductMediaRow[]> {
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT m.id, m.media_asset_id, m.role, m.alt_text, m.sort_order, m.is_cover, m.color_id,
+                pub.public_storage_key
+           FROM vehicle_product_media m
+           LEFT JOIN LATERAL (
+             SELECT mp.public_storage_key
+               FROM media_rendition rn
+               JOIN media_publication mp ON mp.rendition_id = rn.id AND mp.status = 'READY'
+              WHERE rn.asset_id = m.media_asset_id
+              ORDER BY CASE rn.profile WHEN 'POSTER' THEN 0 WHEN 'GALLERY' THEN 1 ELSE 2 END
+              LIMIT 1
+           ) pub ON true
+          WHERE m.product_revision_id = $1
+          ORDER BY m.is_cover DESC, m.sort_order, m.id`,
+        [revisionId],
+      );
+      return rows.map((r) => ({
+        id: r.id as string,
+        mediaAssetId: r.media_asset_id as string,
+        role: r.role as ProductMediaRow['role'],
+        altText: (r.alt_text ?? '') as string,
+        sortOrder: Number(r.sort_order),
+        isCover: r.is_cover as boolean,
+        colorId: (r.color_id ?? null) as string | null,
+        previewUrl: r.public_storage_key === null || r.public_storage_key === undefined
+          ? null
+          : urlMediaCongKhai(r.public_storage_key as string),
+      }));
+    });
+  }
+
+  /**
+   * Đặt lại TOÀN BỘ danh sách ảnh của một bản sửa.
+   *
+   * 🔒 Xoá-rồi-chèn ở đây an toàn, khác với màu xe (xem `replaceColors`): không
+   *    bảng nào trỏ tới `vehicle_product_media`, nên không có `id` nào để mất.
+   *    Chiều phụ thuộc đi ngược lại — chính bảng này trỏ tới `vehicle_color`.
+   *
+   * 🔒 Chỉ ghi được vào bản NHÁP. Trigger `trg_vehicle_product_media_chi_sua_ban_nhap`
+   *    (0082) canh điều đó ở database; kiểm ở đây chỉ để trả về một câu tiếng
+   *    Việt thay vì một lỗi Postgres.
+   */
+  async replaceMedia(
+    actor: ActorContext,
+    revisionId: string,
+    items: ProductMediaInput[],
+  ): Promise<{ count: number }> {
+    /*
+     * ⚠️ Nhiều hơn một ảnh bìa là một trạng thái không có nghĩa: chỗ bìa có một.
+     *    Chặn ở đây thay vì để "ảnh nào cũng được" rồi mỗi truy vấn tự chọn một
+     *    ảnh khác nhau.
+     */
+    if (items.filter((m) => m.isCover).length > 1) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Chỉ một ảnh được đặt làm ảnh bìa.');
+    }
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows: tt } = await tx.query<{ status: string }>(
+        'SELECT status FROM vehicle_product_revision WHERE id = $1',
+        [revisionId],
+      );
+      if (tt[0] === undefined) throw new BusinessError(ErrorCode.NOT_FOUND, 'Không tìm thấy bản sửa.');
+      if (tt[0].status !== 'DRAFT') {
+        throw new BusinessError(
+          ErrorCode.INVALID_STATE_TRANSITION,
+          'Chỉ sửa ảnh của bản NHÁP. Bản đã xuất bản là bất biến — tạo bản nháp mới trước.',
+        );
+      }
+
+      await tx.query('DELETE FROM vehicle_product_media WHERE product_revision_id = $1', [revisionId]);
+      for (const m of items) {
+        await tx.query(
+          `INSERT INTO vehicle_product_media
+             (tenant_id, product_revision_id, media_asset_id, role, alt_text, sort_order, is_cover, color_id)
+           VALUES ($1,$2,$3,$4::product_media_role,$5,$6,$7,$8)`,
+          [actor.tenantId, revisionId, m.mediaAssetId, m.role, m.altText, m.sortOrder,
+            m.isCover, m.colorId ?? null],
+        );
+      }
+      return { count: items.length };
+    });
+  }
+
   async replaceColors(actor: ActorContext, revisionId: string, colors: VehicleColorInput[]): Promise<{ count: number }> {
     return this.db.withTenant(actor, async (tx) => {
       /*
