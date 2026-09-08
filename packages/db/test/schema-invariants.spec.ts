@@ -14,6 +14,9 @@
  */
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Pool } from 'pg';
 
 const ADMIN_URL =
@@ -234,6 +237,67 @@ describe('🔒 PR-03 không đi vòng được bằng SQL', () => {
       rows.map((r) => r.column_name),
       [],
       'Cột tiền của dòng báo giá còn cấp UPDATE — một câu SQL ở bất kỳ đâu là đi vòng qua PR-03',
+    );
+  });
+});
+
+describe('🔒 Bảng mới phải nằm trong câu TRUNCATE của seed', () => {
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * Vì sao bài này tồn tại
+   *
+   * `infra/seed.ts` dọn dữ liệu cũ bằng MỘT câu `TRUNCATE` liệt kê tay mọi
+   * bảng. Thêm một bảng có khoá ngoại tới `tenant` mà quên tên nó ở đó thì
+   * `TRUNCATE ... tenant` gãy với đúng một dòng:
+   *
+   *     cannot truncate a table referenced in a foreign key constraint
+   *
+   * Câu đó KHÔNG nói bảng nào thiếu. Và nó nổ ở `pnpm db:seed` — tức là ở
+   * `e2e/global-setup.ts` và ở bước dựng dữ liệu của CI, xa chỗ vừa sửa.
+   *
+   * 💡 Đây là lỗi đã xảy ra thật khi thêm `site_theme` (0083). Bài này biến nó
+   *    thành một dòng đỏ ngay trong bộ test lược đồ, nói thẳng tên bảng.
+   *
+   * Lấy `tenant_id` làm mốc thay vì "mọi khoá ngoại tới tenant": mọi bảng
+   * nghiệp vụ ở đây đều mang cột đó (INV-T-03 canh riêng điều ấy), và nó cũng
+   * chính là tập bảng mà seed phải dọn.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
+  test('mọi bảng có tenant_id đều được seed dọn', async () => {
+    const nguon = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'infra', 'seed.ts'),
+      'utf8',
+    );
+    const cauTruncate = /TRUNCATE([\s\S]*?)RESTART IDENTITY/.exec(nguon)?.[1];
+    assert.ok(
+      cauTruncate !== undefined,
+      'không tìm thấy câu TRUNCATE trong infra/seed.ts — bài này đang canh một thứ không còn tồn tại',
+    );
+    const daKhai = new Set(
+      cauTruncate
+        .split(/[,\s]+/)
+        .map((t) => t.trim())
+        .filter((t) => /^[a-z_][a-z0-9_]*$/.test(t)),
+    );
+
+    const { rows } = await pool.query<{ table_name: string }>(
+      `SELECT c.table_name
+         FROM information_schema.columns c
+         JOIN information_schema.tables t
+           ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+        WHERE c.table_schema = 'public'
+          AND c.column_name = 'tenant_id'
+          AND t.table_type = 'BASE TABLE'
+        ORDER BY c.table_name`,
+    );
+    assert.ok(rows.length > 20, 'truy vấn sai — không có bảng nào mang tenant_id?');
+
+    const thieu = rows.map((r) => r.table_name).filter((t) => !daKhai.has(t));
+    assert.deepEqual(
+      thieu,
+      [],
+      'Bảng có tenant_id nhưng vắng mặt trong TRUNCATE của infra/seed.ts — ' +
+        '`pnpm db:seed` sẽ gãy ở bước dọn dữ liệu, và thông báo của Postgres không nói tên bảng',
     );
   });
 });

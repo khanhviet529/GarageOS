@@ -18,7 +18,15 @@
     // `tsx` chạy thẳng file nguồn, nên import giữa các file ở đây ghi đuôi
     // `.ts` thật. Không có cờ này thì `tsc` từ chối chính cái đường dẫn mà
     // runtime đang dùng — kiểm kiểu sẽ mâu thuẫn với thứ đang chạy.
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    // `kiem-tuong-phan.mjs` là script `node` thuần — nó phải chạy được bằng
+    // `node` trần trong `pnpm kiem:tuong-phan`, trước mọi bước biên dịch. Bài
+    // `tuong-phan-mot-cong-thuc.spec.ts` import nó để so công thức với bản ở
+    // domain, nên `tsc` cần đọc được file `.mjs`. `checkJs` để tắt: kiểu của
+    // nó suy ra là đủ cho phép so, còn bật kiểm sẽ đòi chú thích kiểu cho một
+    // script cố ý không có bước build.
+    "allowJs": true,
+    "checkJs": false
   },
   "include": ["*.ts"]
 }

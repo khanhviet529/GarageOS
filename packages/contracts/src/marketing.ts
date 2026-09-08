@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Powertrain } from './vehicle.js';
-import { RichTextDocumentV1 } from './catalog-cms.js';
+import { PublicSiteTheme, RichTextDocumentV1 } from './catalog-cms.js';
 
 /**
  * Contracts cho module marketing (landing/catalog/experience/SEO).
@@ -104,6 +104,16 @@ export const PublicSiteView = z.object({
   publicBranches: z.array(PublicBranchCard),
   /** Ảnh mặt tiền do showroom chọn. `null` thì landing rơi về ảnh xe nổi bật. */
   heroUrl: z.string().nullable(),
+  /*
+   * Bảng màu của tenant — `null` nghĩa là chưa từng lưu, landing giữ nguyên
+   * bảng token mặc định trong CSS.
+   *
+   * 💡 Đi kèm `/site` chứ không phải một endpoint riêng, vì mọi trang đã gọi
+   *    `loadSite()` sẵn ở layout. Một lượt gọi nữa cho bốn màu sẽ nằm trên
+   *    đường tới byte đầu tiên của MỌI trang — và khi nó chậm, thứ hỏng là màu
+   *    của trang, không phải một khối phụ có thể bỏ qua.
+   */
+  theme: PublicSiteTheme.nullable(),
 });
 export type PublicSiteView = z.infer<typeof PublicSiteView>;
 

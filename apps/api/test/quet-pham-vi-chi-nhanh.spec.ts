@@ -572,6 +572,7 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
       'api/v1/marketing/lead-form': 'cấu hình biểu mẫu — một biểu mẫu cho cả tenant',
       'api/v1/marketing/lead-form/consent-versions': 'lịch sử câu đồng ý, phạm vi tenant',
       'api/v1/public/lead-form': 'cấu hình biểu mẫu công khai, tenant lấy từ hostname',
+      'api/v1/marketing/site-theme': 'bảng màu của site — đúng một dòng cho cả tenant',
       'api/v1/marketing/navigation': 'menu của site — bảng chỉ có tenant_id',
       'api/v1/marketing/redirects': 'bảng chuyển hướng URL — phạm vi tenant',
       'api/v1/public/navigation': 'menu công khai, tenant lấy từ hostname',

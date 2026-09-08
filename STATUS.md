@@ -47,9 +47,9 @@ Kịch bản đó có một test E2E chạy hai trình duyệt song song (máy t
 
 | | |
 |---|---|
-| Test tự động | 704 (domain 96, api 598, infra 10) |
-| E2E Playwright | 86 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
-| Migration | 74 |
+| Test tự động | 845 (domain 113, api 677, db 43, infra 12) |
+| E2E Playwright | 96 kịch bản (6 accessibility bằng axe-core, 20 điểm ngắt responsive) |
+| Migration | 83 |
 | Vòng review đã chạy | 10 vòng `/codex-review` + 2 vòng rà soát thủ công + 3 vòng rà soát thiết kế |
 | Phát hiện đã xử lý | 25 + ~50 + 22 |
 
@@ -399,7 +399,8 @@ ra đời. Thêm mọi bảng mới vào bài quét quyền so cột service `UP
 | Nợ | Vì sao chấp nhận bây giờ |
 |---|---|
 | `WEB_ORIGIN=*` sẽ vô hiệu hoá lớp chống CSRF trong im lặng | `kiemTraNguonGhi` đọc cùng biến mà CORS dùng. Đặt `*` cho tiện là gỡ mất lớp bảo vệ mà không có gì báo động. Chưa có hàng rào nào chặn cấu hình đó |
-| Cookie phiên chưa kiểm chứng ở cấu hình hai tên miền | Dev và CI đều chạy web/API cùng host khác cổng. Production có thể đặt chúng ở hai tên miền, khi đó cần `SameSite=None; Secure` hoặc một tên miền chung — đã ghi trong `docs/DEPLOY.md` |
+| Hai bài trong `showroom.spec.ts` phải seed lại mới chạy lần hai được | `Ranh giới hiển thị ≠ giao dịch` và `Màu xe — sửa danh sách màu` đọc trạng thái seed của `aurora-e1` rồi sửa nó mà không trả lại. Chạy bộ API hai lượt liên tiếp **không** `pnpm db:seed` ở giữa thì hai bài này đỏ, và thông báo (`500`, `actual: null`) không hề trỏ về nguyên nhân — đã mất thời gian vì nó ba lần trong một buổi. CI không thấy vì CI luôn seed trước. Sửa đúng là cho chúng tự dựng dữ liệu như `🔒 Tạo bản nháp phải chép ĐỦ nội dung` đang làm |
+| 🔒 Cookie phiên KHÔNG chạy được ở cấu hình hai tên miền | Không còn là "chưa kiểm chứng" — đã xác định: `cookies.ts` đặt cứng `SameSite=Lax`, nên với `web`/`sales-admin` trên Vercel và API trên Render/Railway thì trình duyệt **không gửi** `gos_at` kèm request cross-site. Đăng nhập trả 200 rồi mọi lời gọi sau nhận 401, và màn hình chỉ đá về trang đăng nhập. `landing` không dính vì nó gọi qua proxy same-origin. Hai lối ra và khuyến nghị ghi ở [`docs/DEPLOY.md`](docs/DEPLOY.md) |
 | Lịch xưởng vẽ ô theo giờ TRÌNH DUYỆT, không theo `branch.timezone` | Seed đặt việc theo giờ chi nhánh, giao diện đọc theo giờ máy người xem. Trùng nhau ở Việt Nam, lệch 7 tiếng trên CI — việc xếp 8h sáng thành 1h sáng và rơi ra ngoài khung 7–18h. Đã ghim `timezoneId` cho Playwright để CI tất định, nhưng cột `branch.timezone` vẫn chưa được giao diện dùng tới. Sửa đúng là vẽ lịch theo múi giờ chi nhánh |
 | Rate limit đăng nhập lưu trong bộ nhớ tiến trình | Chạy nhiều instance thì hỏng. Chuyển sang Redis khi triển khai thật |
 | Chưa có test kiến trúc chặn `withTenantId` / `queryWithoutTenant` dùng sai chỗ | Hai hàm này mở đường đi ngoài ngữ cảnh tenant. Hiện chỉ `PublicTrackingService` gọi, nhưng không có gì bắt buộc điều đó |
@@ -412,6 +413,7 @@ ra đời. Thêm mọi bảng mới vào bài quét quyền so cột service `UP
 | Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
 | Tiêu đề cột chân trang chưa cấu hình được | `site_navigation` gắn `column_index` vào từng DÒNG, nên một tiêu đề cột sẽ phải lặp lại trên mọi dòng của cột đó — và hai dòng ghi hai tiêu đề khác nhau là chuyện chắc chắn xảy ra. Làm đúng cần một bảng riêng cho cột; liên kết bên dưới đã cấu hình được, tiêu đề thì chưa |
 | `TRANG_CO_THAT` là danh sách viết tay ở hai nơi | Máy chủ (`public-landing.controller.ts`) và màn quản trị (`website/navigation`) mỗi nơi giữ một bản danh sách bốn route landing. Khi có bảng `site_page` thì điều kiện đổi thành một phép JOIN và cả hai bản biến mất. Trong lúc chờ, quên cập nhật một bản chỉ làm mục menu bị ẩn thừa — hướng hỏng an toàn, nhưng vẫn là hai bản sao |
+| Bảng màu landing chỉ đổi được BỐN token | `--ink-2` (ô nhập), `--ink-3` (chip), `--photo` và cả họ `--paper-*` giữ nguyên giá trị đã được `pnpm kiem:tuong-phan` đo. Vì thế cổng lưu bắt hai màu nền phải TỐI (`NEN_PHAI_TOI_DUOI`): nền sáng vẫn có thể qua tám cặp AA nhưng để lại hai mảng xám đen giữa trang, và không cặp nào trong bảng nhìn thấy chỗ đó. Mở thêm token thì phải mở thêm cặp kiểm — bốn token là ranh giới cố ý |
 | ĐỔI TÊN một màu xe vẫn cắt liên kết ảnh | `replaceColors` ghi đè theo khoá tự nhiên `(revision, name)`, nên đổi tên = xoá một màu + thêm một màu khác, và `vehicle_product_media.color_id` về null qua `ON DELETE SET NULL`. Sửa thật là cho `VehicleColorInput` mang `id` — đổi hợp đồng và đổi cả màn quản trị, nên chưa làm cùng lượt vá xoá-rồi-chèn |
 
 ## Nợ đã trả

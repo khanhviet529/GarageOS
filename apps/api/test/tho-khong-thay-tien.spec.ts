@@ -307,6 +307,9 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'navigation', 'redirects', 'redirect',
       // Biểu mẫu: câu chữ và công tắc hiển thị, không có số tiền nào.
       'lead-form', 'lead-form/consent-versions',
+      // Bảng màu landing: bốn mã hex và một bậc bo góc. Vai bị cấm có bài riêng
+      // ở `ma-tran-quyen.spec.ts` (`marketing:experienceRead/Write`).
+      'site-theme',
       // Người dùng và vai: không có số tiền nào; vai bị cấm có bài riêng ở đây.
       'users',
       // Danh sách tư vấn viên nhận lead: chỉ id và họ tên.

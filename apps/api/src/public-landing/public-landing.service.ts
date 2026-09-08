@@ -167,6 +167,18 @@ export class PublicLandingService {
         throw new BusinessError(ErrorCode.SITE_NOT_FOUND, 'Không tìm thấy trang');
       }
 
+      /*
+       * Bảng màu của tenant. Chưa lưu lần nào thì `null` — landing giữ nguyên
+       * bảng token trong CSS, không dựng lại bảng mặc định ở đây.
+       *
+       * 🔒 Trả bốn màu ĐÃ LƯU, không trả biến CSS. `bienCssLanding()` ở domain
+       *    là chỗ duy nhất biết token nào ăn màu nào; sinh ra chuỗi CSS từ máy
+       *    chủ sẽ đóng băng bản dựng hôm nay vào một payload công khai.
+       */
+      const { rows: theme } = await tx.query<Record<string, unknown>>(
+        `SELECT nen_chinh, nen_noi, thuong_hieu, nut_chinh, bo_goc FROM site_theme LIMIT 1`,
+      );
+
       const { rows: branches } = await tx.query<Record<string, unknown>>(
         `SELECT bpp.branch_id AS id, bpp.stable_key, bpp.public_name AS name,
                 bpp.public_phone AS phone, bpp.public_address AS address
@@ -185,6 +197,16 @@ export class PublicLandingService {
           p.hero_key === null || p.hero_key === undefined
             ? null
             : this.publicUrl(p.hero_key as string),
+        theme:
+          theme[0] === undefined
+            ? null
+            : {
+                nenChinh: theme[0].nen_chinh as string,
+                nenNoi: theme[0].nen_noi as string,
+                thuongHieu: theme[0].thuong_hieu as string,
+                nutChinh: theme[0].nut_chinh as string,
+                boGoc: theme[0].bo_goc as number,
+              },
         publicBranches: branches.map((b) => ({
           id: b.id as string,
           stableKey: b.stable_key as string,
