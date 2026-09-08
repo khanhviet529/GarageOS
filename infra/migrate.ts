@@ -18,6 +18,40 @@ const DATABASE_URL =
   process.env.DATABASE_ADMIN_URL ??
   'postgresql://garageos:garageos_dev@localhost:5433/garageos';
 
+/**
+ * 🔒 Checksum CŨ được chấp nhận cho một file buộc phải sửa sau khi đã chạy.
+ *
+ * ───────────────────────────────────────────────────────────────────────────
+ * Quy tắc vẫn là migration CHỈ TIẾN: sửa sai bằng file mới. Bảng này tồn tại
+ * cho đúng một tình huống mà quy tắc đó không áp dụng được — khi chính
+ * migration ĐẦU TIÊN không chạy nổi trên một loại database.
+ *
+ * `0001_init.sql` chạy `ALTER ROLE ... NOSUPERUSER NOBYPASSRLS`, mà đổi hai
+ * thuộc tính đó đòi quyền superuser. Postgres quản lý (Neon, Supabase, RDS)
+ * không cấp superuser cho ai, nên 0001 chết ở dòng đó và KHÔNG migration nào
+ * sau nó có cơ hội chạy để sửa. Đo được trên Neon 2026-09-08:
+ * `permission denied to alter role`.
+ *
+ * 💡 Vì sao không bắt mỗi máy tự `UPDATE schema_migration`: một thao tác SQL
+ *    tay trên bảng theo dõi migration là thứ người ta làm sai lúc 11 giờ đêm.
+ *    Ghi ở đây thì nó đi qua review, và ai gặp lỗi cũng đọc được vì sao.
+ *
+ * ⚠️ Thêm dòng vào bảng này là một quyết định có chủ ý, không phải cách chữa
+ *    một lượt CI đỏ. Database đã chạy bản CŨ sẽ KHÔNG được chạy lại nội dung
+ *    mới — chỉ checksum được cập nhật — nên chỉ chấp nhận khi bản mới không
+ *    đổi kết quả trên database đã có.
+ * ───────────────────────────────────────────────────────────────────────────
+ */
+const CHECKSUM_CU: Record<string, readonly string[]> = {
+  /* Cùng một nguyên nhân: hai file này giả định chủ schema là superuser và TÊN
+     LÀ `garageos`. Cả hai đều nằm trước phần lớn migration nên không file mới
+     nào cứu được. */
+  '0001_init.sql': ['b88e43108f89b822'],
+  '0005_review_fixes.sql': ['c574aaa7330b0c24'],
+  '0055_landing_site.sql': ['1f7feb68b5d931f1'],
+  '0066_landing_page_builder.sql': ['6be1322caf17eb39'],
+};
+
 async function main(): Promise<void> {
   const client = new Client({ connectionString: DATABASE_URL });
   await client.connect();
@@ -55,10 +89,26 @@ async function main(): Promise<void> {
     if (previous !== undefined) {
       // 🔒 Migration đã chạy không được sửa nội dung — sửa sai bằng migration mới.
       if (previous !== checksum) {
-        throw new Error(
-          `Migration ${file} đã chạy nhưng nội dung đã thay đổi ` +
-            `(${previous} -> ${checksum}). Migration chỉ tiến: hãy tạo file mới.`,
-        );
+        if (!(CHECKSUM_CU[file] ?? []).includes(previous)) {
+          throw new Error(
+            `Migration ${file} đã chạy nhưng nội dung đã thay đổi ` +
+              `(${previous} -> ${checksum}). Migration chỉ tiến: hãy tạo file mới.`,
+          );
+        }
+        /*
+         * Bản cũ đã được khai trong `CHECKSUM_CU`. Cập nhật checksum để lần
+         * sau không phải hỏi lại — và để khi mọi database đã qua mốc này thì
+         * xoá được dòng khai đi.
+         *
+         * ⚠️ KHÔNG chạy lại nội dung mới: database này đã có kết quả của bản
+         *    cũ, và điều kiện để một file được vào bảng khai chính là hai bản
+         *    cho cùng kết quả.
+         */
+        await client.query('UPDATE schema_migration SET checksum = $2 WHERE name = $1', [
+          file,
+          checksum,
+        ]);
+        console.log(`  ~ ${file} ... nội dung đã sửa có chủ ý, cập nhật checksum`);
       }
       continue;
     }

@@ -43,6 +43,7 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { bamMatKhau } from '../packages/domain/src/mat-khau.ts';
 
@@ -136,6 +137,25 @@ async function main(): Promise<void> {
     await db.query('BEGIN');
 
     /*
+     * ⚠️ TẮT `FORCE ROW LEVEL SECURITY` trên `tenant` trong đúng giao dịch này.
+     *
+     * Trên Docker ở máy dev, chủ schema là SUPERUSER nên RLS không đụng tới nó
+     * và không ai thấy vấn đề. Trên Postgres quản lý (Neon, Supabase, RDS)
+     * không ai là superuser, nên `FORCE` áp lên cả chủ bảng — và script này
+     * hỏng theo HAI cách, chỉ một cách là nhìn thấy được:
+     *
+     *   · lượt `INSERT` bị chặn: "new row violates row-level security policy"
+     *   · 🔒 nguy hiểm hơn: phép đếm ở dưới đi qua RLS nên LUÔN trả 0, và hàng
+     *     rào "database đã có tenant" mất tác dụng trong im lặng — đúng loại
+     *     hỏng mà cả script này được viết ra để chống.
+     *
+     * DDL trong PostgreSQL có tính giao dịch, nên `ROLLBACK` (kể cả khi lỗi,
+     * kể cả `--thu`) tự khôi phục `FORCE`. Không có đường nào rời hàm này mà
+     * để bảng ở trạng thái yếu hơn.
+     */
+    await db.query('ALTER TABLE tenant NO FORCE ROW LEVEL SECURITY');
+
+    /*
      * 🔒 Từ chối khi database đã có tenant.
      *
      * Chạy lại script này trên một hệ thống đang hoạt động sẽ tạo thêm một
@@ -155,12 +175,22 @@ async function main(): Promise<void> {
       );
     }
 
-    const { rows: tenant } = await db.query<{ id: string }>(
-      `INSERT INTO tenant (name, tax_code, internal_labor_cost_per_hour)
-       VALUES ($1, $2, $3) RETURNING id`,
-      [ts.tenTenant, ts.maSoThue, ts.giaGioNoiBo],
+    /*
+     * Sinh id ở đây thay vì để `DEFAULT gen_random_uuid()` làm, để đặt được
+     * `app.tenant_id` TRƯỚC khi ghi. Ba bảng còn lại (`branch`, `app_user`,
+     * `user_branch`) đều có policy `tenant_id = current_setting('app.tenant_id')`
+     * và vẫn FORCE — không có biến này thì cả ba lượt ghi đều bị chặn.
+     *
+     * 🔒 Truyền bằng THAM SỐ, không nội suy chuỗi (CLAUDE.md, quy tắc tenant).
+     */
+    const tenantId = randomUUID();
+    await db.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+
+    await db.query(
+      `INSERT INTO tenant (id, name, tax_code, internal_labor_cost_per_hour)
+       VALUES ($1, $2, $3, $4)`,
+      [tenantId, ts.tenTenant, ts.maSoThue, ts.giaGioNoiBo],
     );
-    const tenantId = tenant[0]!.id;
 
     const { rows: branch } = await db.query<{ id: string }>(
       `INSERT INTO branch (tenant_id, code, name) VALUES ($1, $2, $3) RETURNING id`,
@@ -192,6 +222,8 @@ async function main(): Promise<void> {
     if (Number(lai[0]?.n ?? 0) !== 1) {
       throw new Error('Có lượt chạy khác cùng lúc đã tạo tenant — đã huỷ lượt này.');
     }
+
+    await db.query('ALTER TABLE tenant FORCE ROW LEVEL SECURITY');
 
     if (thu) {
       await db.query('ROLLBACK');

@@ -19,9 +19,19 @@ GRANT  UPDATE (ended_at, transfer_reason) ON vehicle_ownership TO garageos_app;
 -- nhận lại quyền UPDATE/DELETE mặc định — quy tắc bảo vệ sổ kho âm thầm vô hiệu.
 --
 -- Khai báo tường minh FOR ROLE để không phụ thuộc vào "ai đang chạy".
-ALTER DEFAULT PRIVILEGES FOR ROLE garageos IN SCHEMA public
+--
+-- ⚠️ File này ĐÃ ĐƯỢC SỬA sau khi đã chạy — xem `CHECKSUM_CU` trong
+--    `infra/migrate.ts`. Bản trước ghi thẳng tên `garageos`, tức là giả định
+--    chủ schema TÊN LÀ gì. Đúng trên Docker ở máy dev, sai trên mọi Postgres
+--    quản lý: Neon đặt tên chủ theo project (`garageos_owner`), và migration
+--    chết với `role "garageos" does not exist` — ở migration thứ năm, sau khi
+--    bốn migration đầu đã ghi xong.
+--
+-- 💡 `CURRENT_ROLE` nói đúng điều cần nói: "role đang chạy migration này".
+--    Trên máy dev nó phân giải thành `garageos`, nên kết quả không đổi.
+ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_ROLE IN SCHEMA public
   REVOKE UPDATE, DELETE ON TABLES FROM garageos_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE garageos IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_ROLE IN SCHEMA public
   GRANT SELECT, INSERT ON TABLES TO garageos_app;
 
 -- 🔒 Nhưng default privileges CHỈ là lớp phòng thủ thứ hai. Lớp thứ nhất là:

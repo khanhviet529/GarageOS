@@ -79,6 +79,30 @@ jobs:
       - run: pnpm db:migrate
       - run: pnpm db:seed
 
+      # 🔒 Migration phải chạy được trên Postgres KHÔNG CÓ SUPERUSER.
+      #
+      # Docker và CI đều cấp `garageos` quyền superuser, và superuser bỏ qua RLS,
+      # kiểm tra chủ sở hữu object, lẫn kiểm tra quyền khi đổi chủ. Sáu chỗ trong
+      # repo âm thầm dựa vào điều đó — và không lộ ra cho tới lượt deploy đầu
+      # tiên lên Neon, nơi không ai là superuser. Triệu chứng tệ nhất trong số
+      # đó KHÔNG phải một migration đỏ: nó là 83 migration xanh, dữ liệu ghi
+      # đúng, `/health` ổn — rồi login trả 401 mãi mãi.
+      #
+      # Bước này dựng đúng điều kiện của Postgres quản lý (chủ schema có
+      # CREATEROLE, không superuser) và chạy lại toàn bộ migration trên một
+      # database rỗng. Nó không đụng gì tới database mà các bước sau dùng.
+      - name: Migration chạy được khi chủ schema KHÔNG phải superuser
+        env:
+          PGPASSWORD: garageos_dev
+        run: |
+          psql -h localhost -p 5433 -U garageos -d postgres \
+            -c "DROP DATABASE IF EXISTS garageos_khong_superuser" \
+            -c "DROP ROLE IF EXISTS chu_khong_superuser" \
+            -c "CREATE ROLE chu_khong_superuser LOGIN PASSWORD 'ci_pw' CREATEDB CREATEROLE NOSUPERUSER NOBYPASSRLS" \
+            -c "CREATE DATABASE garageos_khong_superuser OWNER chu_khong_superuser"
+          export DATABASE_ADMIN_URL="postgresql://chu_khong_superuser:ci_pw@localhost:5433/garageos_khong_superuser"
+          pnpm db:migrate
+
       # Build TRƯỚC khi chạy test, và khởi động API bằng BẢN ĐÃ BIÊN DỊCH.
       #
       # Bản trước chạy `pnpm --filter @garageos/api dev` (tsx watch) nên toàn bộ
