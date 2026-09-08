@@ -9,3 +9,4 @@ export * from './so-thap-phan.js';
 export * from './gia-lan-banh.js';
 export * from './tra-gop.js';
 export * from './showroom-trang-thai.js';
+export * from './tuong-phan.js';
