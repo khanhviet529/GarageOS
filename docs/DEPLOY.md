@@ -114,16 +114,34 @@ build lại lần nữa.
 
 Tạo project, chạy ba `CREATE EXTENSION` ở trên. Lấy hai connection string:
 
-- **owner** (Neon cấp sẵn, ví dụ `neondb_owner`) → `DATABASE_ADMIN_URL`
-- **`garageos_app`** → `DATABASE_URL`. Role này do **migration 0001 tự tạo**, nên
-  chưa tồn tại lúc này. Sau bước 3 quay lại đặt mật khẩu:
+Chuỗi kết nối của role owner (Neon cấp sẵn, ví dụ `garageos_owner`) chính là
+`DATABASE_ADMIN_URL`. Role đó cần quyền `CREATEROLE`:
 
 ```sql
-ALTER ROLE garageos_app PASSWORD '<mật khẩu mạnh>';
+SELECT rolname, rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user;
 ```
 
-⚠️ Role owner của Neon cần quyền `CREATEROLE` để migration 0001 chạy được:
-`SELECT rolcreaterole FROM pg_roles WHERE rolname = current_user;`
+### 1b. 🔒 Tạo TRƯỚC role ứng dụng, bằng mật khẩu của bạn
+
+Chạy trong SQL Editor **trước khi** chạy migration:
+
+```sql
+CREATE ROLE garageos_app LOGIN PASSWORD 'dán-mật-khẩu-mạnh-vào-đây';
+```
+
+Sinh mật khẩu bằng `openssl rand -base64 32`.
+
+Vì sao phải làm trước: migration `0001` tạo role này nếu chưa có, và mật khẩu
+nó dùng — `garageos_app_dev` — **nằm công khai trong repo**. Database Neon mở ra
+Internet và gói free không có IP allowlist, nên để migration tự tạo là mở một
+cửa sổ (ngắn, nhưng thật) cho bất kỳ ai đọc mã nguồn. Tạo trước thì migration
+thấy role đã có và **giữ nguyên mật khẩu** — cửa sổ đó không tồn tại.
+
+`DATABASE_URL` của bạn là chuỗi direct với user và mật khẩu này thay vào:
+
+```
+postgresql://garageos_app:<mật khẩu vừa đặt>@ep-xxxx.ap-southeast-1.aws.neon.tech/garageos?sslmode=require
+```
 
 ### 2. Sinh bí mật
 
@@ -139,9 +157,47 @@ biết nó thì tự ký được token với `tid` của bất kỳ garage nào
 
 ### 3. Migration
 
-Đặt `DATABASE_ADMIN_URL` làm **secret của GitHub Environment `production`**, rồi
-chạy tay workflow **Production migration**. Không đặt biến này ở bất kỳ service
-runtime nào.
+Đặt `DATABASE_ADMIN_URL` làm **secret của GitHub Environment `production`** (đúng
+Environment, không phải Repository secret — workflow khai `environment: production`),
+rồi chạy tay workflow **Production migration** từ nhánh `main`. Không đặt biến
+này ở bất kỳ service runtime nào.
+
+Kỳ vọng: 84 dòng `ok`, kết thúc bằng `Đã chạy 84 migration.`
+
+Kiểm sau khi xanh:
+
+```sql
+SELECT count(*) AS so_bang FROM information_schema.tables
+ WHERE table_schema = 'public' AND table_type = 'BASE TABLE';   -- kỳ vọng 91
+
+SELECT rolname, rolsuper, rolbypassrls, rolcanlogin
+  FROM pg_roles WHERE rolname = 'garageos_app';   -- f, f, t
+```
+
+`rolbypassrls = t` thì **dừng lại**: role đó đọc xuyên mọi tenant mà không báo
+lỗi gì. (Migration cũng tự kiểm và từ chối chạy tiếp — xem `chuan_bi_role()`.)
+
+💡 Role tạo bằng SQL **không hiện trong giao diện Neon**; Neon chỉ quản role do
+nó tạo. Đó là bình thường.
+
+#### ⚠️ Vì sao SQL Editor của Neon không thấy dòng dữ liệu nào
+
+Sau bước 4, `SELECT * FROM tenant` trong Neon vẫn trả **0 dòng** — và đó không
+phải lỗi.
+
+Trên Docker ở máy dev, chủ schema là superuser nên RLS không đụng tới nó. Neon
+không cấp superuser cho ai, nên `FORCE ROW LEVEL SECURITY` áp lên cả chủ bảng:
+không có `app.tenant_id`, mọi policy trả false, mọi bảng trông như rỗng.
+
+Đó chính là cô lập tenant đang làm việc. Xem dữ liệu thì xem qua ứng dụng. Nếu
+thật sự cần đếm bằng SQL, mở đúng một bảng trong một giao dịch rồi bỏ:
+
+```sql
+BEGIN;
+ALTER TABLE tenant NO FORCE ROW LEVEL SECURITY;
+SELECT count(*) FROM tenant;
+ROLLBACK;   -- DDL của PostgreSQL có tính giao dịch: FORCE được khôi phục
+```
 
 ### 4. Khởi tạo tenant — bước dễ quên nhất
 

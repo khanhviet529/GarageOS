@@ -199,14 +199,94 @@ CREATE POLICY tenant_isolation ON tenant
 -- Kiểm chứng: apps/api/test/invariants/tenant-isolation.spec.ts (INV-T-01)
 -- =============================================================================
 
+/*
+ * ⚠️ File này ĐÃ ĐƯỢC SỬA sau khi đã chạy — ngoại lệ duy nhất, xem
+ *    `CHECKSUM_CU` trong `infra/migrate.ts`.
+ *
+ *    Lý do: khối dưới đây không chạy được trên Postgres QUẢN LÝ, mà 0001 thì
+ *    đứng đầu — không có cách nào "sửa sai bằng migration mới" khi migration
+ *    đầu tiên chết. Đo được trên Neon: `permission denied to alter role`.
+ */
+
 DO $$ BEGIN
   CREATE ROLE garageos_app LOGIN PASSWORD 'garageos_app_dev';
 EXCEPTION WHEN duplicate_object THEN
-  ALTER ROLE garageos_app LOGIN PASSWORD 'garageos_app_dev';
+  /*
+   * 🔒 Role đã có thì GIỮ NGUYÊN mật khẩu, không đặt lại.
+   *
+   * Bản trước ghi đè bằng `garageos_app_dev` — chuỗi nằm công khai trong repo.
+   * Trên production, chạy lại 0001 nghĩa là mở toang database cho bất kỳ ai
+   * đọc mã nguồn.
+   *
+   * 💡 Giữ nguyên còn mở ra một lối deploy an toàn hơn hẳn: tạo trước
+   *    `garageos_app` với mật khẩu mạnh, RỒI mới chạy migration. Như thế mật
+   *    khẩu công khai không bao giờ tồn tại trên production, dù chỉ vài phút.
+   */
+  NULL;
 END $$;
 
--- 🔒 Bảo hiểm kép: dù có ai vô tình cấp, cũng ép về không đặc quyền
-ALTER ROLE garageos_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+/*
+ * 🔒 Ép một role về KHÔNG đặc quyền — và khi không ép được thì KIỂM.
+ *
+ * `ALTER ROLE ... NOSUPERUSER NOBYPASSRLS` đòi quyền superuser (PostgreSQL 16).
+ * Postgres quản lý — Neon, Supabase, RDS — không cấp superuser cho ai, kể cả
+ * chủ sở hữu schema. Câu lệnh trần vì thế làm migration ĐẦU TIÊN chết đứng, và
+ * thông báo (`permission denied to alter role`) không nói nó đang nói về role
+ * nào, hay vì sao.
+ *
+ * 💡 Bản thân câu ALTER chỉ là BẢO HIỂM: `CREATE ROLE` đã tạo ra một role
+ *    không đặc quyền theo mặc định.
+ *
+ * 🔒 Nên khi không ép được thì KIỂM và NỔ. Bỏ qua im lặng là đúng kiểu hỏng mà
+ *    cả khối chú thích bên trên tồn tại để chống: cô lập tenant vô hiệu mà
+ *    không có một lỗi nào.
+ *
+ * Ba migration cần đúng việc này (0001, 0055, 0066) nên nó là một hàm, không
+ * phải ba khối chép tay sẽ lệch nhau ở lần sửa đầu tiên.
+ */
+CREATE OR REPLACE FUNCTION chuan_bi_role(ten text) RETURNS void AS $fn$
+BEGIN
+  -- (1) Ép về không đặc quyền; không ép được thì kiểm và nổ.
+  BEGIN
+    EXECUTE format('ALTER ROLE %I NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE', ten);
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;  -- Postgres quản lý: không ép được, kiểm ngay dưới đây
+  END;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ten AND (rolsuper OR rolbypassrls)) THEN
+    RAISE EXCEPTION
+      'Role % đang có SUPERUSER hoặc BYPASSRLS — RLS sẽ bị bỏ qua ÂM THẦM và mọi '
+      'tenant đọc được dữ liệu của nhau. Chạy bằng tay với quyền cao hơn: '
+      'ALTER ROLE % NOSUPERUSER NOBYPASSRLS;', ten, ten;
+  END IF;
+
+  /*
+   * (2) Bảo đảm role đang chạy migration `SET ROLE` được sang role này.
+   *
+   * ⚠️ PostgreSQL 16 đổi hành vi: role `CREATEROLE` tạo ra một role thì được
+   *    cấp ADMIN trên nó, nhưng `set_option = false`. Mà `ALTER FUNCTION ...
+   *    OWNER TO <role>` lại đòi SET ROLE — nên 0055 và 0066, hai chỗ giao hàm
+   *    `SECURITY DEFINER` cho một role hẹp, chết với
+   *    `must be able to SET ROLE` trên mọi Postgres quản lý.
+   *
+   * 🔒 `INHERIT TRUE` cũng cần, và vì một lý do khác: kiểm tra "có phải chủ
+   *    object không" của PostgreSQL đi qua quyền KẾ THỪA. Hai hàm resolver được
+   *    cố ý giao cho role hẹp làm chủ (để `SECURITY DEFINER` chạy bằng quyền
+   *    hẹp đó), nên nếu không kế thừa thì chính migration mất quyền bảo trì
+   *    chúng: 0058, 0059 và 0075 đều `ALTER`/`CREATE OR REPLACE` lên chúng và
+   *    đều chết với `must be owner of function`.
+   *
+   * ⚠️ Không phải leo thang quyền: role đang chạy migration LÀ chủ schema, còn
+   *    role hẹp là NOLOGIN và chỉ cầm vài quyền SELECT. Nó nhận lại đúng thứ nó
+   *    vừa trao đi.
+   *
+   * Trên máy dev chủ schema là superuser nên câu này thừa — nhưng thừa một
+   * dòng tốt hơn hai đường đi khác nhau giữa dev và production.
+   */
+  EXECUTE format('GRANT %I TO CURRENT_ROLE WITH SET TRUE, INHERIT TRUE', ten);
+END $fn$ LANGUAGE plpgsql;
+
+SELECT chuan_bi_role('garageos_app');
 
 GRANT USAGE ON SCHEMA public TO garageos_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO garageos_app;

@@ -80,7 +80,11 @@ CREATE TRIGGER trg_touch_site_domain BEFORE UPDATE ON site_domain
 DO $$ BEGIN
   CREATE ROLE site_domain_resolver NOLOGIN;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-ALTER ROLE site_domain_resolver NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+-- ⚠️ File này ĐÃ ĐƯỢC SỬA sau khi đã chạy — xem `CHECKSUM_CU` trong
+--    `infra/migrate.ts`. Câu `ALTER ROLE` trần đòi quyền superuser, thứ không
+--    Postgres quản lý nào cấp; `chuan_bi_role()` (0001) ép khi ép
+--    được và KIỂM khi không.
+SELECT chuan_bi_role('site_domain_resolver');
 
 -- Resolver CHỈ đọc site_domain; app runtime KHÔNG được đọc bảng này trực tiếp.
 REVOKE ALL ON site_domain FROM garageos_app;
@@ -124,13 +128,28 @@ AS $$
    LIMIT 1;
 $$;
 
-ALTER FUNCTION resolve_site_domain(text) OWNER TO site_domain_resolver;
 REVOKE ALL ON FUNCTION resolve_site_domain(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION resolve_site_domain(text) TO garageos_app;
 
 COMMENT ON FUNCTION resolve_site_domain(text) IS
   'SECURITY DEFINER hẹp cho tenant resolution public. KHÔNG nhận điều kiện '
   'lọc tuỳ ý; KHÔNG mở rộng cột trả về — mỗi cột thêm là một đường rò.';
+
+/*
+ * 🔒 CHUYỂN QUYỀN SỞ HỮU LÀ VIỆC CUỐI CÙNG làm với hàm này.
+ *
+ * Sau khi đổi chủ, migration không còn là chủ nữa — mọi `REVOKE`, `GRANT` hay
+ * `COMMENT` trên hàm sẽ bị từ chối với `must be owner of function`. Trên Docker
+ * ở máy dev không ai thấy điều đó, vì superuser bỏ qua kiểm tra chủ sở hữu.
+ *
+ * ⚠️ Đổi chủ còn đòi CHỦ MỚI có `CREATE` trên schema chứa hàm — cũng là một
+ *    kiểm tra superuser được bỏ qua. Nâng đúng trong giao dịch này rồi thu lại
+ *    ngay: `site_domain_resolver` không được giữ quyền tạo object trong schema
+ *    chung, nó là chủ của đúng một hàm `SECURITY DEFINER`.
+ */
+GRANT CREATE ON SCHEMA public TO site_domain_resolver;
+ALTER FUNCTION resolve_site_domain(text) OWNER TO site_domain_resolver;
+REVOKE CREATE ON SCHEMA public FROM site_domain_resolver;
 
 -- =============================================================================
 -- site_profile (SRS mục 6.2) — version rows bất biến sau publish

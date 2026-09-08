@@ -118,7 +118,11 @@ CREATE TABLE IF NOT EXISTS landing_preview_session (
 );
 
 DO $$ BEGIN CREATE ROLE landing_preview_resolver NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-ALTER ROLE landing_preview_resolver NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+-- ⚠️ File này ĐÃ ĐƯỢC SỬA sau khi đã chạy — xem `CHECKSUM_CU` trong
+--    `infra/migrate.ts`. Câu `ALTER ROLE` trần đòi quyền superuser, thứ không
+--    Postgres quản lý nào cấp; `chuan_bi_role()` (0001) ép khi ép
+--    được và KIỂM khi không.
+SELECT chuan_bi_role('landing_preview_resolver');
 REVOKE ALL ON landing_preview_session FROM garageos_app;
 GRANT SELECT ON landing_preview_session TO landing_preview_resolver;
 CREATE OR REPLACE FUNCTION resolve_landing_preview_session(p_token_hash text)
@@ -127,9 +131,24 @@ LANGUAGE sql SECURITY DEFINER SET search_path = public STABLE AS $$
   SELECT s.tenant_id, s.revision_id FROM landing_preview_session s
    WHERE s.token_hash = p_token_hash AND s.revoked_at IS NULL AND s.expires_at > now() LIMIT 1;
 $$;
-ALTER FUNCTION resolve_landing_preview_session(text) OWNER TO landing_preview_resolver;
 REVOKE ALL ON FUNCTION resolve_landing_preview_session(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION resolve_landing_preview_session(text) TO garageos_app;
+
+/*
+ * 🔒 CHUYỂN QUYỀN SỞ HỮU LÀ VIỆC CUỐI CÙNG làm với hàm này.
+ *
+ * Sau khi đổi chủ, migration không còn là chủ nữa — mọi `REVOKE`, `GRANT` hay
+ * `COMMENT` trên hàm sẽ bị từ chối với `must be owner of function`. Trên Docker
+ * ở máy dev không ai thấy điều đó, vì superuser bỏ qua kiểm tra chủ sở hữu.
+ *
+ * ⚠️ Đổi chủ còn đòi CHỦ MỚI có `CREATE` trên schema chứa hàm — cũng là một
+ *    kiểm tra superuser được bỏ qua. Nâng đúng trong giao dịch này rồi thu lại
+ *    ngay: `landing_preview_resolver` không được giữ quyền tạo object trong schema
+ *    chung, nó là chủ của đúng một hàm `SECURITY DEFINER`.
+ */
+GRANT CREATE ON SCHEMA public TO landing_preview_resolver;
+ALTER FUNCTION resolve_landing_preview_session(text) OWNER TO landing_preview_resolver;
+REVOKE CREATE ON SCHEMA public FROM landing_preview_resolver;
 
 DO $$ DECLARE t text; BEGIN
   FOREACH t IN ARRAY ARRAY['landing_page', 'landing_page_revision', 'landing_preview_session'] LOOP
