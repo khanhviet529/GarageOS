@@ -293,13 +293,42 @@ describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn 
     );
     const cols = new Set(rows.map((r) => r.column_name));
     for (const [col, why] of [
-      ['roles', 'một cố vấn tự nâng mình lên OWNER — RLS không chặn vì cùng tenant'],
       ['password_hash', 'đổi được mật khẩu người khác'],
       ['tenant_id', 'chuyển người dùng sang tenant khác'],
     ] as const) {
       assert.ok(!cols.has(col), `Sửa được app_user.${col}: ${why}`);
     }
     assert.ok(cols.has('full_name'), 'phải sửa được hồ sơ cơ bản');
+
+    /*
+     * ⚠️ `roles` ĐƯỢC cấp UPDATE từ migration 0080, và đây là một nới lỏng có
+     *    chủ đích — ghi lại đầy đủ vì nó là ngoại lệ nguy hiểm nhất trong file.
+     *
+     * Lý do cũ của việc KHÔNG cấp: "một cố vấn tự nâng mình lên OWNER — RLS
+     * không chặn vì cùng tenant". Lý do đó vẫn đúng; thứ đổi là màn *Người dùng
+     * & quyền* cần một đường ghi, và tầng GRANT không diễn đạt được điều kiện
+     * thật ("chỉ CHỦ, và không phải chính mình").
+     *
+     * 🔒 Ba hàng rào thay cho một, và tất cả nằm ở `UserAdminController`:
+     *
+     *   1. `assertCan(actor, 'org:userRoleWrite')` — quyền duy nhất trong hệ chỉ
+     *      có MỘT vai (`OWNER`), vì nó là quyền tự cho mình mọi quyền còn lại.
+     *   2. Không tự sửa vai của chính mình — chặn cả đường leo thang lẫn đường
+     *      tự khoá.
+     *   3. Sau thay đổi phải còn ít nhất một chủ đang hoạt động.
+     *
+     * Bài kiểm cho hàng rào 1 và 2 nằm ở `apps/api/test/catalog-cms.spec.ts`
+     * ("Gán vai — chống LEO THANG và chống TỰ KHOÁ"), và `ma-tran-quyen.spec.ts`
+     * tự bắt buộc mọi vai ngoài `OWNER` nhận 403.
+     *
+     * 💡 Đây là chỗ duy nhất trong file này mà tầng GRANT KHÔNG còn là chốt cuối.
+     *    Nếu ba hàng rào kia bị gỡ, không còn gì chặn nữa — nên đừng gỡ chúng mà
+     *    không đọc lại đoạn này.
+     */
+    assert.ok(
+      cols.has('roles'),
+      'Màn Người dùng & quyền cần cấp UPDATE(roles) — nếu cố ý thu lại thì gỡ luôn endpoint',
+    );
   });
 
   test('vehicle: KHÔNG sửa được biển số, loại động cơ, hay xoá mềm', async () => {
@@ -349,13 +378,41 @@ describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn 
      * thật. Điều kiện an toàn nằm ở trigger `trg_*_chi_sua_ban_nhap` (0072):
      * revision đã publish thì mọi INSERT/UPDATE/DELETE đều bị từ chối, nên
      * quyền này không mở đường sửa nội dung đã công khai (INV-LS-13).
+     *
+     * ── L5.2: nội dung TRANG WEB ────────────────────────────────────────────
+     *
+     * Tám bảng dưới đây đều là NỘI DUNG TRANG WEB, không phải chứng từ. Xoá một
+     * câu hỏi thường gặp hay một mục menu không mất bằng chứng của việc gì —
+     * khác hẳn một dòng sổ kho hay một hoá đơn đã phát hành.
+     *
+     * `faq_item`, `faq_placement`  — câu hỏi và nơi nó hiện (0076).
+     * `article`, `article_category`, `article_tag` — bài viết, chuyên mục, thẻ
+     *   (0077). ⚠️ `article_revision` KHÔNG có trong danh sách, và đó là chủ ý:
+     *   lịch sử xuất bản là bằng chứng "ngày đó trang nói gì", nó phải sống lâu
+     *   hơn ý muốn của người sửa. Xoá cả bài thì `ON DELETE CASCADE` dọn theo —
+     *   nhưng không có đường xoá riêng một bản đã publish.
+     * `site_navigation`, `site_redirect` — mục menu và dòng chuyển hướng (0078).
+     * `financing_program_template` — mẫu trong thư viện (0081). Xoá mẫu KHÔNG gỡ
+     *   chương trình khỏi mẫu xe đang chào: khoá ngoại là `ON DELETE SET NULL`,
+     *   nên bản chép chỉ mất liên kết về thư viện, con số đã công bố ở nguyên đó.
+     *
+     * ⚠️ KHÔNG có `lead_form_consent_version`: phiên bản câu đồng ý là bằng
+     *    chứng pháp lý (NFR-PRIV-001), chặn bằng cả REVOKE lẫn trigger (0079).
      */
     assert.deepEqual(
       rows.map((r) => r.table_name),
       [
+        'article',
+        'article_category',
+        'article_tag',
+        'faq_item',
+        'faq_placement',
         'financing_program',
+        'financing_program_template',
         'invoice_line',
         'quotation_line',
+        'site_navigation',
+        'site_redirect',
         'user_branch',
         'vehicle_color',
         'vehicle_product_category',

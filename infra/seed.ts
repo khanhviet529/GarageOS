@@ -267,6 +267,7 @@ async function main(): Promise<void> {
     vehicle_experience_version, vehicle_experience,
     vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
     vehicle_color, onroad_fee_schedule,
+    financing_program_template,
     lead_form_consent_version, lead_form,
     site_redirect, site_navigation,
     article_tag, article_revision, article, article_category,
@@ -1814,16 +1815,44 @@ async function main(): Promise<void> {
        ($1,$2,'QUA_TANG','Tặng gói bảo dưỡng 3 năm','Chương trình đã kết thúc',NULL,false,now() - interval '90 days', now() - interval '30 days',3)`,
     [TENANT_A, revisionId],
   );
+  /*
+   * Thư viện mẫu trả góp (0081) — nguồn để CHÉP, khai một lần cho cả tenant.
+   *
+   * Ba bản chép dưới đây trỏ về mẫu qua `template_id`, và VIB cố ý được chép với
+   * lãi suất KHÁC mẫu: đó là ca "bản chép đã lệch so với thư viện" mà màn Ngân
+   * hàng liên kết sinh ra để phát hiện. Một bộ dữ liệu mà mọi bản chép đều khớp
+   * thì không thử được gì.
+   */
+  const MAU_TRA_GOP = [
+    { ten: 'Techcombank', dpMin: 2000, uuDai: 750, thang: 12, chuan: 1050, ky: '{36,48,60,84}', dp: '{2000,3000,4000,5000}', ngay: '2026-08-28' },
+    { ten: 'VPBank', dpMin: 2000, uuDai: 790, thang: 12, chuan: 1080, ky: '{36,48,60}', dp: '{2000,3000,4000}', ngay: '2026-08-28' },
+    { ten: 'VIB', dpMin: 3000, uuDai: 800, thang: 6, chuan: 1100, ky: '{36,48,60}', dp: '{3000,4000,5000}', ngay: '2026-09-05' },
+  ];
+  const mauId: Record<string, string> = {};
+  for (const [i, m] of MAU_TRA_GOP.entries()) {
+    const { rows } = await db.query<{ id: string }>(
+      `INSERT INTO financing_program_template
+         (tenant_id, bank_name, min_down_payment_bp, promo_rate_bp, promo_months,
+          standard_rate_bp, allowed_terms_months, down_payment_options_bp,
+          rate_updated_at, display_order, created_by, updated_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::int[],$8::int[],$9::date,$10,$11,$11) RETURNING id`,
+      [TENANT_A, m.ten, m.dpMin, m.uuDai, m.thang, m.chuan, m.ky, m.dp, m.ngay, i, publisherId],
+    );
+    mauId[m.ten] = rows[0]!.id;
+  }
+
   await db.query(
     `INSERT INTO financing_program
-       (tenant_id, product_revision_id, bank_name, min_down_payment_bp, promo_rate_bp,
+       (tenant_id, product_revision_id, template_id, bank_name, min_down_payment_bp, promo_rate_bp,
         promo_months, standard_rate_bp, allowed_terms_months, down_payment_options_bp,
         rate_updated_at, display_order)
      VALUES
-       ($1,$2,'Techcombank',2000,750,12,1050,'{36,48,60,84}','{2000,3000,4000,5000}','2026-08-28',0),
-       ($1,$2,'VPBank',2000,790,12,1080,'{36,48,60}','{2000,3000,4000}','2026-08-28',1),
-       ($1,$2,'VIB',3000,820,6,1120,'{36,48,60}','{3000,4000,5000}','2026-08-20',2)`,
-    [TENANT_A, revisionId],
+       ($1,$2,$3,'Techcombank',2000,750,12,1050,'{36,48,60,84}','{2000,3000,4000,5000}','2026-08-28',0),
+       ($1,$2,$4,'VPBank',2000,790,12,1080,'{36,48,60}','{2000,3000,4000}','2026-08-28',1),
+       -- ⚠️ Lệch có chủ ý: mẫu VIB đã đổi sang 8,00 %/11,00 % ngày 05/09, bản chép
+       --    trên mẫu xe vẫn là 8,20 %/11,20 % của ngày 20/08.
+       ($1,$2,$5,'VIB',3000,820,6,1120,'{36,48,60}','{3000,4000,5000}','2026-08-20',2)`,
+    [TENANT_A, revisionId, mauId['Techcombank'], mauId['VPBank'], mauId['VIB']],
   );
 
   /*

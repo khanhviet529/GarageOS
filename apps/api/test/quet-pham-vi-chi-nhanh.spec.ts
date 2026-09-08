@@ -625,6 +625,8 @@ describe('🔒 Quét: dữ liệu chi nhánh khác không lọt ra endpoint nào
        *    được kiểm bằng `showroom.spec.ts` — nhân viên chi nhánh chỉ sửa được
        *    chi nhánh mình.
        */
+      'api/v1/showroom/financing-templates': 'thư viện trả góp dùng chung cả tenant',
+      'api/v1/showroom/financing-drift': 'báo lệch bản chép — dữ liệu tenant',
       'api/v1/showroom/fee-schedules': 'biểu phí lăn bánh khai theo tỉnh/thành cho cả tenant',
       'api/v1/showroom/onroad-quote': 'phép cộng suy ra từ dữ liệu tenant',
       'api/v1/showroom/financing-quote': 'phép cộng suy ra từ dữ liệu tenant',

@@ -182,6 +182,9 @@ before(async () => {
     '/api/v1/marketing/categories',
     '/api/v1/marketing/testimonials',
     '/api/v1/showroom/fee-schedules',
+    // Thư viện trả góp: bề mặt QUẢN TRỊ đầy lãi suất — phải nằm trong bài quét.
+    '/api/v1/showroom/financing-templates',
+    '/api/v1/showroom/financing-drift',
     ...(xe[0] === undefined
       ? []
       : [
