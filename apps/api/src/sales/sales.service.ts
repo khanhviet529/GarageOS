@@ -172,6 +172,52 @@ export class SalesService {
     });
   }
 
+  /**
+   * 🔒 "Ai được nhận lead của chi nhánh này" — MỘT định nghĩa, hai chỗ dùng.
+   *
+   * Danh sách để CHỌN và điều kiện để KIỂM phải là cùng một câu. Viết hai lần là
+   * để chúng lệch nhau, và lệch theo hướng tệ nhất: giao diện gợi ý một người mà
+   * máy chủ từ chối, hoặc gợi ý một người lẽ ra không được gán.
+   *
+   * `$1` = branch_id.
+   */
+  private static readonly AI_NHAN_DUOC = `
+    FROM app_user u
+   WHERE u.is_active
+     AND 'SALES_ADVISOR' = ANY(u.roles::text[])
+     AND EXISTS (
+       SELECT 1 FROM user_branch ub
+        WHERE ub.user_id = u.id AND ub.branch_id = $1
+     )`;
+
+  /**
+   * Tư vấn viên có thể nhận lead của một chi nhánh.
+   *
+   * 🔒 Chi nhánh phải nằm trong phạm vi của người gọi. `SALES_MANAGER` có phạm vi
+   *    BRANCH — không có kiểm này thì họ liệt kê được nhân sự của chi nhánh khác
+   *    bằng cách đổi một tham số trên URL. Chủ doanh nghiệp đi qua vì phạm vi của
+   *    họ là cả tenant.
+   */
+  async assignableAdvisors(
+    actor: ActorContext,
+    branchId: string,
+  ): Promise<{ id: string; fullName: string }[]> {
+    const toanChuoi = actor.roles.includes('OWNER');
+    if (!toanChuoi && !actor.branchIds.includes(branchId)) {
+      throw new BusinessError(
+        ErrorCode.BRANCH_OUT_OF_SCOPE,
+        'Bạn chỉ xem được tư vấn viên của chi nhánh mình.',
+      );
+    }
+    return this.db.withTenant(actor, async (tx) => {
+      const { rows } = await tx.query<{ id: string; full_name: string }>(
+        `SELECT u.id, u.full_name ${SalesService.AI_NHAN_DUOC} ORDER BY u.full_name`,
+        [branchId],
+      );
+      return rows.map((r) => ({ id: r.id, fullName: r.full_name }));
+    });
+  }
+
   /** Gán lead — chỉ manager/owner, người nhận phải là advisor cùng branch. */
   async assignLead(
     actor: ActorContext,
@@ -188,15 +234,8 @@ export class SalesService {
       }
 
       const { rows: userRows } = await tx.query<Record<string, unknown>>(
-        `SELECT u.id, u.full_name
-           FROM app_user u
-          WHERE u.id = $1 AND u.is_active
-            AND 'SALES_ADVISOR' = ANY(u.roles::text[])
-            AND EXISTS (
-              SELECT 1 FROM user_branch ub
-               WHERE ub.user_id = u.id AND ub.branch_id = $2
-            )`,
-        [input.assigneeId, lead.branchId],
+        `SELECT u.id, u.full_name ${SalesService.AI_NHAN_DUOC} AND u.id = $2`,
+        [lead.branchId, input.assigneeId],
       );
       const assignee = userRows[0];
       if (assignee === undefined) {

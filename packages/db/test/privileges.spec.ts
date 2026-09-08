@@ -398,6 +398,13 @@ describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn 
      *
      * ⚠️ KHÔNG có `lead_form_consent_version`: phiên bản câu đồng ý là bằng
      *    chứng pháp lý (NFR-PRIV-001), chặn bằng cả REVOKE lẫn trigger (0079).
+     *
+     * `vehicle_product_media` (0082): ảnh gắn cho một BẢN SỬA. Gỡ một tấm ảnh
+     * khỏi bản nháp là thao tác nghiệp vụ thật, và điều kiện an toàn cùng dạng
+     * với ba bảng nội dung ở 0072 — trigger
+     * `trg_vehicle_product_media_chi_sua_ban_nhap` từ chối mọi INSERT/UPDATE/
+     * DELETE vào revision đã publish (INV-LS-13). Bản thân tấm ảnh trong
+     * `media_asset` không bị đụng tới: đây chỉ là dòng nối ảnh với bản sửa.
      */
     assert.deepEqual(
       rows.map((r) => r.table_name),
@@ -416,6 +423,7 @@ describe('🔒 Quét toàn bộ: không bảng nào được cấp UPDATE toàn 
         'user_branch',
         'vehicle_color',
         'vehicle_product_category',
+        'vehicle_product_media',
         'vehicle_promotion',
       ],
       'Có bảng được cấp DELETE ngoài dự kiến — dữ liệu nghiệp vụ chỉ xoá mềm',

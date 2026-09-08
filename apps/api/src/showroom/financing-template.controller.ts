@@ -55,8 +55,22 @@ export class FinancingTemplateController {
                 t.allowed_terms_months, t.down_payment_options_bp,
                 to_char(t.rate_updated_at,'YYYY-MM-DD') AS rate_updated_at,
                 t.display_order, t.is_active, t.version,
-                (SELECT count(*) FROM financing_program p WHERE p.template_id = t.id) AS used_by,
-                (SELECT count(*) FROM financing_program p
+                /*
+                 * 🔒 Đếm MẪU XE, không đếm dòng.
+                 *
+                 * ⚠️ Một mẫu xe có thể có hai bản sửa cùng lúc (bản đang hiện và
+                 *    bản nháp), và cả hai đều mang một bản chép của mẫu này. Đếm
+                 *    dòng thì "1 mẫu xe đang chào" hiện thành 2 ngay khi ai đó bấm
+                 *    Tạo bản nháp — một con số không sai về kỹ thuật nhưng trả lời
+                 *    sai câu người dùng đang hỏi.
+                 */
+                (SELECT count(DISTINCT r.product_id)
+                   FROM financing_program p
+                   JOIN vehicle_product_revision r ON r.id = p.product_revision_id
+                  WHERE p.template_id = t.id) AS used_by,
+                (SELECT count(DISTINCT r.product_id)
+                   FROM financing_program p
+                   JOIN vehicle_product_revision r ON r.id = p.product_revision_id
                   WHERE p.template_id = t.id AND NOT (${FinancingTemplateController.SO_KHOP})) AS drift
            FROM financing_program_template t
           ORDER BY t.is_active DESC, t.display_order, t.bank_name`,

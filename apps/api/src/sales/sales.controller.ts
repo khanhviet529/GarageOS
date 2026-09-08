@@ -2,6 +2,7 @@ import {
   Body, Controller, Get, Inject, Param, Post, Query, UseGuards,
 } from '@nestjs/common';
 import {
+  ErrorCode,
   LeadAddActivityInput,
   LeadAssignInput,
   LeadRedactInput,
@@ -12,6 +13,7 @@ import {
 } from '@garageos/contracts';
 import { JwtGuard } from '../auth/jwt.guard';
 import { Actor } from '../common/actor.decorator';
+import { BusinessError } from '../common/errors';
 import { assertCan } from '../common/permissions';
 import { ZodPipe } from '../common/zod.pipe';
 import { SalesService, type LeadListResult } from './sales.service';
@@ -48,6 +50,30 @@ export class SalesController {
   ): Promise<{ lead: LeadView; activities: unknown[] }> {
     assertCan(actor, 'sales:leadRead');
     return this.svc.getLead(actor, id);
+  }
+
+  /**
+   * Tư vấn viên có thể nhận lead của một chi nhánh.
+   *
+   * 🔒 Gác bằng `sales:leadAssign`, không phải `org:userRead`. Đây là danh sách
+   *    của một THAO TÁC — nó tồn tại để lấp ô "người nhận" trên hộp thoại gán
+   *    lead, và nó trả đúng tập mà máy chủ sẽ chấp nhận. Ai gán được lead thì
+   *    thấy được danh sách đó; không cần và không nên đòi thêm quyền đọc danh bạ.
+   *
+   * ⚠️ Đặt ở `sales/assignable-advisors` chứ không phải `sales/leads/...`: một
+   *    đoạn đường dẫn cố định nằm cùng chỗ với `leads/:id` sẽ bị bắt bởi route
+   *    tham số nếu thứ tự khai báo đổi.
+   */
+  @Get('assignable-advisors')
+  assignableAdvisors(
+    @Actor() actor: ActorContext,
+    @Query('branchId') branchId?: string,
+  ): Promise<{ id: string; fullName: string }[]> {
+    assertCan(actor, 'sales:leadAssign');
+    if (branchId === undefined || !/^[0-9a-f-]{36}$/i.test(branchId)) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Thiếu `branchId` hợp lệ.');
+    }
+    return this.svc.assignableAdvisors(actor, branchId);
   }
 
   @Post('leads/:id/assign')

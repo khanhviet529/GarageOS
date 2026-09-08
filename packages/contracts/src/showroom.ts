@@ -265,3 +265,33 @@ export const FinancingDriftRow = z.object({
   bankName: z.string(),
 });
 export type FinancingDriftRow = z.infer<typeof FinancingDriftRow>;
+
+/* ==================== Ảnh gắn cho một bản sửa (§4.4) ======================== */
+
+export const ProductMediaKind = z.enum(['POSTER', 'GALLERY', 'SOCIAL', 'HOTSPOT_DETAIL']);
+export type ProductMediaKind = z.infer<typeof ProductMediaKind>;
+
+export const PRODUCT_MEDIA_KIND_LABEL: Record<ProductMediaKind, string> = {
+  POSTER: 'Ảnh bìa',
+  GALLERY: 'Thư viện',
+  SOCIAL: 'Chia sẻ mạng xã hội',
+  HOTSPOT_DETAIL: 'Điểm nhấn chi tiết',
+};
+
+export const ProductMediaInput = z.object({
+  mediaAssetId: z.string().uuid(),
+  role: ProductMediaKind.default('GALLERY'),
+  altText: z.string().trim().max(300).default(''),
+  sortOrder: z.number().int().min(0).max(10_000).default(0),
+  isCover: z.boolean().default(false),
+  /** Ảnh chụp một màu cụ thể. Null = ảnh chung. */
+  colorId: z.string().uuid().nullable().optional(),
+});
+export type ProductMediaInput = z.infer<typeof ProductMediaInput>;
+
+export const ProductMediaRow = ProductMediaInput.extend({
+  id: z.string().uuid(),
+  /** URL xem trước. Null = bản dựng chưa publish xong, chưa hiện được. */
+  previewUrl: z.string().nullable(),
+});
+export type ProductMediaRow = z.infer<typeof ProductMediaRow>;

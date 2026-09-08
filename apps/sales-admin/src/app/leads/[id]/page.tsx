@@ -290,6 +290,7 @@ export default function LeadDetailPage({
 
       <AssignDialog
         open={moGan}
+        branchId={lead.branchId}
         onOpenChange={setMoGan}
         busy={busy}
         error={error}

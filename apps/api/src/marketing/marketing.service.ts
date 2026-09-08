@@ -1249,7 +1249,22 @@ export class MarketingService {
       [newId, soMoi, actor.userId, sourceRevisionId],
     );
 
-    // Sao chép variant + media sang draft mới (clone-to-draft, không mutate lịch sử)
+    /*
+     * 🔒 Chép TOÀN BỘ nội dung theo revision, không chỉ variant và ảnh.
+     *
+     * ⚠️ Bản trước chép đúng hai bảng: `vehicle_variant_revision` và
+     *    `vehicle_product_media`. Bốn nhóm nội dung khác cũng gắn vào revision
+     *    và đều bị bỏ lại: MÀU, ƯU ĐÃI, TRẢ GÓP.
+     *
+     *    Hệ quả đo được trên seed: mẫu `aurora-e1` có 3 màu, 4 ưu đãi, 3 chương
+     *    trình trả góp; sau một lượt tạo bản nháp, bản nháp có 0/0/0. Biên tập
+     *    viên sửa một lỗi chính tả rồi bấm Xuất bản là trang xe mất sạch màu,
+     *    ưu đãi và bảng trả góp — không có cảnh báo nào, vì về mặt kỹ thuật
+     *    "bản nháp đó đúng là không có màu nào".
+     *
+     * 💡 Lỗi này nằm im vì màn Sửa xe KHÔNG có nút tạo bản nháp: đường duy nhất
+     *    tới đây là gọi API tay. Thêm nút xong là nó thành đường đi hằng ngày.
+     */
     await tx.query(
       `INSERT INTO vehicle_variant_revision
          (id, tenant_id, product_revision_id, variant_id, name, sku, powertrain,
@@ -1261,13 +1276,65 @@ export class MarketingService {
          FROM vehicle_variant_revision WHERE product_revision_id = $2`,
       [newId, sourceRevisionId],
     );
+
+    /*
+     * Màu chép TRƯỚC ảnh, và giữ lại bản đồ id cũ → id mới.
+     *
+     * 🔒 `vehicle_product_media.color_id` trỏ tới một dòng màu CỦA CHÍNH revision
+     *    đó. Chép ảnh mà bê nguyên `color_id` là để ảnh của bản nháp trỏ sang màu
+     *    của bản cũ — khoá ngoại vẫn hợp lệ (cùng tenant), nên không có lỗi nào
+     *    nổ ra; chỉ là "ảnh này của màu nào" trả lời sai kể từ đó.
+     */
+    const { rows: mauMoi } = await tx.query<{ cu: string; moi: string }>(
+      `WITH chep AS (
+         INSERT INTO vehicle_color
+           (tenant_id, product_revision_id, name, hex_code, kind, surcharge_amount, display_order)
+         SELECT tenant_id, $1, name, hex_code, kind, surcharge_amount, display_order
+           FROM vehicle_color WHERE product_revision_id = $2
+         RETURNING id, name
+       )
+       SELECT c.id AS cu, chep.id AS moi
+         FROM chep JOIN vehicle_color c
+           ON c.product_revision_id = $2 AND c.name = chep.name`,
+      [newId, sourceRevisionId],
+    );
+    const banDoMau = new Map(mauMoi.map((r) => [r.cu, r.moi]));
+
+    const { rows: anhCu } = await tx.query<Record<string, unknown>>(
+      `SELECT media_asset_id, role, alt_text, sort_order, is_cover, color_id
+         FROM vehicle_product_media WHERE product_revision_id = $1`,
+      [sourceRevisionId],
+    );
+    for (const a of anhCu) {
+      await tx.query(
+        `INSERT INTO vehicle_product_media
+           (tenant_id, product_revision_id, media_asset_id, role, alt_text, sort_order, is_cover, color_id)
+         VALUES ($1,$2,$3,$4::product_media_role,$5,$6,$7,$8)`,
+        [actor.tenantId, newId, a.media_asset_id, a.role, a.alt_text, a.sort_order, a.is_cover,
+          a.color_id === null ? null : banDoMau.get(a.color_id as string) ?? null],
+      );
+    }
+
     await tx.query(
-      `INSERT INTO vehicle_product_media
-         (id, tenant_id, product_revision_id, media_asset_id, role, alt_text,
-          sort_order, is_cover)
-       SELECT gen_random_uuid(), tenant_id, $1, media_asset_id, role, alt_text,
-              sort_order, is_cover
-         FROM vehicle_product_media WHERE product_revision_id = $2`,
+      `INSERT INTO vehicle_promotion
+         (tenant_id, product_revision_id, variant_id, kind, title, condition_text,
+          value_amount, is_enabled, starts_at, ends_at, display_order)
+       SELECT tenant_id, $1, variant_id, kind, title, condition_text,
+              value_amount, is_enabled, starts_at, ends_at, display_order
+         FROM vehicle_promotion WHERE product_revision_id = $2`,
+      [newId, sourceRevisionId],
+    );
+
+    /* `template_id` chép theo: mất nó là mất luôn báo lệch với thư viện (0081). */
+    await tx.query(
+      `INSERT INTO financing_program
+         (tenant_id, product_revision_id, template_id, bank_name, bank_logo_media_id,
+          min_down_payment_bp, promo_rate_bp, promo_months, standard_rate_bp,
+          allowed_terms_months, down_payment_options_bp, rate_updated_at, display_order)
+       SELECT tenant_id, $1, template_id, bank_name, bank_logo_media_id,
+              min_down_payment_bp, promo_rate_bp, promo_months, standard_rate_bp,
+              allowed_terms_months, down_payment_options_bp, rate_updated_at, display_order
+         FROM financing_program WHERE product_revision_id = $2`,
       [newId, sourceRevisionId],
     );
     return newId;

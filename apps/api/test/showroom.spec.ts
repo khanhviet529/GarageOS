@@ -17,6 +17,8 @@ const ADMIN_URL = process.env.DATABASE_ADMIN_URL ?? 'postgresql://garageos:garag
 const TENANT_A = '11111111-1111-1111-1111-111111111111';
 
 let admin: Pool;
+/** Pool bằng ROLE ỨNG DỤNG — dùng để chứng minh database chặn, không phải controller. */
+let app: Pool;
 let publisher = '';
 let editor = '';
 let advisor = '';
@@ -56,6 +58,10 @@ async function publicGet(path: string): Promise<{ status: number; body: any }> {
 
 before(async () => {
   admin = new Pool({ connectionString: ADMIN_URL });
+  app = new Pool({
+    connectionString:
+      process.env.DATABASE_URL ?? 'postgresql://garageos_app:garageos_app_dev@localhost:5433/garageos',
+  });
   [publisher, editor, advisor, ownerB] = await Promise.all([
     login('0901000011'), login('0901000010'), login('0901000012'), login('0902000001'),
   ]);
@@ -71,6 +77,7 @@ before(async () => {
 after(async () => {
   await admin.query(`DELETE FROM onroad_fee_schedule WHERE province_code = '99'`);
   await admin.end();
+  await app.end();
 });
 
 describe('Giá lăn bánh — INV-LS-16', () => {
@@ -637,5 +644,272 @@ describe('Thư viện trả góp — mẫu là nguồn để CHÉP, không phả
       rateUpdatedAt: '2026-09-01', displayOrder: 0, isActive: true,
     });
     assert.equal(r.status, 403);
+  });
+});
+
+describe('Ảnh và màu của bản sửa — chỉ bản NHÁP, và ảnh bìa có MỘT', () => {
+  let revNhap = '';
+
+  before(async () => {
+    const r = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+    assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r.body));
+    const { rows } = await admin.query<{ id: string }>(
+      'SELECT draft_revision_id AS id FROM vehicle_product WHERE id = $1',
+      [productId],
+    );
+    revNhap = rows[0]!.id;
+  });
+
+  test('🔒 sửa ảnh của bản ĐÃ PUBLISH bị từ chối — INV-LS-13', async () => {
+    const r = await api('PUT', `/api/v1/showroom/revisions/${revisionId}/media`, editor, []);
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(String(r.body.error.message), /bản NHÁP|bất biến/i);
+  });
+
+  test('🔒 database chặn độc lập với controller', async () => {
+    /*
+     * Bài trên chứng minh controller từ chối. Bài này chứng minh DỮ LIỆU được
+     * bảo vệ: ghi thẳng bằng role của ứng dụng, không qua API. Một endpoint
+     * kiểm đúng chỉ nói lên rằng endpoint đó kiểm đúng.
+     */
+    const tx = await app.connect();
+    try {
+      await tx.query('BEGIN');
+      await tx.query(`SELECT set_config('app.tenant_id', $1, true)`, [TENANT_A]);
+      await assert.rejects(
+        tx.query('DELETE FROM vehicle_product_media WHERE product_revision_id = $1', [revisionId]),
+        /bất biến|INV-LS-13/i,
+      );
+      await tx.query('ROLLBACK');
+    } finally {
+      tx.release();
+    }
+  });
+
+  test('gắn ảnh vào bản nháp, đọc lại thấy đúng thứ tự và ảnh bìa', async () => {
+    const { rows: assets } = await admin.query<{ id: string }>(
+      'SELECT id FROM media_asset WHERE tenant_id = $1 ORDER BY created_at LIMIT 2',
+      [TENANT_A],
+    );
+    assert.equal(assets.length, 2, 'seed cần ít nhất hai ảnh để thử thứ tự');
+
+    const dat = await api('PUT', `/api/v1/showroom/revisions/${revNhap}/media`, editor, [
+      { mediaAssetId: assets[1]!.id, role: 'GALLERY', altText: 'Ảnh phụ', sortOrder: 1, isCover: false },
+      { mediaAssetId: assets[0]!.id, role: 'POSTER', altText: 'Ảnh bìa', sortOrder: 0, isCover: true },
+    ]);
+    assert.equal(dat.status, 200, JSON.stringify(dat.body));
+
+    const doc = await api('GET', `/api/v1/showroom/revisions/${revNhap}/media`, editor);
+    assert.equal(doc.status, 200);
+    const items = doc.body.items as { altText: string; isCover: boolean }[];
+    assert.equal(items.length, 2);
+    assert.equal(items[0]!.isCover, true, 'ảnh bìa phải đứng đầu');
+    assert.equal(items[0]!.altText, 'Ảnh bìa');
+  });
+
+  test('🔒 hai ảnh bìa bị từ chối — chỗ bìa có MỘT', async () => {
+    const { rows: assets } = await admin.query<{ id: string }>(
+      'SELECT id FROM media_asset WHERE tenant_id = $1 ORDER BY created_at LIMIT 2',
+      [TENANT_A],
+    );
+    const r = await api('PUT', `/api/v1/showroom/revisions/${revNhap}/media`, editor, [
+      { mediaAssetId: assets[0]!.id, role: 'POSTER', altText: 'A', sortOrder: 0, isCover: true },
+      { mediaAssetId: assets[1]!.id, role: 'POSTER', altText: 'B', sortOrder: 1, isCover: true },
+    ]);
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+  });
+
+  test('đọc màu của một bản sửa — endpoint mà giao diện cần để hiện danh sách', async () => {
+    const dat = await api('PUT', `/api/v1/showroom/revisions/${revNhap}/colors`, editor, [
+      { name: 'Xanh Rêu', hexCode: '#3d4a3a', kind: 'KIM_LOAI', surchargeAmount: 8000000, displayOrder: 0 },
+    ]);
+    assert.equal(dat.status, 200, JSON.stringify(dat.body));
+
+    const doc = await api('GET', `/api/v1/showroom/revisions/${revNhap}/colors`, editor);
+    assert.equal(doc.status, 200);
+    const items = doc.body.items as { name: string; hexCode: string; surchargeAmount: number }[];
+    assert.equal(items.length, 1);
+    assert.equal(items[0]!.name, 'Xanh Rêu');
+    assert.equal(items[0]!.surchargeAmount, 8000000, 'phụ thu phải về dạng số, không phải chuỗi');
+  });
+});
+
+describe('🔒 Danh sách tư vấn viên nhận lead — cùng một quy tắc với bước kiểm', () => {
+  test('trả đúng tập mà assignLead sẽ chấp nhận', async () => {
+    const quanLySales = await login('0901000013');
+    const { rows: br } = await admin.query<{ id: string }>(
+      `SELECT b.id FROM branch b
+         JOIN user_branch ub ON ub.branch_id = b.id
+         JOIN app_user u ON u.id = ub.user_id
+        WHERE u.phone = '0901000013' AND b.tenant_id = $1 LIMIT 1`,
+      [TENANT_A],
+    );
+    const r = await api(
+      'GET',
+      `/api/v1/sales/assignable-advisors?branchId=${br[0]!.id}`,
+      quanLySales,
+    );
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const ds = r.body as { id: string; fullName: string }[];
+
+    /*
+     * Đối chiếu với SQL thật thay vì với một con số viết cứng: seed đổi thì bài
+     * kiểm không đỏ vì lý do không liên quan, nhưng nếu endpoint và bước kiểm
+     * lệch nhau thì nó đỏ ngay.
+     */
+    const { rows: dung } = await admin.query<{ id: string }>(
+      `SELECT u.id FROM app_user u
+        WHERE u.tenant_id = $1 AND u.is_active
+          AND 'SALES_ADVISOR' = ANY(u.roles::text[])
+          AND EXISTS (SELECT 1 FROM user_branch ub WHERE ub.user_id = u.id AND ub.branch_id = $2)`,
+      [TENANT_A, br[0]!.id],
+    );
+    assert.deepEqual(ds.map((x) => x.id).sort(), dung.map((x) => x.id).sort());
+  });
+
+  test('🔒 quản lý không liệt kê được nhân sự của chi nhánh KHÁC', async () => {
+    const quanLySales = await login('0901000013');
+    const { rows: br } = await admin.query<{ id: string }>(
+      `SELECT id FROM branch WHERE tenant_id = $1 AND code = 'HCM01'`,
+      [TENANT_A],
+    );
+    const r = await api(
+      'GET',
+      `/api/v1/sales/assignable-advisors?branchId=${br[0]!.id}`,
+      quanLySales,
+    );
+    assert.equal(r.status, 422, 'đổi một tham số trên URL không được vượt phạm vi chi nhánh');
+  });
+
+  test('🔒 tư vấn viên KHÔNG xem được danh sách — họ không gán lead', async () => {
+    const { rows: br } = await admin.query<{ id: string }>(
+      `SELECT id FROM branch WHERE tenant_id = $1 ORDER BY code LIMIT 1`,
+      [TENANT_A],
+    );
+    const r = await api('GET', `/api/v1/sales/assignable-advisors?branchId=${br[0]!.id}`, advisor);
+    assert.equal(r.status, 403);
+  });
+});
+
+describe('🔒 Tạo bản nháp phải chép ĐỦ nội dung theo revision', () => {
+  /*
+   * ⚠️ Bản trước chép đúng hai bảng: variant và ảnh. Màu, ưu đãi và trả góp bị
+   *    bỏ lại. Đo được trên seed: aurora-e1 có 3 màu / 4 ưu đãi / 3 chương trình;
+   *    bản nháp mới có 0/0/0. Biên tập viên sửa một lỗi chính tả rồi bấm Xuất
+   *    bản là trang xe mất sạch — không cảnh báo nào, vì về mặt kỹ thuật "bản
+   *    nháp đó đúng là không có màu nào".
+   *
+   * 💡 Lỗi nằm im vì màn Sửa xe chưa có nút tạo bản nháp. Thêm nút xong là nó
+   *    thành đường đi hằng ngày.
+   *
+   * 🔒 Bài này DỰNG LẤY dữ liệu của chính nó thay vì tin vào seed. Bản đầu đọc
+   *    thẳng số của seed và đỏ vì một bài khác trong cùng file đã tạo bản nháp
+   *    trước — `cloneProductDraft` trả lại bản nháp đang có chứ không chép lần
+   *    nữa, nên phép so sánh đo nhầm thứ.
+   */
+  async function demTheoRevision(revisionId: string): Promise<Record<string, string>> {
+    const { rows } = await admin.query<Record<string, string>>(
+      `SELECT (SELECT count(*) FROM vehicle_color c WHERE c.product_revision_id = $1) AS mau,
+              (SELECT count(*) FROM vehicle_promotion p WHERE p.product_revision_id = $1) AS uu_dai,
+              (SELECT count(*) FROM financing_program f WHERE f.product_revision_id = $1) AS tra_gop,
+              (SELECT count(*) FROM vehicle_product_media m WHERE m.product_revision_id = $1) AS anh`,
+      [revisionId],
+    );
+    return rows[0]!;
+  }
+
+  async function conTro(): Promise<{ draft: string | null; published: string | null }> {
+    const { rows } = await admin.query<{ d: string | null; p: string | null }>(
+      'SELECT draft_revision_id AS d, published_revision_id AS p FROM vehicle_product WHERE id = $1',
+      [productId],
+    );
+    return { draft: rows[0]!.d, published: rows[0]!.p };
+  }
+
+  /** Đưa mẫu xe về trạng thái "đã publish, không còn nháp" — điểm xuất phát sạch. */
+  async function dungNenSach(): Promise<string> {
+    let ct = await conTro();
+    if (ct.draft === null) {
+      const tao = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+      assert.ok(tao.status === 200 || tao.status === 201, JSON.stringify(tao.body));
+      ct = await conTro();
+    }
+    const rev = ct.draft!;
+
+    // Ba màu và hai ảnh, đặt tường minh để phép so sánh có gì để so.
+    const dat = await api('PUT', `/api/v1/showroom/revisions/${rev}/colors`, editor, [
+      { name: 'Trắng Nền', hexCode: '#f2f2f0', kind: 'DON', surchargeAmount: 0, displayOrder: 0 },
+      { name: 'Đen Nền', hexCode: '#101010', kind: 'DON', surchargeAmount: 0, displayOrder: 1 },
+      { name: 'Đỏ Nền', hexCode: '#c73526', kind: 'DAC_BIET', surchargeAmount: 9000000, displayOrder: 2 },
+    ]);
+    assert.equal(dat.status, 200, JSON.stringify(dat.body));
+
+    const { rows: assets } = await admin.query<{ id: string }>(
+      'SELECT id FROM media_asset WHERE tenant_id = $1 ORDER BY created_at LIMIT 2',
+      [TENANT_A],
+    );
+    const datAnh = await api('PUT', `/api/v1/showroom/revisions/${rev}/media`, editor, [
+      { mediaAssetId: assets[0]!.id, role: 'POSTER', altText: 'Bìa', sortOrder: 0, isCover: true },
+      { mediaAssetId: assets[1]!.id, role: 'GALLERY', altText: 'Phụ', sortOrder: 1, isCover: false },
+    ]);
+    assert.equal(datAnh.status, 200, JSON.stringify(datAnh.body));
+
+    const ver = (await api('GET', `/api/v1/marketing/vehicle-products/${productId}`, editor)).body.version;
+    const pub = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/publish`, publisher, {
+      version: ver,
+    });
+    assert.ok(pub.status === 200 || pub.status === 201, JSON.stringify(pub.body));
+    return (await conTro()).published!;
+  }
+
+  test('màu, ưu đãi, trả góp và ảnh đều theo sang bản nháp', async () => {
+    const daDang = await dungNenSach();
+    const truoc = await demTheoRevision(daDang);
+    assert.ok(Number(truoc.mau) > 0 && Number(truoc.anh) > 0, 'nền dựng hỏng — không có gì để chép');
+
+    const r = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+    assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r.body));
+
+    const sau = await demTheoRevision((await conTro()).draft!);
+    assert.deepEqual(sau, truoc, 'bản nháp phải có đúng bằng bản đang hiện');
+  });
+
+  test('🔒 ảnh gắn màu trỏ sang màu MỚI của bản nháp, không phải màu của bản cũ', async () => {
+    /*
+     * Chỗ sai tinh vi nhất của một lượt chép: bê nguyên `color_id`. Khoá ngoại
+     * vẫn hợp lệ (cùng tenant) nên KHÔNG có lỗi nào nổ ra — chỉ là câu "ảnh này
+     * của màu nào" trả lời sai kể từ đó, và nó trả lời sai vĩnh viễn.
+     */
+    const daDang = await dungNenSach();
+
+    // Gắn ảnh của bản ĐANG HIỆN vào một màu của chính bản đó, bằng quyền chủ
+    // schema — trigger INV-LS-13 chặn role ứng dụng ghi vào bản đã publish.
+    const { rows: mau } = await admin.query<{ id: string }>(
+      'SELECT id FROM vehicle_color WHERE product_revision_id = $1 ORDER BY display_order LIMIT 1',
+      [daDang],
+    );
+    await admin.query(
+      'UPDATE vehicle_product_media SET color_id = $2 WHERE product_revision_id = $1',
+      [daDang, mau[0]!.id],
+    );
+
+    const tao = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+    assert.ok(tao.status === 200 || tao.status === 201, JSON.stringify(tao.body));
+    const revNhap = (await conTro()).draft!;
+
+    const { rows: lac } = await admin.query<{ n: string }>(
+      `SELECT count(*) AS n
+         FROM vehicle_product_media m
+         JOIN vehicle_color c ON c.id = m.color_id
+        WHERE m.product_revision_id = $1 AND c.product_revision_id <> $1`,
+      [revNhap],
+    );
+    assert.equal(Number(lac[0]!.n), 0, 'ảnh của bản nháp đang trỏ sang màu của một bản khác');
+
+    const { rows: coMau } = await admin.query<{ n: string }>(
+      'SELECT count(*) AS n FROM vehicle_product_media WHERE product_revision_id = $1 AND color_id IS NOT NULL',
+      [revNhap],
+    );
+    assert.ok(Number(coMau[0]!.n) > 0, 'liên kết ảnh–màu bị mất hẳn thay vì được ánh xạ');
   });
 });

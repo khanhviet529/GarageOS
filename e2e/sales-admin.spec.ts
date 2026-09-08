@@ -86,25 +86,62 @@ test.describe('Sales Admin', () => {
     await dangNhap(page, '0901000011'); // MARKETING_PUBLISHER
     await page.goto(`${ADMIN}/vehicles`);
 
-    // Loại `/vehicles/new` — đó là nút "tạo xe mới", không phải một dòng xe.
-    const xe = page.locator('a[href^="/vehicles/"]:not([href="/vehicles/new"])').first();
+    /*
+     * ⚠️ Mốc vào ĐÚNG `aurora-e1`, không phải "xe đầu tiên trong danh sách".
+     *
+     * Bài này khẳng định bản nháp mang theo MÀU, mà seed chỉ khai màu cho
+     * `aurora-e1`. Lấy xe đầu tiên thì kết quả phụ thuộc thứ tự sắp xếp: ở máy
+     * này ra aurora và xanh, trên CI ra `meridian-x5` — xe không có màu nào —
+     * rồi bài đỏ vì một lý do không liên quan đến thứ nó kiểm.
+     */
+    const xe = page.getByRole('link', { name: /aurora/i }).first();
     await expect(xe).toBeVisible();
     await xe.click();
     await expect(page).toHaveURL(/\/vehicles\/[0-9a-f-]{36}$/);
 
     /*
-     * Xe seed đã publish và không có bản nháp, nên nút phải hiện. Nếu bản nháp
-     * đã tồn tại thì form soạn thảo hiện thay — cả hai đều là trạng thái hợp lệ,
-     * và cả hai đều phải cho người dùng một đường đi tiếp.
+     * ⚠️ Bản trước của bài này TỰ BỎ QUA phần nó kiểm, và xanh suốt nhiều tháng.
+     *
+     * Nó viết:
+     *
+     *     const formSoan = page.getByLabel(/tiêu đề/i);
+     *     await expect(nutTaoNhap.or(formSoan).first()).toBeVisible();
+     *     if (await nutTaoNhap.isVisible()) { … }
+     *
+     * Nút "Tạo bản nháp" KHÔNG tồn tại trong bản dựng giao diện hiện tại, nên
+     * nhánh `if` không bao giờ chạy. Còn `getByLabel(/tiêu đề/i)` khớp cả nút
+     * "Tiêu đề mức 2" trên thanh công cụ soạn thảo — luôn hiện, ở mọi trạng
+     * thái. Phép `.or()` vì thế luôn đúng, và bài kiểm báo xanh mà chưa từng
+     * bấm nút nào.
+     *
+     * 🔒 Hai chỗ sai cộng lại: một locator quá rộng, và một nhánh `if` không có
+     *    vế `else` nào báo động. Cả hai đều là cách một bài kiểm đi VÒNG QUA
+     *    vấn đề thay vì phát hiện nó.
+     *
+     * Bản này mốc vào hai NÚT loại trừ nhau theo trạng thái — có nháp thì "Lưu
+     * nháp", chưa có thì "Tạo bản nháp" — nên không có trạng thái nào lọt qua mà
+     * không bị khẳng định.
      */
-    const nutTaoNhap = page.getByRole('button', { name: /tạo bản nháp/i });
-    const formSoan = page.getByLabel(/tiêu đề/i);
-    await expect(nutTaoNhap.or(formSoan).first()).toBeVisible({ timeout: 10_000 });
+    const nutTaoNhap = page.getByRole('button', { name: /^Tạo bản nháp$/ });
+    const nutLuuNhap = page.getByRole('button', { name: /^Lưu nháp$/ });
+    await expect(nutTaoNhap.or(nutLuuNhap).first()).toBeVisible({ timeout: 10_000 });
 
     if (await nutTaoNhap.isVisible().catch(() => false)) {
       await nutTaoNhap.click();
-      await expect(formSoan).toBeVisible({ timeout: 15_000 });
+      // Sau khi tạo, nút đổi thành "Lưu nháp" và nhãn trạng thái hiện "Bản nháp".
+      await expect(nutLuuNhap).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText('Bản nháp', { exact: true }).first()).toBeVisible();
     }
+
+    /*
+     * 🔒 Bản nháp phải mang theo NỘI DUNG của bản đang hiện, không phải một bản
+     *    rỗng. Chép thiếu là biên tập viên sửa một chữ rồi xuất bản, và trang xe
+     *    mất sạch màu — xem `cloneRevisionAsDraft`.
+     */
+    await page.getByRole('tab', { name: 'Màu sắc' }).click();
+    const oTenMau = page.locator('input[id^="ten-mau-"]');
+    await expect(oTenMau.first()).toBeVisible({ timeout: 15_000 });
+    expect(await oTenMau.count()).toBeGreaterThan(0);
   });
 
   test('SA-E05 — lead từ landing hiện trong danh sách, và không bịa phiên bản xe', async ({
