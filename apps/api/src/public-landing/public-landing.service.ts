@@ -13,6 +13,8 @@ import {
   type ChiPhiSoHuuView,
   type PublicFaqItem,
   type FaqSurface,
+  type PublicNavItem,
+  type NavPlacement,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
 import { MOC_CON_TRO, ghepConTro, tachConTro } from '../common/con-tro-trang';
@@ -50,6 +52,57 @@ export class PublicLandingService {
         ORDER BY f.display_order, f.created_at`,
       [surface],
     )).rows);
+  }
+
+  /**
+   * Menu công khai.
+   *
+   * 🔒 Mục trỏ tới trang CHƯA CÓ phải tự ẩn — SRS-LS-EXP-001 §4.10: "link gãy
+   *    trên trang bán hàng đắt hơn một mục menu thiếu".
+   *
+   *    Ở lát cắt này landing chỉ có bốn trang có mã, nên "trang có thật" là một
+   *    danh sách hữu hạn kiểm được ở tầng gọi. Điều kiện `visible` là chốt của
+   *    người dùng; điều kiện "trang có thật" là chốt của hệ thống, và hai chốt
+   *    đó không thay nhau được.
+   */
+  async navigation(ctx: PublicTenantContext, placement: NavPlacement): Promise<PublicNavItem[]> {
+    return this.db.withTenantId(ctx.tenantId, null, async (tx) => {
+      const { rows } = await tx.query<Record<string, unknown>>(
+        `SELECT label, path, external_url, column_index
+           FROM site_navigation
+          WHERE visible AND placement = $1::nav_placement
+          ORDER BY column_index, display_order, label`,
+        [placement],
+      );
+      return rows.map((r) => ({
+        label: r.label as string,
+        href: (r.path ?? r.external_url) as string,
+        columnIndex: Number(r.column_index),
+        external: r.path === null,
+      }));
+    });
+  }
+
+  /**
+   * Tra một đường dẫn trong bảng chuyển hướng. `null` = không có.
+   *
+   * 🔒 So khớp CHÍNH XÁC, không tiền tố và không mẫu. Chuyển hướng theo tiền tố
+   *    ("mọi thứ dưới /blog") nghe tiện, nhưng nó bắt landing phải quét cả bảng
+   *    ở mỗi lượt 404 và nó biến một dòng cấu hình thành một quy tắc mà người
+   *    nhập không đoán được phạm vi. Cần nhiều đích thì nhập nhiều dòng.
+   */
+  async redirectFor(
+    tenantId: string,
+    path: string,
+  ): Promise<{ to: string; statusCode: number } | null> {
+    return this.db.withTenantId(tenantId, null, async (tx) => {
+      const { rows } = await tx.query<{ to_path: string; status_code: number }>(
+        'SELECT to_path, status_code FROM site_redirect WHERE from_path = $1',
+        [path],
+      );
+      const r = rows[0];
+      return r === undefined ? null : { to: r.to_path, statusCode: Number(r.status_code) };
+    });
   }
 
   async testimonials(ctx: PublicTenantContext): Promise<PublicTestimonial[]> {

@@ -297,6 +297,8 @@ describe('🔒 INV — thợ không thấy bất kỳ số tiền nào', () => {
       'faq-items', 'faq',
       // Bài viết: nội dung trang web. Vai bị cấm có bài riêng ở `ma-tran-quyen`.
       'articles', 'articles/:id/draft', 'articles/:slug', 'article-categories',
+      // Menu và chuyển hướng: nhãn chữ và đường dẫn, không có số tiền nào.
+      'navigation', 'redirects', 'redirect',
     ]);
 
     const thieu: string[] = [];

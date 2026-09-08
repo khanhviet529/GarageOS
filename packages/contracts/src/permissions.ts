@@ -295,6 +295,20 @@ export const ACTION_ROLES = {
   'marketing:articleRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:articleWrite': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
   'marketing:articlePublish': ['MARKETING_PUBLISHER', 'OWNER'],
+
+  /**
+   * Điều hướng và chuyển hướng — SRS-LS-EXP-001 §4.10.
+   *
+   * HAI bậc, không ba, và khác với nội dung có chủ ý: menu không có bản nháp.
+   * Một mục menu là một dòng chữ và một đường dẫn — không có gì để "đọc lại
+   * trước khi đăng", và bắt nó qua vòng duyệt sẽ khiến việc sửa một lỗi chính
+   * tả trong menu mất hai người.
+   *
+   * 🔒 Đổi lại, cả hai quyền đều hẹp hơn quyền soạn nội dung: sai một dòng
+   *    chuyển hướng là gãy đường vào của cả một nhóm URL đã được đánh chỉ mục.
+   */
+  'marketing:navigationRead': ['MARKETING_EDITOR', 'MARKETING_PUBLISHER', 'OWNER'],
+  'marketing:navigationWrite': ['MARKETING_PUBLISHER', 'OWNER'],
   'sales:leadRead': ['SALES_ADVISOR', 'SALES_MANAGER', 'OWNER'],
   'sales:leadReadAllBranch': ['SALES_MANAGER', 'OWNER'],
   'sales:leadAssign': ['SALES_MANAGER', 'OWNER'],
@@ -429,6 +443,8 @@ export const ACTION_LABEL: Record<PermissionAction, string> = {
   'marketing:articleRead': 'xem bài viết',
   'marketing:articleWrite': 'soạn và sửa bài viết',
   'marketing:articlePublish': 'công bố bài viết',
+  'marketing:navigationRead': 'xem menu và chuyển hướng',
+  'marketing:navigationWrite': 'sửa menu và chuyển hướng',
   'sales:leadRead': 'xem lead được gán',
   'sales:leadReadAllBranch': 'xem lead toàn chi nhánh',
   'sales:leadAssign': 'gán lead cho tư vấn',

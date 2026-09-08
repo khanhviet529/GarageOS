@@ -267,6 +267,7 @@ async function main(): Promise<void> {
     vehicle_experience_version, vehicle_experience,
     vehicle_price_log, vehicle_availability, financing_program, vehicle_promotion,
     vehicle_color, onroad_fee_schedule,
+    site_redirect, site_navigation,
     article_tag, article_revision, article, article_category,
     faq_placement, faq_item,
     testimonial, vehicle_variant_revision, vehicle_variant,
@@ -2015,6 +2016,44 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  /*
+   * Điều hướng — bộ mặc định, khớp ĐÚNG mảng `MAC_DINH` trong `site-header.tsx`
+   * và `site-footer.tsx`. Khớp là điều kiện để đổi nguồn dữ liệu mà người dùng
+   * không thấy gì đổi; lệch là một lỗi hiển thị chỉ hiện ra sau khi seed chạy.
+   */
+  console.log('Tạo menu và chuyển hướng...');
+  const MENU: { vt: 'HEADER' | 'FOOTER'; cot: number; nhan: string; duong: string }[] = [
+    { vt: 'HEADER', cot: 0, nhan: 'Xe đang bán', duong: '/xe' },
+    { vt: 'HEADER', cot: 0, nhan: 'Giá lăn bánh', duong: '/#gia-lan-banh' },
+    { vt: 'HEADER', cot: 0, nhan: 'Tin tức', duong: '/tin-tuc' },
+    { vt: 'HEADER', cot: 0, nhan: 'Liên hệ', duong: '/lien-he' },
+    { vt: 'FOOTER', cot: 0, nhan: 'Xe đang bán', duong: '/xe' },
+    { vt: 'FOOTER', cot: 0, nhan: 'Giá lăn bánh', duong: '/#gia-lan-banh' },
+    { vt: 'FOOTER', cot: 0, nhan: 'Đăng ký lái thử', duong: '/lien-he?nhu-cau=lai-thu' },
+    { vt: 'FOOTER', cot: 1, nhan: 'Tin tức', duong: '/tin-tuc' },
+    { vt: 'FOOTER', cot: 1, nhan: 'Gửi yêu cầu tư vấn', duong: '/lien-he' },
+    { vt: 'FOOTER', cot: 1, nhan: 'Hệ thống showroom', duong: '/#chi-nhanh' },
+  ];
+  for (const [i, m] of MENU.entries()) {
+    await db.query(
+      `INSERT INTO site_navigation
+         (tenant_id, placement, column_index, label, path, display_order, created_by, updated_by)
+       VALUES ($1,$2::nav_placement,$3,$4,$5,$6,$7,$7)`,
+      [TENANT_A, m.vt, m.cot, m.nhan, m.duong, i, publisherId],
+    );
+  }
+
+  /*
+   * Một chuyển hướng thật để bài kiểm có gì để thử: `/tin-tuc-cu` là đường dẫn
+   * của bản trang cũ. Đây đúng ca dùng mà bảng này sinh ra — đổi cấu trúc URL mà
+   * không bỏ rơi link đã có ngoài internet.
+   */
+  await db.query(
+    `INSERT INTO site_redirect (tenant_id, from_path, to_path, status_code, note, created_by, updated_by)
+     VALUES ($1,'/tin-tuc-cu','/tin-tuc',301,'Đường dẫn của bản trang trước',$2,$2)`,
+    [TENANT_A, publisherId],
+  );
 
   await db.query('COMMIT');
 

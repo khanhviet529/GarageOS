@@ -219,3 +219,72 @@ export const PublicArticleDetail = PublicArticleSummary.extend({
   tags: z.array(z.string()),
 });
 export type PublicArticleDetail = z.infer<typeof PublicArticleDetail>;
+
+/* ========================= Điều hướng và chuyển hướng ======================= */
+
+export const NavPlacement = z.enum(['HEADER', 'FOOTER']);
+export type NavPlacement = z.infer<typeof NavPlacement>;
+
+export const NAV_PLACEMENT_LABEL: Record<NavPlacement, string> = {
+  HEADER: 'Đầu trang',
+  FOOTER: 'Chân trang',
+};
+
+/**
+ * Một mục menu.
+ *
+ * 🔒 Đúng MỘT đích: `path` (nội bộ) hoặc `externalUrl`, không cả hai và không
+ *    thiếu cả hai. Ràng buộc `nav_dung_mot_dich` (0078) canh điều đó ở database;
+ *    ở đây `refine` để người dùng nhận một câu tiếng Việt thay vì lỗi Postgres.
+ */
+export const NavItemInput = z
+  .object({
+    placement: NavPlacement,
+    columnIndex: z.number().int().min(0).max(2).default(0),
+    label: z.string().trim().min(1).max(60),
+    path: z.string().trim().regex(/^\/[^\s]*$/, 'Đường dẫn phải bắt đầu bằng /').max(300).nullable().optional(),
+    externalUrl: z.string().trim().url().max(500).nullable().optional(),
+    displayOrder: z.number().int().min(0).max(10_000).default(0),
+    visible: z.boolean().default(true),
+  })
+  .refine(
+    (v) => (v.path == null) !== (v.externalUrl == null),
+    { message: 'Mỗi mục cần đúng một đích: đường dẫn nội bộ HOẶC liên kết ngoài.' },
+  );
+export type NavItemInput = z.infer<typeof NavItemInput>;
+
+export const NavItemRow = z.object({
+  id: z.string().uuid(),
+  placement: NavPlacement,
+  columnIndex: z.number().int(),
+  label: z.string(),
+  path: z.string().nullable(),
+  externalUrl: z.string().nullable(),
+  displayOrder: z.number().int(),
+  visible: z.boolean(),
+  version: z.number().int(),
+});
+export type NavItemRow = z.infer<typeof NavItemRow>;
+
+/** Menu công khai — chỉ những gì landing cần để vẽ, không có id và version. */
+export const PublicNavItem = z.object({
+  label: z.string(),
+  href: z.string(),
+  columnIndex: z.number().int(),
+  external: z.boolean(),
+});
+export type PublicNavItem = z.infer<typeof PublicNavItem>;
+
+export const RedirectInput = z.object({
+  fromPath: z.string().trim().regex(/^\/[^\s]*$/, 'Đường dẫn nguồn phải bắt đầu bằng /').max(300),
+  toPath: z.string().trim().min(1).max(500),
+  statusCode: z.union([z.literal(301), z.literal(302)]).default(301),
+  note: z.string().trim().max(200).nullable().optional(),
+});
+export type RedirectInput = z.infer<typeof RedirectInput>;
+
+export const RedirectRow = RedirectInput.extend({
+  id: z.string().uuid(),
+  version: z.number().int(),
+});
+export type RedirectRow = z.infer<typeof RedirectRow>;

@@ -442,6 +442,20 @@ const KICH_BAN: KichBan[] = [
     goi: (v) => call('POST', `/api/v1/marketing/testimonials/${UUID_GIA}/publish`, undefined, v),
   },
   {
+    quyen: 'marketing:navigationRead',
+    ten: 'Xem menu và chuyển hướng',
+    goi: (v) => call('GET', '/api/v1/marketing/navigation', undefined, v),
+  },
+  {
+    quyen: 'marketing:navigationWrite',
+    ten: 'Sửa menu',
+    goi: (v) =>
+      call('POST', '/api/v1/marketing/navigation', {
+        placement: 'HEADER', columnIndex: 0, label: 'Thử quyền', path: '/xe',
+        displayOrder: 0, visible: false,
+      }, v),
+  },
+  {
     quyen: 'marketing:articleRead',
     ten: 'Xem bài viết',
     goi: (v) => call('GET', '/api/v1/marketing/articles', undefined, v),

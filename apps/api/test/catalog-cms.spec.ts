@@ -354,3 +354,106 @@ describe('🔒 Bài viết — nháp không lọt ra, và chỉ MỘT bài nổi
     assert.equal(slugs.includes('sau-dieu-can-kiem-truoc-khi-nhan-xe'), false, 'RLS phải chặn — INV-T-01');
   });
 });
+
+describe('🔒 Điều hướng — mục trỏ tới trang không có thật phải TỰ ẩn', () => {
+  async function congKhai(duong: string): Promise<{ status: number; body: any }> {
+    const r = await fetch(`${API}${duong}`, {
+      headers: {
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }
+
+  test('menu đầu trang lấy từ dữ liệu, đúng thứ tự đã khai', async () => {
+    const r = await congKhai('/api/v1/public/navigation?placement=HEADER');
+    assert.equal(r.status, 200);
+    const nhan = (r.body.items as { label: string }[]).map((m) => m.label);
+    assert.deepEqual(nhan, ['Xe đang bán', 'Giá lăn bánh', 'Tin tức', 'Liên hệ']);
+  });
+
+  test('🔒 mục trỏ tới trang chưa có KHÔNG lọt ra landing', async () => {
+    /*
+     * SRS-LS-EXP-001 §4.10: "Menu trỏ tới trang chưa publish phải tự ẩn, không
+     * chờ người sửa nhớ tắt — link gãy trên trang bán hàng đắt hơn một mục menu
+     * thiếu."
+     *
+     * Đây là hàng rào của HỆ THỐNG, khác với cờ `visible` là chốt của NGƯỜI
+     * DÙNG. Bài này thử đúng hàng rào hệ thống: mục `visible = true`, trỏ tới
+     * một đường dẫn không có route nào.
+     */
+    const tao = await api('POST', '/api/v1/marketing/navigation', publisher, {
+      placement: 'HEADER',
+      columnIndex: 0,
+      label: `Trang ma ${uniq}`,
+      path: '/khong-ton-tai',
+      displayOrder: 900,
+      visible: true,
+    });
+    assert.equal(tao.status, 201, JSON.stringify(tao.body));
+
+    const cong = await congKhai('/api/v1/public/navigation?placement=HEADER');
+    assert.equal(
+      (cong.body.items as { label: string }[]).some((m) => m.label === `Trang ma ${uniq}`),
+      false,
+      'mục trỏ tới trang không có thật đã lọt ra menu công khai',
+    );
+
+    // Nhưng admin VẪN thấy nó — nếu không, người nhập sẽ tưởng hệ thống nuốt mất
+    const admin = await api('GET', '/api/v1/marketing/navigation', publisher);
+    assert.ok((admin.body.items as { label: string }[]).some((m) => m.label === `Trang ma ${uniq}`));
+
+    const id = (admin.body.items as { id: string; label: string }[]).find(
+      (m) => m.label === `Trang ma ${uniq}`,
+    )!.id;
+    await api('DELETE', `/api/v1/marketing/navigation/${id}`, publisher);
+  });
+
+  test('🔒 mỗi mục đúng MỘT đích — không có đích, hoặc cả hai, đều bị từ chối', async () => {
+    const khong = await api('POST', '/api/v1/marketing/navigation', publisher, {
+      placement: 'HEADER', columnIndex: 0, label: 'Không đích', displayOrder: 0, visible: true,
+    });
+    assert.equal(khong.status, 400, 'mục không có đích là một chữ không bấm được');
+
+    const caHai = await api('POST', '/api/v1/marketing/navigation', publisher, {
+      placement: 'HEADER', columnIndex: 0, label: 'Hai đích', path: '/xe',
+      externalUrl: 'https://vidu.vn', displayOrder: 0, visible: true,
+    });
+    assert.equal(caHai.status, 400, 'hai đích thì mỗi chỗ render sẽ chọn khác nhau');
+  });
+
+  test('chuyển hướng tra được, và vòng lặp bị chặn', async () => {
+    const co = await congKhai('/api/v1/public/redirect?path=/tin-tuc-cu');
+    assert.equal(co.status, 200);
+    assert.equal(co.body.to, '/tin-tuc');
+    assert.equal(co.body.statusCode, 301);
+
+    // Không có chuyển hướng thì 200 kèm `to: null`, KHÔNG phải 404 — middleware
+    // cần phân biệt "không có" với "hệ thống hỏng".
+    const khong = await congKhai('/api/v1/public/redirect?path=/khong-co-gi');
+    assert.equal(khong.status, 200);
+    assert.equal(khong.body.to, null);
+
+    /*
+     * 🔒 Vòng HAI BƯỚC. Ràng buộc `redirect_khong_tu_tro` ở database chỉ bắt
+     *    được `/a → /a`; vòng dài hơn cho ra đúng cùng một kết quả trên trình
+     *    duyệt (ERR_TOO_MANY_REDIRECTS) nên nó phải bị chặn ở tầng service.
+     */
+    const a = `/vong-a-${uniq}`;
+    const b = `/vong-b-${uniq}`;
+    const buoc1 = await api('POST', '/api/v1/marketing/redirects', publisher, { fromPath: a, toPath: b });
+    assert.equal(buoc1.status, 201, JSON.stringify(buoc1.body));
+    const buoc2 = await api('POST', '/api/v1/marketing/redirects', publisher, { fromPath: b, toPath: a });
+    assert.equal(buoc2.status, 409, 'vòng lặp hai bước phải bị chặn');
+
+    await api('DELETE', `/api/v1/marketing/redirects/${buoc1.body.id}`, publisher);
+  });
+
+  test('🔒 biên tập viên KHÔNG sửa được menu — quyền ghi hẹp hơn quyền soạn nội dung', async () => {
+    const r = await api('POST', '/api/v1/marketing/navigation', editor, {
+      placement: 'HEADER', columnIndex: 0, label: 'Thử', path: '/xe', displayOrder: 0, visible: true,
+    });
+    assert.equal(r.status, 403);
+  });
+});

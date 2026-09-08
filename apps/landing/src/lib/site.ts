@@ -4,6 +4,8 @@ import type {
   PublicFaqItem,
   FaqSurface,
   PublicArticleSummary,
+  PublicNavItem,
+  NavPlacement,
 } from '@garageos/contracts';
 
 /**
@@ -92,6 +94,24 @@ export async function loadArticles(limit = 12): Promise<PublicArticleSummary[]> 
   try {
     const host = await requestHost();
     const kq = await fetchPublic<{ items: PublicArticleSummary[] }>(host, `/articles?limit=${limit}`);
+    return kq.items;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Menu của một vị trí. Rỗng = tenant chưa cấu hình → chỗ gọi dùng menu mặc định.
+ *
+ * ⚠️ Trả rỗng cũng là kết quả của LỖI mạng, và hai trường hợp đó không phân biệt
+ *    được ở đây. Đó là lý do chỗ gọi phải có menu mặc định thay vì vẽ một thanh
+ *    điều hướng trống: một trang bán xe không có menu là một trang không đi đâu
+ *    được.
+ */
+export async function loadNav(placement: NavPlacement): Promise<PublicNavItem[]> {
+  try {
+    const host = await requestHost();
+    const kq = await fetchPublic<{ items: PublicNavItem[] }>(host, `/navigation?placement=${placement}`);
     return kq.items;
   } catch {
     return [];

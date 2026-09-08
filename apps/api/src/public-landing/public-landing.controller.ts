@@ -8,6 +8,8 @@ import {
   type PublicProductDetail,
   type PublicProductSummary,
   FaqSurface,
+  NavPlacement,
+  type PublicNavItem,
   type PublicArticleDetail,
   type PublicArticleSummary,
   type PublicFaqItem,
@@ -21,6 +23,15 @@ import { TenantContextService, type TenantResolution } from './tenant-context.se
 import { PublicLandingService } from './public-landing.service';
 import { LandingPageService } from '../landing-page/landing-page.service';
 import { ArticleService } from '../article/article.service';
+
+/**
+ * Bốn route landing có mã, tính cả `/`. Xem `navigation()` bên dưới.
+ *
+ * 🔒 Danh sách này phải mở rộng CÙNG LÚC với mỗi route landing mới. Quên nó thì
+ *    mục menu mới bị ẩn im lặng — khó chịu, nhưng đúng hướng an toàn: thà thiếu
+ *    một mục còn hơn một link 404 trên trang bán hàng.
+ */
+const TRANG_CO_THAT = ['/', '/xe', '/tin-tuc', '/lien-he'] as const;
 
 /**
  * Public API cho landing — SRS Phase 1 mục 11.1.
@@ -94,6 +105,63 @@ export class PublicLandingController {
     res.json({ items: await this.svc.faq(this.requireContext(resolution), mat.data) } as {
       items: PublicFaqItem[];
     });
+  }
+
+  /**
+   * Menu công khai của một vị trí.
+   *
+   * 🔒 Lọc mục trỏ tới trang KHÔNG CÓ THẬT ngay ở đây, không để landing tự lọc.
+   *
+   * SRS-LS-EXP-001 §4.10: "Menu trỏ tới trang chưa publish phải tự ẩn, không chờ
+   * người sửa nhớ tắt — link gãy trên trang bán hàng đắt hơn một mục menu
+   * thiếu." Landing hiện có bốn trang có mã; danh sách này là chốt của HỆ THỐNG,
+   * còn cờ `visible` là chốt của NGƯỜI DÙNG. Hai chốt không thay nhau được.
+   *
+   * ⚠️ Danh sách phải mở rộng cùng lúc với mỗi route landing mới. Đó là cái giá
+   *    của việc chưa có bảng trang; khi có `site_page` thì điều kiện này đổi
+   *    thành một phép JOIN.
+   */
+  @Get('navigation')
+  async navigation(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('placement') placement?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    const vt = NavPlacement.safeParse(placement);
+    if (!vt.success) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Thiếu hoặc sai tham số `placement`.');
+    }
+    const items = (await this.svc.navigation(this.requireContext(r), vt.data)).filter(
+      (m) => m.external || TRANG_CO_THAT.some((t) => m.href === t || m.href.startsWith(`${t}?`) || m.href.startsWith(`${t}#`)),
+    );
+    res.json({ items } as { items: PublicNavItem[] });
+  }
+
+  /**
+   * Tra chuyển hướng cho MỘT đường dẫn.
+   *
+   * 🔒 Trả 200 kèm `{ to: null }` khi không có, KHÔNG trả 404.
+   *
+   * Middleware của landing gọi endpoint này ở mỗi đường dẫn lạ. Dùng 404 làm
+   * "không có chuyển hướng" thì nó lẫn với 404 của chính endpoint (sai tên
+   * route, sai host, API chết) — và middleware sẽ không phân biệt được "không
+   * có chuyển hướng" với "hệ thống hỏng".
+   */
+  @Get('redirect')
+  async redirect(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query('path') path?: string,
+  ): Promise<void> {
+    const r = await this.tenantCtx.resolvePublic(req);
+    if (!this.applyAliasRedirect(r, req, res)) return;
+    if (path === undefined || !path.startsWith('/') || path.length > 300) {
+      throw new BusinessError(ErrorCode.VALIDATION_FAILED, 'Tham số `path` không hợp lệ.');
+    }
+    const kq = await this.svc.redirectFor(this.requireContext(r).tenantId, path);
+    res.json(kq ?? { to: null, statusCode: null });
   }
 
   @Get('articles')

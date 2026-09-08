@@ -410,6 +410,8 @@ ra đời. Thêm mọi bảng mới vào bài quét quyền so cột service `UP
 | Mỗi màn hình web tự dựng lại vòng đời dữ liệu của riêng nó | 5 bản sao của `useState(null) + useEffect + .catch`, mỗi bản thiếu một mảnh khác nhau. Một lớp server state (SWR/React Query) xử lý cùng lúc retry, refetch và trạng thái tải — đáng làm nhưng chưa cấp bách |
 | Máy trạng thái `Quotation` chưa có trigger riêng | Các đường của báo giá đang được chặn gián tiếp bằng `one_pending_quotation`, trigger đóng băng sau khi gửi, và điều kiện `status='SENT'` trong câu UPDATE |
 | Token tra cứu lưu dạng thô, không băm | Theo đúng `docs/10-data-model.md`. Băm sẽ tốt hơn nhưng lệch tài liệu thiết kế |
+| Tiêu đề cột chân trang chưa cấu hình được | `site_navigation` gắn `column_index` vào từng DÒNG, nên một tiêu đề cột sẽ phải lặp lại trên mọi dòng của cột đó — và hai dòng ghi hai tiêu đề khác nhau là chuyện chắc chắn xảy ra. Làm đúng cần một bảng riêng cho cột; liên kết bên dưới đã cấu hình được, tiêu đề thì chưa |
+| `TRANG_CO_THAT` là danh sách viết tay ở hai nơi | Máy chủ (`public-landing.controller.ts`) và màn quản trị (`website/navigation`) mỗi nơi giữ một bản danh sách bốn route landing. Khi có bảng `site_page` thì điều kiện đổi thành một phép JOIN và cả hai bản biến mất. Trong lúc chờ, quên cập nhật một bản chỉ làm mục menu bị ẩn thừa — hướng hỏng an toàn, nhưng vẫn là hai bản sao |
 | ĐỔI TÊN một màu xe vẫn cắt liên kết ảnh | `replaceColors` ghi đè theo khoá tự nhiên `(revision, name)`, nên đổi tên = xoá một màu + thêm một màu khác, và `vehicle_product_media.color_id` về null qua `ON DELETE SET NULL`. Sửa thật là cho `VehicleColorInput` mang `id` — đổi hợp đồng và đổi cả màn quản trị, nên chưa làm cùng lượt vá xoá-rồi-chèn |
 
 ## Nợ đã trả

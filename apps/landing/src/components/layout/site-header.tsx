@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import type { PublicSiteView } from '@garageos/contracts';
+import type { PublicNavItem, PublicSiteView } from '@garageos/contracts';
+import { loadNav } from '@/lib/site';
 import css from './site-chrome.module.css';
 
 export type TrangHienTai = 'trang-chu' | 'xe' | 'tin-tuc' | 'lien-he' | null;
@@ -17,7 +18,34 @@ export type TrangHienTai = 'trang-chu' | 'xe' | 'tin-tuc' | 'lien-he' | null;
  * Trang vẫn hiện đàng hoàng khi chưa có bài nào: nó nói "Chưa có bài viết nào
  * được đăng", chứ không phải một trang lỗi.
  */
-export function SiteHeader({
+/**
+ * Menu MẶC ĐỊNH khi tenant chưa cấu hình mục nào.
+ *
+ * 🔒 Không vẽ thanh điều hướng trống. `loadNav` trả rỗng cho CẢ HAI trường hợp
+ *    "chưa cấu hình" và "gọi API hỏng", và hai trường hợp đó không phân biệt
+ *    được ở đây — nhưng cách xử lý đúng thì giống nhau: một trang bán xe không
+ *    có menu là một trang không đi đâu được.
+ *
+ * Bốn mục này khớp đúng bộ mà seed ghi vào `site_navigation`, nên đổi nguồn dữ
+ * liệu không đổi cái người dùng nhìn thấy.
+ */
+const MAC_DINH: PublicNavItem[] = [
+  { label: 'Xe đang bán', href: '/xe', columnIndex: 0, external: false },
+  { label: 'Giá lăn bánh', href: '/#gia-lan-banh', columnIndex: 0, external: false },
+  { label: 'Tin tức', href: '/tin-tuc', columnIndex: 0, external: false },
+  { label: 'Liên hệ', href: '/lien-he', columnIndex: 0, external: false },
+];
+
+/** Mục nào đang mở — so theo phần đường dẫn, bỏ qua `?` và `#`. */
+function dangMo(href: string, trang: TrangHienTai): boolean {
+  const goc = href.split('?')[0]?.split('#')[0] ?? href;
+  if (trang === 'xe') return goc === '/xe';
+  if (trang === 'tin-tuc') return goc === '/tin-tuc';
+  if (trang === 'lien-he') return goc === '/lien-he';
+  return false;
+}
+
+export async function SiteHeader({
   site,
   tren = false,
   trang = null,
@@ -26,7 +54,10 @@ export function SiteHeader({
   /** `true` khi thanh nằm đè lên ảnh hero: nền bắt đầu trong suốt. */
   tren?: boolean;
   trang?: TrangHienTai;
-}): React.ReactElement {
+}): Promise<React.ReactElement> {
+  const tuDb = await loadNav('HEADER');
+  const muc = tuDb.length > 0 ? tuDb : MAC_DINH;
+
   return (
     <header className={tren ? `${css.dauTrang} ${css.tren}` : css.dauTrang}>
       <a href="#main" className="skip-link">Bỏ qua điều hướng</a>
@@ -40,10 +71,24 @@ export function SiteHeader({
           <span>{site?.brandName ?? 'Showroom ô tô'}</span>
         </Link>
         <nav className={css.dieuHuong} aria-label="Điều hướng chính">
-          <Link href="/xe" aria-current={trang === 'xe' ? 'page' : undefined}>Xe đang bán</Link>
-          <Link href="/#gia-lan-banh">Giá lăn bánh</Link>
-          <Link href="/tin-tuc" aria-current={trang === 'tin-tuc' ? 'page' : undefined}>Tin tức</Link>
-          <Link href="/lien-he" aria-current={trang === 'lien-he' ? 'page' : undefined}>Liên hệ</Link>
+          {muc.map((m) =>
+            m.external ? (
+              <a key={m.href + m.label} href={m.href} rel="noopener">{m.label}</a>
+            ) : (
+              <Link
+                key={m.href + m.label}
+                href={m.href}
+                aria-current={dangMo(m.href, trang) ? 'page' : undefined}
+              >
+                {m.label}
+              </Link>
+            ),
+          )}
+          {/*
+            CTA lái thử KHÔNG lấy từ dữ liệu: nó là nút hành động của trang bán
+            xe, có kiểu riêng và luôn phải ở đó. Để nó cấu hình được nghĩa là cho
+            phép gỡ mất đường chuyển đổi chính bằng một lần bấm nhầm.
+          */}
           <Link href="/lien-he?nhu-cau=lai-thu" className={css.ctaDau}>Đăng ký lái thử</Link>
         </nav>
       </div>
