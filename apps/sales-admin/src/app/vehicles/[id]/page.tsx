@@ -138,11 +138,35 @@ export default function VehicleEditorPage({
               Xem trước
             </a>
           </Button>
-          {canWrite && (
-            <Button variant="secondary" form="form-nhap" type="submit" disabled={busy}>
-              Lưu nháp
-            </Button>
-          )}
+          {/*
+            🔒 Xe đã xuất bản mà chưa có bản nháp thì KHÔNG sửa được gì —
+               INV-LS-13. `POST .../draft` đã có từ lâu nhưng màn này chưa có nút
+               nào gọi nó, nên mọi tab sửa (màu, ảnh, thông tin) đều dừng ở câu
+               "tạo bản nháp mới trước" mà không chỉ ra chỗ tạo.
+
+            Hai nút loại trừ nhau theo trạng thái: có nháp thì Lưu nháp, chưa có
+            thì Tạo bản nháp. Hiện cả hai cùng lúc là mời người dùng đoán.
+          */}
+          {canWrite &&
+            (draft === null ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    () =>
+                      api(`/api/v1/marketing/vehicle-products/${id}/draft`, { method: 'POST' }),
+                    'Đã tạo bản nháp từ bản đang hiện',
+                  )
+                }
+              >
+                Tạo bản nháp
+              </Button>
+            ) : (
+              <Button variant="secondary" form="form-nhap" type="submit" disabled={busy}>
+                Lưu nháp
+              </Button>
+            ))}
           <PublishGate
             canPublish={canPublish}
             busy={busy}

@@ -790,3 +790,126 @@ describe('🔒 Danh sách tư vấn viên nhận lead — cùng một quy tắc 
     assert.equal(r.status, 403);
   });
 });
+
+describe('🔒 Tạo bản nháp phải chép ĐỦ nội dung theo revision', () => {
+  /*
+   * ⚠️ Bản trước chép đúng hai bảng: variant và ảnh. Màu, ưu đãi và trả góp bị
+   *    bỏ lại. Đo được trên seed: aurora-e1 có 3 màu / 4 ưu đãi / 3 chương trình;
+   *    bản nháp mới có 0/0/0. Biên tập viên sửa một lỗi chính tả rồi bấm Xuất
+   *    bản là trang xe mất sạch — không cảnh báo nào, vì về mặt kỹ thuật "bản
+   *    nháp đó đúng là không có màu nào".
+   *
+   * 💡 Lỗi nằm im vì màn Sửa xe chưa có nút tạo bản nháp. Thêm nút xong là nó
+   *    thành đường đi hằng ngày.
+   *
+   * 🔒 Bài này DỰNG LẤY dữ liệu của chính nó thay vì tin vào seed. Bản đầu đọc
+   *    thẳng số của seed và đỏ vì một bài khác trong cùng file đã tạo bản nháp
+   *    trước — `cloneProductDraft` trả lại bản nháp đang có chứ không chép lần
+   *    nữa, nên phép so sánh đo nhầm thứ.
+   */
+  async function demTheoRevision(revisionId: string): Promise<Record<string, string>> {
+    const { rows } = await admin.query<Record<string, string>>(
+      `SELECT (SELECT count(*) FROM vehicle_color c WHERE c.product_revision_id = $1) AS mau,
+              (SELECT count(*) FROM vehicle_promotion p WHERE p.product_revision_id = $1) AS uu_dai,
+              (SELECT count(*) FROM financing_program f WHERE f.product_revision_id = $1) AS tra_gop,
+              (SELECT count(*) FROM vehicle_product_media m WHERE m.product_revision_id = $1) AS anh`,
+      [revisionId],
+    );
+    return rows[0]!;
+  }
+
+  async function conTro(): Promise<{ draft: string | null; published: string | null }> {
+    const { rows } = await admin.query<{ d: string | null; p: string | null }>(
+      'SELECT draft_revision_id AS d, published_revision_id AS p FROM vehicle_product WHERE id = $1',
+      [productId],
+    );
+    return { draft: rows[0]!.d, published: rows[0]!.p };
+  }
+
+  /** Đưa mẫu xe về trạng thái "đã publish, không còn nháp" — điểm xuất phát sạch. */
+  async function dungNenSach(): Promise<string> {
+    let ct = await conTro();
+    if (ct.draft === null) {
+      const tao = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+      assert.ok(tao.status === 200 || tao.status === 201, JSON.stringify(tao.body));
+      ct = await conTro();
+    }
+    const rev = ct.draft!;
+
+    // Ba màu và hai ảnh, đặt tường minh để phép so sánh có gì để so.
+    const dat = await api('PUT', `/api/v1/showroom/revisions/${rev}/colors`, editor, [
+      { name: 'Trắng Nền', hexCode: '#f2f2f0', kind: 'DON', surchargeAmount: 0, displayOrder: 0 },
+      { name: 'Đen Nền', hexCode: '#101010', kind: 'DON', surchargeAmount: 0, displayOrder: 1 },
+      { name: 'Đỏ Nền', hexCode: '#c73526', kind: 'DAC_BIET', surchargeAmount: 9000000, displayOrder: 2 },
+    ]);
+    assert.equal(dat.status, 200, JSON.stringify(dat.body));
+
+    const { rows: assets } = await admin.query<{ id: string }>(
+      'SELECT id FROM media_asset WHERE tenant_id = $1 ORDER BY created_at LIMIT 2',
+      [TENANT_A],
+    );
+    const datAnh = await api('PUT', `/api/v1/showroom/revisions/${rev}/media`, editor, [
+      { mediaAssetId: assets[0]!.id, role: 'POSTER', altText: 'Bìa', sortOrder: 0, isCover: true },
+      { mediaAssetId: assets[1]!.id, role: 'GALLERY', altText: 'Phụ', sortOrder: 1, isCover: false },
+    ]);
+    assert.equal(datAnh.status, 200, JSON.stringify(datAnh.body));
+
+    const ver = (await api('GET', `/api/v1/marketing/vehicle-products/${productId}`, editor)).body.version;
+    const pub = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/publish`, publisher, {
+      version: ver,
+    });
+    assert.ok(pub.status === 200 || pub.status === 201, JSON.stringify(pub.body));
+    return (await conTro()).published!;
+  }
+
+  test('màu, ưu đãi, trả góp và ảnh đều theo sang bản nháp', async () => {
+    const daDang = await dungNenSach();
+    const truoc = await demTheoRevision(daDang);
+    assert.ok(Number(truoc.mau) > 0 && Number(truoc.anh) > 0, 'nền dựng hỏng — không có gì để chép');
+
+    const r = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+    assert.ok(r.status === 200 || r.status === 201, JSON.stringify(r.body));
+
+    const sau = await demTheoRevision((await conTro()).draft!);
+    assert.deepEqual(sau, truoc, 'bản nháp phải có đúng bằng bản đang hiện');
+  });
+
+  test('🔒 ảnh gắn màu trỏ sang màu MỚI của bản nháp, không phải màu của bản cũ', async () => {
+    /*
+     * Chỗ sai tinh vi nhất của một lượt chép: bê nguyên `color_id`. Khoá ngoại
+     * vẫn hợp lệ (cùng tenant) nên KHÔNG có lỗi nào nổ ra — chỉ là câu "ảnh này
+     * của màu nào" trả lời sai kể từ đó, và nó trả lời sai vĩnh viễn.
+     */
+    const daDang = await dungNenSach();
+
+    // Gắn ảnh của bản ĐANG HIỆN vào một màu của chính bản đó, bằng quyền chủ
+    // schema — trigger INV-LS-13 chặn role ứng dụng ghi vào bản đã publish.
+    const { rows: mau } = await admin.query<{ id: string }>(
+      'SELECT id FROM vehicle_color WHERE product_revision_id = $1 ORDER BY display_order LIMIT 1',
+      [daDang],
+    );
+    await admin.query(
+      'UPDATE vehicle_product_media SET color_id = $2 WHERE product_revision_id = $1',
+      [daDang, mau[0]!.id],
+    );
+
+    const tao = await api('POST', `/api/v1/marketing/vehicle-products/${productId}/draft`, editor);
+    assert.ok(tao.status === 200 || tao.status === 201, JSON.stringify(tao.body));
+    const revNhap = (await conTro()).draft!;
+
+    const { rows: lac } = await admin.query<{ n: string }>(
+      `SELECT count(*) AS n
+         FROM vehicle_product_media m
+         JOIN vehicle_color c ON c.id = m.color_id
+        WHERE m.product_revision_id = $1 AND c.product_revision_id <> $1`,
+      [revNhap],
+    );
+    assert.equal(Number(lac[0]!.n), 0, 'ảnh của bản nháp đang trỏ sang màu của một bản khác');
+
+    const { rows: coMau } = await admin.query<{ n: string }>(
+      'SELECT count(*) AS n FROM vehicle_product_media WHERE product_revision_id = $1 AND color_id IS NOT NULL',
+      [revNhap],
+    );
+    assert.ok(Number(coMau[0]!.n) > 0, 'liên kết ảnh–màu bị mất hẳn thay vì được ánh xạ');
+  });
+});
