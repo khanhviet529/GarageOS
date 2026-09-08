@@ -8,7 +8,8 @@
  * 🔒 Tạo 2 tenant để kiểm chứng cô lập bằng mắt, không chỉ bằng test.
  */
 import { Client } from 'pg';
-import { scryptSync, randomBytes, createHash, randomUUID } from 'node:crypto';
+import { bamMatKhau } from '../packages/domain/src/mat-khau.ts';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
@@ -53,13 +54,6 @@ const MEDIA_ROOT =
 const ADMIN_URL =
   process.env.DATABASE_ADMIN_URL ??
   'postgresql://garageos:garageos_dev@localhost:5433/garageos';
-
-/** Băm mật khẩu — scrypt (chuẩn Node, không cần phụ thuộc ngoài) */
-export function hashPassword(plain: string): string {
-  const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(plain, salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
-}
 
 const TENANT_A = '11111111-1111-1111-1111-111111111111';
 const TENANT_B = '22222222-2222-2222-2222-222222222222';
@@ -302,7 +296,7 @@ async function main(): Promise<void> {
   );
 
   console.log('Tạo người dùng...');
-  const pwd = hashPassword(DEMO_PASSWORD);
+  const pwd = bamMatKhau(DEMO_PASSWORD);
 
   for (const u of USERS_A) {
     const { rows } = await db.query<{ id: string }>(
