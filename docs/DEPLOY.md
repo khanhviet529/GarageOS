@@ -1,7 +1,7 @@
 # Triển khai
 
-> ⚠️ **Trạng thái: deploy-ready cho API + landing. `web` và `sales-admin` còn
-> một chỗ chặn thật** — xem mục [Cookie và hai tên miền](#-chặn-cookie-samesitelax-và-deploy-khác-tên-miền).
+> ⚠️ **Trạng thái: cả bốn thành phần deploy được.** API đã chạy thật trên
+> Render + Neon từ 2026-09-09; ba front-end theo bước 6–7.
 
 ## Bản đồ triển khai
 
@@ -26,41 +26,34 @@ Hai điều cần biết trước khi mở tài khoản:
 
 ---
 
-## 🔒 CHẶN: cookie `SameSite=Lax` và deploy khác tên miền
+## 🔒 Vì sao ba front-end gọi API qua rewrite same-origin
 
-Đây là chỗ dễ mất nửa ngày nhất, và nó **không** hiện ra như một lỗi.
+Cookie phiên đặt `SameSite=Lax` (`apps/api/src/auth/cookies.ts`) — lớp chống
+CSRF chính, chặn ngay ở tầng trình duyệt. Cái giá của nó: **trình duyệt không
+gửi cookie kèm request cross-site**.
 
-`apps/api/src/auth/cookies.ts` đặt cookie phiên với `SameSite=Lax`. Đó là lớp
-chống CSRF **chính**, chặn ngay ở tầng trình duyệt; lớp thứ hai là kiểm `Origin`
-cho mọi thao tác ghi (`kiemTraNguonGhi`).
+Ở dev mọi thứ cùng `localhost` nên không ai thấy. Trên production, front-end ở
+`*.vercel.app` còn API ở `*.onrender.com` là hai site khác nhau — và hỏng theo
+kiểu tệ nhất để lần:
 
-Hệ quả khi front-end và API ở **hai tên miền khác nhau** — đúng kịch bản
-`*.vercel.app` + `*.onrender.com`:
+> Đăng nhập trả 200 kèm `Set-Cookie`, rồi mọi lời gọi sau nhận 401. Màn hình chỉ
+> đá về trang đăng nhập, không nói gì về cookie.
 
-> Trình duyệt **không gửi** cookie `gos_at` kèm request cross-site. Người dùng
-> đăng nhập, API trả 200 và `Set-Cookie`, rồi mọi lời gọi sau đó nhận 401. Màn
-> hình không nói gì về cookie — nó chỉ đá về trang đăng nhập.
+Cách chữa: `sales-admin` và `web` **rewrite `/api/v1/*` sang API** ngay trong
+`next.config.mjs`. Trình duyệt chỉ nói chuyện với tên miền nó đang mở, nên cookie
+ở lại same-site và cả hai lớp chống CSRF còn nguyên — `SameSite` vẫn chặn, và
+`kiemTraNguonGhi()` vẫn kiểm `Origin` cho mọi thao tác ghi.
 
-Ảnh hưởng **`web` và `sales-admin`**. `landing` KHÔNG bị: nó vốn gọi API qua một
-proxy same-origin (`apps/landing/src/app/api/public/[...duong]/route.ts`) và
-không dùng cookie phiên.
+💡 Đã đo: gọi ghi qua rewrite với `Origin` hợp lệ trả 200; cùng lời gọi đó với
+   `Origin: https://ke-tan-cong.example` trả **403**.
 
-### Hai cách xử lý
+⚠️ Hệ quả cho cấu hình: `NEXT_PUBLIC_ADMIN_API_ORIGIN` và `NEXT_PUBLIC_API_URL`
+   phải **để trống**. Đặt giá trị cho chúng là trỏ trình duyệt thẳng sang tên
+   miền API — tức quay lại đúng kiểu gọi cross-site mà rewrite sinh ra để tránh.
 
-| | Cách A — proxy same-origin | Cách B — `SameSite=None` |
-|---|---|---|
-| Làm gì | Mỗi app thêm một route chuyển tiếp `/api/v1/*` sang API, giống `landing` đang làm | Thêm biến `COOKIE_SAMESITE=none` cho API |
-| Bảo mật | Giữ nguyên hai lớp chống CSRF | **Mất lớp trình duyệt**, chỉ còn kiểm `Origin` |
-| Chi phí | ~40 dòng mỗi app, thêm một hop qua Vercel | Một dòng cấu hình |
-| Ghi chú | Cookie ở lại same-site, không phải đổi gì ở API | Bắt buộc kèm `Secure` (đã có ở production) |
-
-**Khuyến nghị: cách A.** Hai lớp là chủ ý của thiết kế, và `landing` đã chứng
-minh khuôn proxy này chạy được trong chính repo này. Cách B đổi một thuộc tính
-bảo mật để lấy 15 phút công.
-
-Chưa làm cách nào thì **deploy `landing` trước** — nó chạy đầy đủ ngay hôm nay.
-
----
+🔒 `landing` thì khác và vẫn giữ proxy viết tay (`app/api/public/[...duong]`):
+   nó phải **ký host bằng HMAC**, việc mà rewrite không làm được. Nó cũng không
+   dùng cookie phiên.
 
 ## 🔒 Kiểm tra BẮT BUỘC trước khi chọn nhà cung cấp PostgreSQL
 
@@ -297,20 +290,31 @@ theo `(tenant_id, hostname)` và swap primary nguyên tử.
 
 ### 7. sales-admin và web — Vercel
 
-⚠️ **Đọc mục [Cookie và hai tên miền](#-chặn-cookie-samesitelax-và-deploy-khác-tên-miền)
-trước.** Chưa xử lý thì hai app này deploy được nhưng **không đăng nhập được**.
+Cùng khuôn với landing:
 
-| App | Root Directory | Build Command | Biến |
-|---|---|---|---|
-| `sales-admin` | `apps/sales-admin` | `cd ../.. && pnpm --filter @garageos/sales-admin build` | `NEXT_PUBLIC_ADMIN_API_ORIGIN` |
-| `web` | `apps/web` | `cd ../.. && pnpm --filter @garageos/web build` | `NEXT_PUBLIC_API_URL` |
+| Thiết lập | `sales-admin` | `web` |
+|---|---|---|
+| Root Directory | `apps/sales-admin` | `apps/web` |
+| Build Command | `cd ../.. && pnpm --filter @garageos/sales-admin build` | `cd ../.. && pnpm --filter @garageos/web build` |
+| Install Command | `cd ../.. && pnpm install --frozen-lockfile` | như trái |
 
-Install Command của cả hai: `cd ../.. && pnpm install --frozen-lockfile`.
+Biến môi trường — **đúng một biến mỗi app**:
 
-`NEXT_PUBLIC_*` được đóng vào bundle → **redeploy sau mỗi lần đổi**.
+| App | Biến | Giá trị |
+|---|---|---|
+| `sales-admin` | `ADMIN_INTERNAL_API` | `https://<api>` |
+| `web` | `WEB_INTERNAL_API` | `https://<api>` |
 
-Sau khi có domain của cả ba app, cập nhật `WEB_ORIGIN` ở API cho đủ và deploy
-lại API. Sai giá trị này thì hoặc front-end không gọi được API, hoặc mở cửa cho
+🔒 **Không** đặt `NEXT_PUBLIC_ADMIN_API_ORIGIN` hay `NEXT_PUBLIC_API_URL`. Để
+trống là điều kiện để trình duyệt gọi same-origin — xem mục đầu tài liệu. Đặt
+giá trị cho chúng là làm hỏng đăng nhập theo kiểu khó lần nhất.
+
+💡 Hai biến trên **không** phải `NEXT_PUBLIC_*`: chúng đọc lúc máy chủ khởi
+   động, không đi vào bundle. Đổi địa chỉ API chỉ cần restart, không cần build
+   lại — khác hẳn landing, nơi `LANDING_INTERNAL_API` cũng vậy.
+
+Sau khi có domain của cả ba app, cập nhật `WEB_ORIGIN` ở API cho đủ rồi deploy
+lại API. Sai giá trị này thì hoặc thao tác ghi bị chặn 403, hoặc mở cửa cho
 trang lạ — nó vừa là CORS vừa là allow-list chống CSRF.
 
 ### 8. R2, backup và theo dõi
@@ -349,7 +353,6 @@ Một bản backup chưa từng khôi phục thử không phải là một bản
 
 | Việc | Khi nào |
 |---|---|
-| Proxy same-origin cho `web`/`sales-admin` (hoặc `COOKIE_SAMESITE`) | **Trước khi dùng hai app này trên production** |
 | Sao lưu tự động + kiểm tra khôi phục hằng tháng | Trước khi có dữ liệu thật |
 | Chuyển rate limit sang Redis | Trước khi scale API quá một replica — hiện nó chủ ý chạy trong bộ nhớ tiến trình |
 | Quan trắc (log, trace, cảnh báo) | Giai đoạn 2 |

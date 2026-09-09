@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { bamMatKhau, khopMatKhau } from './mat-khau.js';
+import { bamMatKhau, khopMatKhau } from '../src/mat-khau.js';
 
 describe('Mật khẩu', () => {
   test('băm rồi đối chiếu lại thì khớp', () => {

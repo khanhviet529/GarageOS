@@ -15,7 +15,13 @@ import { ROLE_LABEL } from '@garageos/contracts';
  * header, không phải chứng thực. Ai sửa nó cũng chẳng được thêm quyền gì —
  * mọi quyết định phân quyền nằm ở máy chủ, đọc từ token trong cookie.
  */
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+/**
+ * 🔒 Mặc định RỖNG — gọi cùng origin với trang, qua rewrite ở `next.config.mjs`.
+ *
+ * Cookie phiên là `SameSite=Lax`, nên trình duyệt chỉ gửi nó khi request đi
+ * cùng site. Trỏ thẳng sang tên miền API là mất phiên ngay sau khi đăng nhập.
+ */
+const BASE = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 const USER_KEY = 'garageos.user';
 
 /**

@@ -8,7 +8,17 @@
  * thị `requestId` từ envelope lỗi chung.
  */
 
-const API_ORIGIN = (process.env['NEXT_PUBLIC_ADMIN_API_ORIGIN'] ?? 'http://localhost:3001').replace(/\/+$/, '');
+/**
+ * 🔒 Mặc định là RỖNG — gọi cùng origin với trang.
+ *
+ * `next.config.mjs` rewrite `/api/v1/*` sang API, nên trình duyệt chỉ nói
+ * chuyện với chính tên miền nó đang mở. Đó là điều kiện để cookie phiên
+ * `SameSite=Lax` được gửi đi — chú thích đầy đủ ở `next.config.mjs`.
+ *
+ * ⚠️ Trỏ biến này sang một origin KHÁC là quay lại kiểu gọi cross-site: đăng
+ *    nhập trả 200 rồi mọi lời gọi sau nhận 401. Chỉ dùng để gỡ rối ở dev.
+ */
+const API_ORIGIN = (process.env['NEXT_PUBLIC_ADMIN_API_ORIGIN'] ?? '').replace(/\/+$/, '');
 
 export interface ApiEnvelopeError {
   error?: { code?: string; message?: string; requestId?: string; details?: unknown };
