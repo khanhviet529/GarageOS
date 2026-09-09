@@ -13,7 +13,7 @@ import { ErrorCode, type LoginInput, type LoginOutput, type Role } from '@garage
  * không lỗi lúc chạy: chỉ là không ai đăng nhập được nữa, và câu người dùng
  * thấy là "sai mật khẩu".
  */
-import { khopMatKhau } from '@garageos/domain';
+import { khopMatKhau } from '@garageos/db';
 import { BusinessError } from '../common/errors';
 import { APP_POOL } from '../db/db.module';
 

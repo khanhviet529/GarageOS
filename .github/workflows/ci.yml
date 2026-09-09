@@ -76,9 +76,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm db:migrate
-      - run: pnpm db:seed
-
       # 🔒 Migration phải chạy được trên Postgres KHÔNG CÓ SUPERUSER.
       #
       # Docker và CI đều cấp `garageos` quyền superuser, và superuser bỏ qua RLS,
@@ -91,6 +88,18 @@ jobs:
       # Bước này dựng đúng điều kiện của Postgres quản lý (chủ schema có
       # CREATEROLE, không superuser) và chạy lại toàn bộ migration trên một
       # database rỗng. Nó không đụng gì tới database mà các bước sau dùng.
+      #
+      # ⚠️ PHẢI đứng TRƯỚC `pnpm db:migrate`, và đây là chỗ bản đầu làm sai.
+      #
+      #    Role trong PostgreSQL thuộc về cả CỤM, không thuộc một database.
+      #    Chạy sau thì `garageos_app` đã được migration lượt trước tạo bằng
+      #    quyền superuser, và `chu_khong_superuser` không có ADMIN trên nó:
+      #
+      #        ERROR: permission denied to grant role "garageos_app"
+      #
+      #    Chạy trước thì chính nó tạo ra các role đó và nhận ADMIN kèm theo;
+      #    lượt migration bằng superuser sau đó đi qua nhánh `duplicate_object`
+      #    và không đụng gì thêm.
       - name: Migration chạy được khi chủ schema KHÔNG phải superuser
         env:
           PGPASSWORD: garageos_dev
@@ -102,6 +111,9 @@ jobs:
             -c "CREATE DATABASE garageos_khong_superuser OWNER chu_khong_superuser"
           export DATABASE_ADMIN_URL="postgresql://chu_khong_superuser:ci_pw@localhost:5433/garageos_khong_superuser"
           pnpm db:migrate
+
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
 
       # Build TRƯỚC khi chạy test, và khởi động API bằng BẢN ĐÃ BIÊN DỊCH.
       #

@@ -45,7 +45,7 @@
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
-import { bamMatKhau } from '../packages/domain/src/mat-khau.ts';
+import { bamMatKhau } from '../packages/db/src/mat-khau.ts';
 
 const ADMIN_URL = process.env.DATABASE_ADMIN_URL;
 

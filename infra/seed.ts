@@ -8,7 +8,7 @@
  * 🔒 Tạo 2 tenant để kiểm chứng cô lập bằng mắt, không chỉ bằng test.
  */
 import { Client } from 'pg';
-import { bamMatKhau } from '../packages/domain/src/mat-khau.ts';
+import { bamMatKhau } from '../packages/db/src/mat-khau.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
