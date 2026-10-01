@@ -122,7 +122,31 @@ Chạy trong SQL Editor **trước khi** chạy migration:
 CREATE ROLE garageos_app LOGIN PASSWORD 'dán-mật-khẩu-mạnh-vào-đây';
 ```
 
-Sinh mật khẩu bằng `openssl rand -base64 32`.
+Sinh mật khẩu bằng:
+
+```bash
+openssl rand -hex 32
+```
+
+⚠️ **`-hex`, không phải `-base64`** — mật khẩu này nằm bên trong một URL:
+
+```
+postgresql://garageos_app:<mật khẩu>@ep-xxxx.../garageos?sslmode=require
+```
+
+Bảng chữ base64 có `/`, và một dấu `/` trong mật khẩu **cắt đứt URL ngay tại
+đó** — phần sau bị hiểu là đường dẫn. Lỗi hiện ra sẽ nói về host hoặc database
+sai, không nói gì về mật khẩu. Hex chỉ có `0-9a-f`, an toàn trong URL, và 32
+byte vẫn là 256 bit.
+
+💡 Ba bí mật ở bước 2 thì cứ base64: chúng là biến môi trường thường, không nằm
+   trong URL nào.
+
+🔒 Vì sao phải ngẫu nhiên thay vì tự đặt: mật khẩu này **không bao giờ có người
+   gõ** — nó đi từ ô cấu hình của Render sang Neon. Đánh đổi "dễ nhớ" không tồn
+   tại ở đây, nên không có lý do gì nhận một chuỗi yếu hơn. Phía kia thì endpoint
+   Neon mở ra Internet, gói free không có IP allowlist, còn tên database và tên
+   role nằm công khai trong repo.
 
 Vì sao phải làm trước: migration `0001` tạo role này nếu chưa có, và mật khẩu
 nó dùng — `garageos_app_dev` — **nằm công khai trong repo**. Database Neon mở ra
