@@ -18,6 +18,7 @@ import {
   type PatchProductDraftInput,
   type SeoCheck,
   type SeoValidationResult,
+  type SiteProfileCreateInput,
   type SiteProfileDraftInput,
 } from '@garageos/contracts';
 import { BusinessError } from '../common/errors';
@@ -39,6 +40,7 @@ const AUDIT = {
   EXPERIENCE_CREATED: 'MARKETING_EXPERIENCE_CREATED',
   EXPERIENCE_PUBLISHED: 'MARKETING_EXPERIENCE_PUBLISHED',
   EXPERIENCE_ARCHIVED: 'MARKETING_EXPERIENCE_ARCHIVED',
+  SITE_PROFILE_DRAFT_CREATED: 'MARKETING_SITE_PROFILE_DRAFT_CREATED',
   SITE_PROFILE_DRAFT_UPDATED: 'MARKETING_SITE_PROFILE_DRAFT_UPDATED',
   SITE_PROFILE_PUBLISHED: 'MARKETING_SITE_PROFILE_PUBLISHED',
   BRANCH_PROFILE_DRAFT_UPDATED: 'MARKETING_BRANCH_PROFILE_DRAFT_UPDATED',
@@ -886,6 +888,86 @@ export class MarketingService {
         draft: view(rows.find((r) => r.status === 'DRAFT')),
         published: view(rows.find((r) => r.status === 'PUBLISHED')),
       };
+    });
+  }
+
+  /**
+   * Tạo hồ sơ site ĐẦU TIÊN của một tenant.
+   *
+   * ───────────────────────────────────────────────────────────────────────────
+   * 🔒 Vì sao hàm này phải tồn tại
+   *
+   * Vòng đời hồ sơ site là nháp → publish → hệ thống tự mở bản nháp kế tiếp
+   * (`marketing_publish_site_profile`). Khuôn đó đúng cho mọi lần sau — nhưng
+   * nó giả định đã có một bản nháp để publish.
+   *
+   * ⚠️ Trên máy dev không ai thấy lỗ hổng, vì `seed` dựng sẵn một bản PUBLISHED
+   *    và một bản DRAFT cho cả hai tenant. Trên một database production vừa
+   *    migrate xong thì `site_profile` RỖNG, và màn *Thông tin doanh nghiệp*
+   *    hiện đúng một câu:
+   *
+   *        "Chưa có bản nháp. Xuất bản một bản trước để hệ thống tạo bản nháp
+   *         kế tiếp."
+   *
+   *    Muốn xuất bản thì phải có bản nháp. Không có nút nào thoát ra — đo được
+   *    ở lượt deploy đầu tiên, 2026-10-01.
+   *
+   * 💡 Và hệ quả không dừng ở màn này: landing trả `SITE_NOT_FOUND` cho MỌI
+   *    trang khi chưa có hồ sơ PUBLISHED. Thiếu một nút bấm làm cả trang bán xe
+   *    không mở được.
+   * ───────────────────────────────────────────────────────────────────────────
+   */
+  async createSiteProfileDraft(
+    actor: ActorContext,
+    input: SiteProfileCreateInput,
+  ): Promise<{ draftId: string }> {
+    return this.db.withTenant(actor, async (tx) => {
+      /*
+       * 🔒 Từ chối khi đã có bản nháp, thay vì để `uq_site_profile_one_draft`
+       *    ném ra lỗi 23505.
+       *
+       * Ràng buộc ở database vẫn là chốt cuối — nhưng nó nói bằng tên index,
+       * còn người dùng cần biết "bản nháp đã có rồi, mở ra mà sửa".
+       */
+      const { rows: dangCo } = await tx.query<{ id: string }>(
+        "SELECT id FROM site_profile WHERE status = 'DRAFT' LIMIT 1",
+      );
+      if (dangCo[0] !== undefined) {
+        throw new BusinessError(
+          ErrorCode.RESOURCE_CONFLICT,
+          'Tenant đã có bản nháp thông tin doanh nghiệp — mở bản nháp đó ra sửa.',
+        );
+      }
+
+      /*
+       * `version_number` đếm tiếp từ bản cao nhất đang có. Gọi hàm này khi
+       * `site_profile` rỗng cho ra 1; gọi sau khi đã có bản PUBLISHED (ví dụ
+       * bản nháp kế tiếp bị xoá tay) thì nối đúng số tiếp theo — `UNIQUE
+       * (tenant_id, version_number)` không cho trùng.
+       */
+      const { rows } = await tx.query<{ id: string }>(
+        `INSERT INTO site_profile
+           (tenant_id, version_number, status, brand_name, legal_name,
+            default_title_suffix, default_description, phone, address,
+            created_by, updated_by)
+         SELECT current_setting('app.tenant_id')::uuid,
+                coalesce(max(sp.version_number), 0) + 1,
+                'DRAFT', $1, $2, $3, $4, $5, $6, $7, $7
+           FROM site_profile sp
+         RETURNING id`,
+        [
+          input.brandName,
+          input.legalName ?? null,
+          input.defaultTitleSuffix,
+          input.defaultDescription ?? null,
+          input.phone ?? null,
+          input.address ?? null,
+          actor.userId,
+        ],
+      );
+      const draftId = rows[0]!.id;
+      await this.audit(tx, actor, AUDIT.SITE_PROFILE_DRAFT_CREATED, 'site_profile', draftId);
+      return { draftId };
     });
   }
 
