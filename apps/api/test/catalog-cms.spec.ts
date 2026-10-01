@@ -931,3 +931,166 @@ describe('🔒 Bảng màu landing — cổng AA nằm ở MÁY CHỦ', () => {
     assert.equal(Number(rows[0]!.n), 1, 'tenant A vẫn phải có đúng một dòng của riêng nó');
   });
 });
+
+describe('🔒 Hồ sơ doanh nghiệp — tenant mới phải tạo được bản ĐẦU TIÊN', () => {
+  /*
+   * ─────────────────────────────────────────────────────────────────────────
+   * Vì sao khối này tồn tại
+   *
+   * Vòng đời hồ sơ site là nháp → publish → hệ thống tự mở bản nháp kế tiếp.
+   * Khuôn đó đúng cho mọi lần sau, và nó giả định đã có một bản nháp.
+   *
+   * ⚠️ `seed` dựng sẵn một bản PUBLISHED và một bản DRAFT cho cả hai tenant,
+   *    nên trên máy dev và trên CI giả định ấy LUÔN đúng. Trên một database
+   *    production vừa migrate xong thì `site_profile` rỗng, và màn *Thông tin
+   *    doanh nghiệp* trở thành ngõ cụt: "xuất bản một bản trước để hệ thống tạo
+   *    bản nháp kế tiếp" — mà muốn xuất bản thì phải có bản nháp.
+   *
+   *    Đo được ở lượt deploy đầu tiên lên Neon (2026-10-01). Hệ quả không dừng
+   *    ở màn này: landing trả `SITE_NOT_FOUND` cho MỌI trang chừng nào chưa có
+   *    hồ sơ PUBLISHED.
+   *
+   * 🔒 Nên bài đầu tiên DỰNG LẠI trạng thái đó — xoá sạch `site_profile` của
+   *    tenant — thay vì chạy trên dữ liệu seed. Chạy trên seed thì nó chỉ kiểm
+   *    đường đi mới và không bao giờ chứng minh được ngõ cụt đã hết.
+   * ─────────────────────────────────────────────────────────────────────────
+   */
+  const DU = {
+    brandName: `Hồ sơ mới ${uniq}`,
+    defaultTitleSuffix: `Hậu tố ${uniq}`,
+    defaultDescription:
+      'Showroom ô tô chính hãng, nhận đăng ký lái thử và báo giá lăn bánh trong ngày cho khách ở Hà Nội.',
+  };
+
+  /** Ảnh chụp hồ sơ của tenant A, để trả lại nguyên trạng cho các bài khác. */
+  let banDau: Record<string, unknown>[] = [];
+
+  before(async () => {
+    const { rows } = await admin.query<Record<string, unknown>>(
+      `SELECT version_number, status::text AS status, brand_name, legal_name,
+              default_title_suffix, default_description, phone, address,
+              created_by, updated_by, published_by, published_at
+         FROM site_profile WHERE tenant_id = $1 ORDER BY version_number`,
+      [TENANT_A],
+    );
+    banDau = rows;
+  });
+
+  after(async () => {
+    /*
+     * 🔒 Trả lại đúng những dòng đã lấy đi. `marketing-soan-thao.spec.ts` và
+     *    bộ landing công khai đều đọc hồ sơ PUBLISHED của tenant A — để lại
+     *    một database thiếu nó là làm đỏ những bài không liên quan.
+     */
+    await admin.query('DELETE FROM site_profile WHERE tenant_id = $1', [TENANT_A]);
+    /* Bài cuối để lại một hồ sơ ở tenant B — dọn luôn, đừng để nó lớn lên. */
+    await admin.query(
+      `DELETE FROM site_profile WHERE tenant_id = $1 AND brand_name LIKE $2`,
+      [TENANT_B, `Hồ sơ mới %`],
+    );
+    for (const r of banDau) {
+      await admin.query(
+        `INSERT INTO site_profile
+           (tenant_id, version_number, status, brand_name, legal_name, default_title_suffix,
+            default_description, phone, address, created_by, updated_by, published_by, published_at)
+         VALUES ($1,$2,$3::site_profile_status,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [
+          TENANT_A, r.version_number, r.status, r.brand_name, r.legal_name,
+          r.default_title_suffix, r.default_description, r.phone, r.address,
+          r.created_by, r.updated_by, r.published_by, r.published_at,
+        ],
+      );
+    }
+  });
+
+  test('🔒 database RỖNG hồ sơ: tạo được bản nháp đầu tiên, rồi publish được', async () => {
+    await admin.query('DELETE FROM site_profile WHERE tenant_id = $1', [TENANT_A]);
+
+    const truoc = await api('GET', '/api/v1/marketing/site-profile', editor);
+    assert.equal(truoc.status, 200);
+    assert.equal(truoc.body.draft, null, 'nền dựng hỏng — vẫn còn bản nháp');
+    assert.equal(truoc.body.published, null);
+
+    const tao = await api('POST', '/api/v1/marketing/site-profile', editor, DU);
+    assert.ok(tao.status === 200 || tao.status === 201, JSON.stringify(tao.body));
+    assert.ok(tao.body.draftId, 'không trả về id bản nháp');
+
+    const sau = await api('GET', '/api/v1/marketing/site-profile', editor);
+    assert.equal(sau.body.draft.brandName, DU.brandName);
+    assert.equal(sau.body.draft.versionNumber, 1, 'bản đầu tiên phải là version 1');
+    assert.equal(sau.body.draft.status, 'DRAFT');
+
+    /*
+     * Và nó phải publish được — đó mới là điều landing cần. Tạo ra một bản nháp
+     * không publish được thì ngõ cụt chỉ lùi lại một bước.
+     */
+    const pub = await api(
+      'POST', `/api/v1/marketing/site-profile/${tao.body.draftId as string}/publish`, publisher,
+    );
+    assert.ok(pub.status === 200 || pub.status === 201, JSON.stringify(pub.body));
+
+    const cuoi = await api('GET', '/api/v1/marketing/site-profile', editor);
+    assert.equal(cuoi.body.published.brandName, DU.brandName);
+    assert.ok(cuoi.body.draft !== null, 'publish xong phải tự mở bản nháp kế tiếp');
+  });
+
+  test('🔒 landing MỞ ĐƯỢC sau khi publish — đó mới là thứ cần chứng minh', async () => {
+    const r = await fetch(`${API}/api/v1/public/site`, {
+      headers: {
+        'x-garageos-original-host': 'localhost',
+        'x-garageos-original-host-signature': hostSignature('localhost'),
+      },
+    });
+    assert.equal(r.status, 200, 'landing vẫn trả SITE_NOT_FOUND sau khi đã publish hồ sơ');
+    const site = (await r.json()) as { brandName: string };
+    assert.equal(site.brandName, DU.brandName);
+  });
+
+  test('đã có bản nháp thì từ chối, kèm lời chỉ đường', async () => {
+    const r = await api('POST', '/api/v1/marketing/site-profile', editor, {
+      ...DU,
+      brandName: `Trùng ${uniq}`,
+    });
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.match(String(r.body.error?.message ?? ''), /đã có bản nháp/i);
+  });
+
+  test('thiếu trường BẮT BUỘC bị chặn ở Zod, không chết ở NOT NULL', async () => {
+    /*
+     * `brand_name` và `default_title_suffix` là NOT NULL ở database. Nếu lượt
+     * tạo dùng chung contract của bản vá (mọi trường optional) thì thiếu trường
+     * sẽ đi qua Zod rồi nổ 500 — một lỗi hạ tầng cho chuyện lẽ ra là 400 kèm
+     * tên trường.
+     */
+    for (const thieu of ['brandName', 'defaultTitleSuffix']) {
+      const than: Record<string, unknown> = { ...DU };
+      delete than[thieu];
+      const r = await api('POST', '/api/v1/marketing/site-profile', editor, than);
+      assert.equal(r.status, 400, `thiếu ${thieu} phải trả 400, nhận ${r.status}`);
+    }
+  });
+
+  test('🔒 mô tả ngắn hơn 50 ký tự bị từ chối trước khi chạm CHECK của database', async () => {
+    await admin.query('DELETE FROM site_profile WHERE tenant_id = $1', [TENANT_A]);
+    const r = await api('POST', '/api/v1/marketing/site-profile', editor, {
+      ...DU,
+      defaultDescription: 'Quá ngắn',
+    });
+    assert.equal(r.status, 400, JSON.stringify(r.body));
+  });
+
+  test('🔒 vai không có quyền soạn SEO không tạo được', async () => {
+    await admin.query('DELETE FROM site_profile WHERE tenant_id = $1', [TENANT_A]);
+    const r = await api('POST', '/api/v1/marketing/site-profile', ownerB, DU);
+    /*
+     * `ownerB` LÀ owner của tenant khác nên nó có quyền — và nó ghi vào tenant
+     * CỦA NÓ. Điều cần chứng minh là tenant A không bị đụng tới.
+     */
+    assert.ok(r.status === 200 || r.status === 201 || r.status === 409, JSON.stringify(r.body));
+    const { rows } = await admin.query<{ n: string }>(
+      'SELECT count(*) AS n FROM site_profile WHERE tenant_id = $1',
+      [TENANT_A],
+    );
+    assert.equal(Number(rows[0]!.n), 0, 'lượt ghi của tenant B đã chạm vào tenant A');
+  });
+});

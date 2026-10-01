@@ -5,6 +5,7 @@ import {
   CreateVariantInput,
   CreateVehicleProductInput,
   PatchProductDraftInput,
+  SiteProfileCreateInput,
   SiteProfileDraftInput,
   type ActorContext,
   type SeoValidationResult,
@@ -192,6 +193,21 @@ export class MarketingController {
   getSiteProfile(@Actor() actor: ActorContext): Promise<Record<string, unknown>> {
     assertCan(actor, 'marketing:seoRead');
     return this.svc.getSiteProfile(actor);
+  }
+
+  /**
+   * Tạo hồ sơ ĐẦU TIÊN. Mọi bản nháp sau đó do `publish` tự mở ra.
+   *
+   * 🔒 `marketing:seoWrite` — cùng quyền với sửa bản nháp, không phải quyền
+   *    publish. Tạo một bản nháp không đẩy gì ra trang công khai.
+   */
+  @Post('site-profile')
+  createSiteProfileDraft(
+    @Actor() actor: ActorContext,
+    @Body(new ZodPipe(SiteProfileCreateInput)) input: SiteProfileCreateInput,
+  ): Promise<{ draftId: string }> {
+    assertCan(actor, 'marketing:seoWrite');
+    return this.svc.createSiteProfileDraft(actor, input);
   }
 
   @Patch('site-profile/:draftId')

@@ -86,6 +86,40 @@ export default function BusinessProfilePage(): React.ReactElement {
     }
   }
 
+  /**
+   * Tạo bản nháp ĐẦU TIÊN.
+   *
+   * ⚠️ Màn này từng là ngõ cụt trên một database mới: nó bảo "xuất bản một bản
+   *    trước để hệ thống tạo bản nháp kế tiếp", mà muốn xuất bản thì phải có
+   *    bản nháp. Trên máy dev không ai thấy vì `seed` dựng sẵn hồ sơ; lượt
+   *    deploy đầu tiên thì đứng luôn ở đây — và landing trả `SITE_NOT_FOUND`
+   *    cho mọi trang chừng nào chưa có hồ sơ PUBLISHED.
+   */
+  async function taoBanNhapDau(form: FormData): Promise<void> {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api('/api/v1/marketing/site-profile', {
+        method: 'POST',
+        body: JSON.stringify({
+          brandName: String(form.get('brandName') ?? '').trim(),
+          defaultTitleSuffix: String(form.get('defaultTitleSuffix') ?? '').trim(),
+          legalName: String(form.get('legalName') ?? '').trim() || null,
+          defaultDescription: String(form.get('defaultDescription') ?? '').trim() || null,
+          phone: String(form.get('phone') ?? '').trim() || null,
+          address: String(form.get('address') ?? '').trim() || null,
+        }),
+      });
+      setMessage('Đã tạo bản nháp đầu tiên. Điền nốt rồi bấm Xuất bản để trang công khai dùng được.');
+      await profile.refetch();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const moTaNgan = moTa.trim().length > 0 && moTa.trim().length < MO_TA_TOI_THIEU;
 
   return (
@@ -148,9 +182,77 @@ export default function BusinessProfilePage(): React.ReactElement {
       ) : profile.isLoading ? (
         <Skeleton className="h-[420px] w-full" />
       ) : draft === null ? (
-        <Alert tone="warn">
-          Chưa có bản nháp thông tin doanh nghiệp. Xuất bản một bản trước để hệ thống tạo bản nháp kế tiếp.
-        </Alert>
+        <Card className="max-w-3xl">
+          <CardHeader>
+            <CardTitle>Tạo hồ sơ doanh nghiệp</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Alert>
+              Chưa có hồ sơ nào. Trang công khai chỉ mở được sau khi hồ sơ này được{' '}
+              <strong>xuất bản</strong> — trước đó mọi địa chỉ đều trả về trang không tìm thấy.
+            </Alert>
+
+            {!canWrite ? (
+              <Alert tone="warn">Vai trò của bạn không có quyền tạo hồ sơ doanh nghiệp.</Alert>
+            ) : (
+              <form
+                className="flex flex-col gap-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void taoBanNhapDau(new FormData(e.currentTarget));
+                }}
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="moi-brand-name">Tên thương hiệu *</Label>
+                    <Input id="moi-brand-name" name="brandName" required maxLength={160} />
+                    <span className="text-[11px] text-text-muted">Tên khách nhìn thấy trên trang.</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="moi-title-suffix">Hậu tố tiêu đề *</Label>
+                    <Input id="moi-title-suffix" name="defaultTitleSuffix" required maxLength={160} />
+                    <span className="text-[11px] text-text-muted">
+                      Ghép vào cuối tiêu đề mỗi trang, ví dụ “… · Garage Thành Công”.
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="moi-legal-name">Tên pháp lý</Label>
+                    <Input id="moi-legal-name" name="legalName" maxLength={160} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="moi-phone">Điện thoại</Label>
+                    <Input id="moi-phone" name="phone" maxLength={20} />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="moi-mo-ta">Mô tả mặc định</Label>
+                  <Textarea id="moi-mo-ta" name="defaultDescription" rows={3} maxLength={300} />
+                  {/*
+                    * ⚠️ 50–300 ký tự là ràng buộc CHECK ở database. Nói ra ở đây
+                    *    để người dùng không nhận một lỗi của tầng dưới; để trống
+                    *    cũng được, điền nốt sau khi đã có bản nháp.
+                    */}
+                  <span className="text-[11px] text-text-muted">
+                    Để trống cũng được. Nếu điền thì cần {MO_TA_TOI_THIEU}–300 ký tự — ràng buộc của
+                    database, không phải của màn hình.
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="moi-dia-chi">Địa chỉ</Label>
+                  <Input id="moi-dia-chi" name="address" maxLength={500} />
+                </div>
+
+                <div>
+                  <Button type="submit" disabled={busy}>
+                    {busy ? 'Đang tạo…' : 'Tạo bản nháp đầu tiên'}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
           <Card>

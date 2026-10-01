@@ -291,3 +291,30 @@ export const SiteProfileDraftInput = z.object({
   address: z.string().trim().max(500).nullable().optional(),
 });
 export type SiteProfileDraftInput = z.infer<typeof SiteProfileDraftInput>;
+
+/**
+ * Tạo hồ sơ đầu tiên của một tenant.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 🔒 Vì sao đây là một contract RIÊNG, không dùng lại `SiteProfileDraftInput`
+ *
+ * Bản vá (`PATCH`) có MỌI trường `optional` — đúng với một bản vá: gửi gì sửa
+ * nấy. Nhưng lượt tạo thì khác, vì `brand_name` và `default_title_suffix` là
+ * `NOT NULL` ở database. Dùng chung contract nghĩa là lượt tạo thiếu trường sẽ
+ * đi qua Zod rồi chết ở tầng `NOT NULL` — một lỗi 500 cho một thứ lẽ ra là 400
+ * kèm tên trường.
+ *
+ * ⚠️ Không có `version`: chưa có gì để mà xung đột. Đưa `version` vào đây là
+ *    mời người gọi gửi một con số vô nghĩa.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+export const SiteProfileCreateInput = z.object({
+  brandName: z.string().trim().min(1).max(160),
+  defaultTitleSuffix: z.string().trim().min(1).max(160),
+  legalName: z.string().trim().max(160).nullable().optional(),
+  /* Ràng buộc 50–300 là của database (`site_profile_description_len`, 0055). */
+  defaultDescription: z.string().trim().min(50).max(300).nullable().optional(),
+  phone: z.string().trim().max(20).nullable().optional(),
+  address: z.string().trim().max(500).nullable().optional(),
+});
+export type SiteProfileCreateInput = z.infer<typeof SiteProfileCreateInput>;
